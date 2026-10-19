@@ -22,6 +22,11 @@ const SETTINGS_SCHEMA = [
     default: DEFAULT_DAILY_SEND_LIMIT, min: 1, max: 5000,
   },
   {
+    key: 'daily_limit_warn_above', legacyKey: 'daily_limit_warn_above', label: 'Warn when a mailbox limit is above', unit: 'emails/day', group: 'Email engine',
+    description: 'A daily limit higher than this still saves, but the screen warns that Gmail / Outlook may slow or flag a mailbox that sends this much.',
+    default: 500, min: 1, max: 100000,
+  },
+  {
     key: 'send_delay_min_sec', legacyKey: 'send_delay_min_sec', label: 'Shortest pause between two emails from one mailbox', unit: 'seconds', group: 'Email engine',
     description: 'Emails from one mailbox are spaced out by a random pause between this and the longest pause.',
     default: 30, min: 1, max: 300,

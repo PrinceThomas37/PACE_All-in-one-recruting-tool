@@ -497,3 +497,6 @@ AI ceilings were shared across companies although usage was per company; now per
 
 ## 2026-10-16 (Session 49, later) — owner asked to see existing passwords: declined (R-265)
 Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's password" was NOT built: a readable copy turns one database leak or one stolen admin login into every account, in a product sold to other companies. The substitute is the admin setting a new password (R-262) and seeing what they typed (eye).
+
+## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
+- rampart: R-266 — who may change a mailbox limit: admin/team lead any; the mailbox's own person lower only; others 403; change log admin-only and org-scoped.

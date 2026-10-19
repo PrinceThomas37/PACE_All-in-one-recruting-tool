@@ -30,7 +30,7 @@ window.openAddUserEmail=function(userId,platform){
     +'<div class="mb_">'
     +'<div class="fgrp"><label class="flbl">Email address *</label><input class="inp" id="ue-email" placeholder="e.g. john@futeglobal.com"/></div>'
     +'<div class="fgrp"><label class="flbl">Display name</label><input class="inp" id="ue-name" placeholder="John Smith"/></div>'
-    +'<div class="fgrp"><label class="flbl">Daily limit</label><input class="inp" type="number" id="ue-limit" value="300" min="1" max="500" style="width:120px"/></div>'
+    +'<div class="fgrp"><label class="flbl">Daily limit</label><input class="inp" type="number" id="ue-limit" placeholder="Company default" min="1" style="width:160px"/><div class="fs-11 c-text3">Leave empty to use the company default (Admin → System settings). Change it later any time.</div></div>'
     +'<label class="fs-13" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0">'
     +'<input type="checkbox" id="ue-primary"/> Set as primary email (login email)</label>'
     +'</div>'
@@ -45,7 +45,7 @@ window.openAddUserEmail=function(userId,platform){
 window.submitAddUserEmail=function(userId,platform){
   var email=(document.getElementById('ue-email')||{}).value||'';
   var name=(document.getElementById('ue-name')||{}).value||'';
-  var limit=parseInt((document.getElementById('ue-limit')||{}).value||'300');
+  var limit=parseInt((document.getElementById('ue-limit')||{}).value,10)||undefined;
   var isPrimary=(document.getElementById('ue-primary')||{}).checked||false;
   if(!email){showToast('Email address required','warning');return;}
   apiPost('/users/'+userId+'/emails',{email_address:email,display_name:name||email,platform:platform||'Gmail',daily_send_limit:limit,is_primary:isPrimary}).then(function(e){
@@ -58,7 +58,7 @@ window.submitAddUserEmail=function(userId,platform){
 window.submitAddUserEmailMicrosoft=function(userId){
   var email=(document.getElementById('ue-email')||{}).value||'';
   var name=(document.getElementById('ue-name')||{}).value||'';
-  var limit=parseInt((document.getElementById('ue-limit')||{}).value||'300');
+  var limit=parseInt((document.getElementById('ue-limit')||{}).value,10)||undefined;
   var isPrimary=(document.getElementById('ue-primary')||{}).checked||false;
   if(!email){showToast('Email address required','warning');return;}
   apiPost('/users/'+userId+'/emails',{email_address:email,display_name:name||email,platform:'Microsoft',daily_send_limit:limit,is_primary:isPrimary}).then(function(e){
@@ -993,6 +993,28 @@ window.removeUser=function(id,fromDetail){
   }).catch(function(e){showToast("Failed: "+e.message,"error");});
 };
 // Deactivated people, with a way back (admin only). Deactivating erased nothing, so reactivating returns the person as they were.
+window.saveMailboxLimit=function(userId,emailId,value){
+  var n=parseInt(value,10);
+  if(!(n>=1)){showToast('Enter a whole number of 1 or more','warning');return Promise.resolve();}
+  return apiPatch('/users/'+userId+'/emails/'+emailId,{daily_send_limit:n}).then(function(e){
+    STATE.userEmailsCache=STATE.userEmailsCache||{};
+    STATE.userEmailsCache[userId]=(STATE.userEmailsCache[userId]||[]).map(function(x){return x.id===emailId?Object.assign({},x,{daily_send_limit:e.daily_send_limit}):x;});
+    if(e.limit_warning)showToast('Saved. '+e.limit_warning,'warning'); else showToast('Daily limit saved','success');
+    render();
+  }).catch(function(e){ showToast((e&&e.message)||'Could not save','error'); });
+};
+window.openMailboxLimitChanges=function(){
+  STATE.modal='<div class="modal modal-w420"><div class="mh"><div class="mt">Daily limit changes</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div><div class="mb"><div class="fs-13 c-text3">Loading…</div></div></div>';
+  render();
+  apiGet('/users/email-limit-changes').then(function(rows){
+    var body=(rows||[]).length?rows.map(function(r){
+      return '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div class="fw6 fs-13">'+htmlEsc(r.mailbox||'a removed mailbox')+': '+(r.from==null?'set to ':htmlEsc(String(r.from))+' → ')+htmlEsc(String(r.to))+' a day</div>'+
+        '<div class="fs-12 c-text3">'+htmlEsc(r.by||'someone')+' · '+htmlEsc(new Date(r.at).toLocaleString())+'</div></div>';
+    }).join(''):'<div class="fs-13 c-text3">No changes recorded yet. Changes are listed from the day this was switched on.</div>';
+    STATE.modal='<div class="modal modal-w420"><div class="mh"><div class="mt">Daily limit changes</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div><div class="mb">'+body+'</div></div>';
+    render();
+  }).catch(function(e){ showToast('Failed: '+((e&&e.message)||e),'error'); closeModal(); });
+};
 window.openDeactivatedUsers=function(){
   STATE.modal='<div class="modal modal-w420"><div class="mh"><div class="mt">Deactivated users</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb"><div class="fs-13 c-text3">Loading…</div></div></div>';

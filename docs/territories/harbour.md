@@ -345,3 +345,6 @@ The send loop, follow-up queue and cancel path now ask `services/contact-status.
 
 ## 2026-10-15 (Session 47, later) — R-259: a follow-up may now be AI-written at send time
 - Only for a person who chose "AI writes each one" AND taught that follow-up; written from the first email that really went out (stored text, `{{sender}}` put back, html stripped) and the posting; stored (`template_variant 'ai'`, body with `{{sender}}` deferred) BEFORE sending; subject and threading untouched. Any failure sends the queued backup follow-up unchanged. A retry never pays twice (`template_variant === 'ai'`).
+
+## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
+- harbour: a mailbox's daily limit is edited via `PATCH /users/:id/emails/:eid` (rule `services/mailbox-limit.js`, R-266); the send loop and `assignmentQueue` still read `user_emails.daily_send_limit` unchanged.
