@@ -28,6 +28,12 @@ a = dist.allocationQueue([{ mailbox_id: 'A', count: 6 }, { mailbox_id: 'A', coun
 step('the same email ID twice is refused', /twice/.test(a.error || ''));
 a = dist.allocationQueue([{ mailbox_id: 'A', count: 6.5 }, { mailbox_id: 'B', count: 5.5 }], accs, 12);
 step('fractions and negatives are refused', !!a.error && !!dist.allocationQueue([{ mailbox_id: 'A', count: -1 }, { mailbox_id: 'B', count: 13 }], accs, 12).error);
+const lim = (acc) => ({ A: 10, B: 5 })[acc.id];
+let lq;
+lq = dist.allocationQueue([{ mailbox_id: 'A', count: 8 }, { mailbox_id: 'B', count: 4 }], [{ id: 'A', email_address: 'a@x.test' }, { id: 'B', email_address: 'b@x.test' }], 12, Math.random, lim);
+step('R-277: a split inside each email ID\'s daily limit is accepted', !lq.error && lq.queue.length === 12, JSON.stringify(lq.error || ''));
+lq = dist.allocationQueue([{ mailbox_id: 'A', count: 6 }, { mailbox_id: 'B', count: 6 }], [{ id: 'A', email_address: 'a@x.test' }, { id: 'B', email_address: 'b@x.test' }], 12, Math.random, lim);
+step('R-277: giving an email ID more than it can send in a day is REFUSED, naming it and its limit (owner, 19 Oct: "the math should always be correct")', /b@x\.test can send 5 a day — 6 is more than that/.test(lq.error || ''), lq.error);
 
 const pl = claim.planClaim([{ id: 'j1', assigned_to_bd: null }, { id: 'j2', assigned_to_bd: 'x' }, { id: 'j3' }], accs, '');
 step('a first email claims only leads nobody owns — never one that already has an owner', pl.claims.length === 2 && pl.claims.every(c => c.job_id !== 'j2'));

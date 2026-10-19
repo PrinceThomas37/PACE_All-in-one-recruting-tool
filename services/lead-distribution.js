@@ -57,8 +57,12 @@ function assignmentQueue(accounts, total, rand = Math.random) {
  * `total` — a split that loses or invents a lead is refused, in words. The queue is then shuffled like the automatic one.
  * → { queue } | { error }
  */
-function allocationQueue(allocation, accounts, total, rand = Math.random) {
+// `limitOf(account)` (optional): the most that email ID may send in a day. The owner (19 Oct, D-0158 #3): "Do not send if numbers do
+// not make sense … if the number is more than the email per user, give warning and error. The math should always be correct" —
+// so a split giving one email ID more leads than it can send in a day is REFUSED, here and in the window (70-assign-leads.js).
+function allocationQueue(allocation, accounts, total, rand = Math.random, limitOf = null) {
   const ids = new Set((accounts || []).map(a => a.id));
+  const byId = new Map((accounts || []).map(a => [a.id, a]));
   const list = Array.isArray(allocation) ? allocation : [];
   const queue = [];
   const seen = new Set();
@@ -69,6 +73,10 @@ function allocationQueue(allocation, accounts, total, rand = Math.random) {
     if (seen.has(id)) return { error: 'An email ID appears twice in that split.' };
     seen.add(id);
     if (!Number.isInteger(n) || n < 0) return { error: 'Each email ID needs a whole number of leads (0 or more).' };
+    if (limitOf) {
+      const acc = byId.get(id), lim = Number(limitOf(acc));
+      if (Number.isFinite(lim) && n > lim) return { error: `${(acc && acc.email_address) || 'An email ID'} can send ${lim} a day — ${n} is more than that. Give it ${lim} or fewer.` };
+    }
     for (let i = 0; i < n; i++) queue.push(id);
   }
   if (queue.length !== total) return { error: `The split gives out ${queue.length} lead${queue.length === 1 ? '' : 's'} but ${total} ${total === 1 ? 'is' : 'are'} being assigned — make the numbers add up.` };

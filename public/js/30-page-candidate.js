@@ -79,6 +79,13 @@
       // same selection and the same scroll position — which it does for free
       // if we never left the page in the first place.
       STATE.bd.profileOpen = true;
+      // Opened from a job (its pipeline, board or detail): show THAT job beside the person — the description and the client —
+      // so a call can be made with the job in view (owner, 19 Oct, R-275). Read once; the drawer paints it when it arrives.
+      if (back.joId) {
+        STATE.bd.profile.fromJob = back.joId;
+        apiGet('/job-orders/'+back.joId).then(function(j){ var p=STATE.bd.profile; if(p&&p.id===id&&p.fromJob===back.joId){ p.job=j||{}; render(); } })
+          .catch(function(){ var p=STATE.bd.profile; if(p&&p.id===id){ p.job={ _failed:true }; render(); } });
+      }
       render();
       cpLoadResume();
     }).catch(function(e){ showToast('Failed to load candidate: '+e.message,'error'); });
@@ -307,9 +314,20 @@
     // Notes (Job Posting / Applicant Reference tabs)
     var noteTab = pr.noteTab || 'applicant_reference';
     var allNotes = pr.notes || [];
-    var notes = allNotes.filter(function(n){ return n.note_type===noteTab; });
+    // The note typed when a stage was changed is a note too (owner, 19 Oct, R-275: "the notes added to the candidate while
+    // changing the stage is missing in the notes section") — listed here with the date and time of the change, under both tabs,
+    // read-only (it belongs to the stage move, which the Activity tab also shows).
+    var stageNotes = (h.activity||[]).filter(function(a){ return a && String(a.note||'').trim(); }).map(function(a){
+      return { stage:true, created_at:a.created_at, body:a.note, author:a.actor||a.user||a.recruiter||null,
+        what:(a.old_stage&&a.new_stage)?('Moved '+a.old_stage+' → '+a.new_stage):(a.action==='bdm_approved'?'BDM approved → client':a.action==='promoted'?'Promoted to submission':'Stage change') };
+    });
+    var notes = allNotes.filter(function(n){ return n.note_type===noteTab; }).concat(stageNotes)
+      .sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
     function tabBtn(key,label){ var on=noteTab===key; return '<div onclick="cpNoteTab(\''+key+'\')" style="padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;'+(on?'background:var(--accent);color:#fff':'color:var(--text3)')+'">'+label+' ('+allNotes.filter(function(n){return n.note_type===key;}).length+')</div>'; }
     var noteRows = notes.map(function(n){
+      if (n.stage) return '<div class="cp-stagenote" data-cpstagenote>'+
+        '<div class="fs-11 c-text3"><b>'+esc(n.what)+'</b> · '+esc(fmtDT(n.created_at))+(n.author&&n.author.name?' · '+esc(n.author.name):'')+'</div>'+
+        '<div class="fs-13 cp-note-body">'+esc(n.body)+'</div></div>';
       return '<div style="padding:9px 4px;border-bottom:1px solid var(--border)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
           '<div class="fs-11 c-text3">'+esc((n.author&&n.author.name)||'—')+' · '+esc(fmtDT(n.created_at))+'</div>'+
@@ -422,7 +440,7 @@
     var counts = {
       activity: (h.activity||[]).length,
       jobs: jobs.length,
-      notes: (pr.notes||[]).length,
+      notes: (pr.notes||[]).length + (h.activity||[]).filter(function(a){ return a && String(a.note||'').trim(); }).length,
       emails: (pr.emailActivity||[]).length,
       docs: (pr.documents||[]).length
     };
@@ -531,9 +549,40 @@
           (c.candidate_code?'<span class="id-chip">'+esc(c.candidate_code)+'</span>':'')+
           (c.applicant_status?UI.pill(c.applicant_status,'info',true):'')+
         '</div>'+ fields,
-      tabs: tabBar,
+      tabs: jobPanel(pr) + tabBar,
       body: body
     });
+  };
+
+  // THE JOB, BESIDE THE PERSON (R-275). Only when the drawer was opened from a job. Hide/Show flips `hidden` in place (cpToggleJob)
+  // — a full render would throw away a half-typed note.
+  function jobPanel(pr){
+    if (!pr.fromJob) return '';
+    var j = pr.job;
+    if (!j) return '<div class="cp-job"><div class="fs-12_5 c-text3">Loading the job…</div></div>';
+    if (j._failed) return '<div class="cp-job"><div class="fs-12_5 c-text3">The job could not be loaded just now.</div></div>';
+    var place = [j.city, j.state].filter(Boolean).join(', ') + (j.remote ? (j.city||j.state?' · ':'')+j.remote : '');
+    var pay = (j.pay_min||j.pay_max) ? [(j.pay_cur||''), [j.pay_min,j.pay_max].filter(Boolean).join('–')].join(' ').trim()+(j.pay_period?' per '+j.pay_period:'') : '';
+    var exp = (j.exp_min||j.exp_max) ? [j.exp_min,j.exp_max].filter(function(x){ return x!=null&&x!==''; }).join('–')+' yrs' : '';
+    var client = [j.client || (j.company&&j.company.name), j.client_manager?'contact: '+j.client_manager:'', j.end_client?'end client: '+j.end_client:''].filter(Boolean).join(' · ');
+    var facts = [place, pay, exp, j.job_type].filter(Boolean).join(' · ');
+    var jd = String(j.job_description || j.posting_description || '').trim();
+    var hidden = !!pr.jobHidden;
+    return '<div class="cp-job" data-cpjob>'+
+      '<div class="cp-job-head"><div class="cp-job-title"><span class="fs-11 c-text3">THE JOB</span> '+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||''))+'</div>'+
+        '<button type="button" class="btn btn-sm btn-outline" data-cpjobbtn onclick="cpToggleJob()">'+(hidden?'Show':'Hide')+'</button></div>'+
+      '<div data-cpjobbody'+(hidden?' hidden':'')+'>'+
+        (client?'<div class="fs-12_5"><b>Client:</b> '+esc(client)+'</div>':'')+
+        (facts?'<div class="fs-12_5 c-text3">'+esc(facts)+'</div>':'')+
+        (j.primary_skills?'<div class="fs-12_5"><b>Must have:</b> '+esc(j.primary_skills)+'</div>':'')+
+        '<div class="cp-job-jd fs-12_5">'+(jd?esc(jd):'<span class="c-text3">No job description on this job yet.</span>')+'</div>'+
+      '</div></div>';
+  }
+  window.cpToggleJob = function(){
+    var pr = STATE.bd && STATE.bd.profile; if (!pr) return;
+    pr.jobHidden = !pr.jobHidden;
+    var b = document.querySelector('[data-cpjobbody]'), btn = document.querySelector('[data-cpjobbtn]');
+    if (b) b.hidden = pr.jobHidden; if (btn) btn.textContent = pr.jobHidden ? 'Show' : 'Hide';
   };
 
   // Switching tabs shows and hides panels that are already in the DOM. It
