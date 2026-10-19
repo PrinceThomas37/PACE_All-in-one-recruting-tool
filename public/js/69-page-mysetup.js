@@ -126,7 +126,7 @@
       '<div class="fd-row">'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupEdit(\''+m.id+'\')">'+(m.sends_as?'Edit sender &amp; signature':'Set up sender &amp; signature')+'</button>'+
         '<button class="btn btn-sm '+(isConnected(m)?'btn-outline':'btn-primary')+'" onclick="mySetupConnect(\''+m.id+'\')">'+(isConnected(m)?'Reconnect':(plat==='App password'?'Enter the app password':'Connect '+plat))+'</button>'+
-        '<button class="btn btn-sm btn-outline" onclick="mySetupLowerLimit(\''+m.id+'\')">Lower daily limit</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mySetupLowerLimit(\''+m.id+'\')">Edit daily limit</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupRemove(\''+m.id+'\')">Remove</button>'+
       '</div></div>';
   }
@@ -159,8 +159,15 @@
   }
   window.mySetupLowerLimit = function(id){
     var list=(STATE.userEmailsCache&&STATE.userEmailsCache[meId()])||[], m=list.filter(function(x){ return x.id===id; })[0]||{};
-    var v=window.prompt('New daily limit for '+(m.email_address||'this mailbox')+' (a whole number, lower than '+(m.daily_send_limit||'now')+'):', '');
-    if(v===null) return;
+    var max=Number(m.daily_send_limit)||0, v='', who=m.email_address||'this mailbox';
+    for(;;){
+      v=window.prompt('Daily limit for '+who+(max?' (type '+max+' or less — an admin set '+max+')':'')+':', v);
+      if(v===null) return;
+      var n=parseInt(v,10);
+      if(!(n>=1)){ showToast('Type a whole number of 1 or more','error'); continue; }
+      if(max && n>max){ showToast('Too high: an admin set '+max+' for this mailbox. Type '+max+' or less.','error'); continue; }
+      break;
+    }
     window.saveMailboxLimit(meId(), id, v);
   };
   window.mySetupWinDay = function(d){ var f=M.winForm; if(!f) return; var i=f.days.indexOf(d); if(i>=0) f.days.splice(i,1); else f.days.push(d); };

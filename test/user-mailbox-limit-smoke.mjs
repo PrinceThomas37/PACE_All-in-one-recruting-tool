@@ -84,6 +84,7 @@ step('staff: any whole number', rules.decideLimitChange({ staff: true, requested
 step('staff: zero / decimal / text refused', [0, 1.5, 'abc', -3, null].every((v) => !rules.decideLimitChange({ staff: true, requested: v }).ok));
 step('owner may lower', rules.decideLimitChange({ owner: true, current: 100, requested: 40 }).ok);
 step('owner may not raise', rules.decideLimitChange({ owner: true, current: 100, requested: 101 }).status === 403);
+step('…and the refusal names the number to stay under', /100/.test(rules.decideLimitChange({ owner: true, current: 100, requested: 101 }).error));
 step('someone else is refused', rules.decideLimitChange({ requested: 5 }).status === 403);
 step('a warning above the line, none at it', !!rules.decideLimitChange({ staff: true, requested: 401, warnAbove: 400 }).warn && !rules.decideLimitChange({ staff: true, requested: 400, warnAbove: 400 }).warn);
 
