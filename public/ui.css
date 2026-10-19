@@ -655,6 +655,19 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 .mb-acct{display:inline-block;margin-top:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
 .mb-skipped{padding:8px 14px;font-size:12px;color:var(--ink2);background:var(--amber-l);border-bottom:1px solid var(--line)}
 .mb-view{display:inline-flex;gap:0}
+/* R-273: Schedule send — a panel at the foot of the window; the Scheduled and Draft tabs are two short sections each. */
+.mb-sched{display:flex;flex-direction:column;gap:8px;padding:12px 20px 14px;border-top:1px solid var(--border);background:var(--bg)}
+.mb-sched-quick{display:flex;flex-wrap:wrap;gap:6px}
+.mb-sched-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.mb-sched-row label{display:flex;flex-direction:column;gap:3px}
+.mb-sched-row input{width:auto}
+.mb-sched-btns{display:flex;justify-content:flex-end;gap:8px}
+.mb-sec-h{padding:12px 14px 6px;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--ink2);border-bottom:1px solid var(--line)}
+.mb-sec-foot{padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mb-sched-item{cursor:default}
+.mb-sched-item.is-failed{border-left-color:var(--red)}
+.mb-sched-err{margin-top:4px;font-size:12px;color:var(--red)}
+.mb-sched-acts{display:flex;gap:6px;margin-top:6px}
 .mb-view .seg-btn{border-radius:0}
 .mb-view .seg-btn:first-child{border-radius:var(--r) 0 0 var(--r)}
 .mb-view .seg-btn:last-child{border-radius:0 var(--r) var(--r) 0;margin-left:-1px}

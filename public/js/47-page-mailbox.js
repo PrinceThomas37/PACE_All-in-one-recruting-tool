@@ -669,7 +669,7 @@
     var d=_deep; if(!d) return; _deep=null;
     var m=M();
     if(m.activeId!==d.acct){ return; }                        // the account they asked for was not openable: leave the mailbox as it is
-    m._replyWhen=d.reply?d.id:null; m._deepQ=d.q||'';
+    m._replyWhen=d.reply?d.id:null; m._replyMode=d.reply?(d.mode||'reply'):null; m._deepQ=d.q||'';
     loadMessage(d.id);
   }
   function deepAfterOpen(id){
@@ -685,7 +685,7 @@
   }
   window.mbOpenMessage=function(acct,id,opts){
     opts=opts||{};
-    var m=M(); _deep={ acct:acct, id:id, reply:!!opts.reply, q:opts.q||'' }; m.all=false;
+    var m=M(); _deep={ acct:acct, id:id, reply:!!opts.reply, mode:opts.mode||'reply', q:opts.q||'' }; m.all=false;
     var known=(m.accounts||[]).some(function(a){ return a.id===acct && a.readable; });
     if(known && m.activeId!==acct){ m.activeId=acct; m.q=''; m.messages=null; m.selectedId=null; m.message=null; goPage('mailbox'); loadFolders(); return; }
     if(!known) m.activeId=acct;                                // accounts not loaded yet: pickAccount keeps this pick, then the list opens it
@@ -1167,12 +1167,14 @@
     try{ document.execCommand('styleWithCSS', false, true); }catch(e){}
     if(cmd==='size'){
       // execCommand's sizes are 1–7; the words a person picks are written as the size itself, on a span.
-      try{ document.execCommand('fontSize', false, '7'); }catch(e){}
-      Array.prototype.slice.call(ed.querySelectorAll('font[size="7"], span[style*="xxx-large"]')).forEach(function(el){
-        var sp=document.createElement('span'); sp.setAttribute('style','font-size: '+value+';');
-        while(el.firstChild) sp.appendChild(el.firstChild);
-        el.parentNode.replaceChild(sp, el);
-      });
+      // The selected words are wrapped in a span of that size (the browser's own size command is unreliable inside the app
+      // window — it reports success and changes nothing). A size set further in is taken off, so the new one shows.
+      var range=sel.getRangeAt(0), sp=document.createElement('span');
+      sp.style.fontSize=value;
+      sp.appendChild(range.extractContents());
+      Array.prototype.slice.call(sp.querySelectorAll('[style]')).forEach(function(el){ el.style.fontSize=''; if(!el.getAttribute('style')) el.removeAttribute('style'); });
+      range.insertNode(sp);
+      try{ var nr=document.createRange(); nr.selectNodeContents(sp); sel.removeAllRanges(); sel.addRange(nr); _mbRange[which]=nr.cloneRange(); }catch(e){}
     } else {
       try{ document.execCommand(cmd, false, value); }catch(e){}
     }
@@ -1285,8 +1287,10 @@
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="mbCancelCompose()">Cancel</button>'+
+          '<button class="btn btn-outline" onclick="mbSchedOpen(\'compose\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
           '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
+        mbSchedPanel('compose',c)+
       '</div>';
   }
   function paintComposeModal(open){
@@ -1485,6 +1489,96 @@
       .catch(function(e){ c.sending=false; if(m.compose===c) paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
   };
 
+  // ── SCHEDULE SEND (R-273, D-0162 / D-0163) ─────────────────────────────────
+  // A date and a time in the person's OWN time zone (named on screen). The server checks the email now — the same answers as
+  // Send — and the engine sends it at that time through the same path, from the same email ID. Until PACE has an always-on
+  // server (the owner's plan before other customers use it) it goes when PACE is next awake, and the panel says so plainly.
+  function myZone(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone||''; }catch(e){ return ''; } }
+  function pad2(n){ return (n<10?'0':'')+n; }
+  function localParts(d){ return { date:d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()), time:pad2(d.getHours())+':'+pad2(d.getMinutes()) }; }
+  function quickTimes(){
+    var now=new Date(), out=[];
+    var at=function(daysAhead,h){ var d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+daysAhead,h,0,0,0); return d; };
+    if(now.getHours()<16) out.push(['This afternoon, 4:00 PM',at(0,16)]);
+    out.push(['Tomorrow morning, 8:00 AM',at(1,8)]);
+    out.push(['Tomorrow afternoon, 1:00 PM',at(1,13)]);
+    var toMon=(8-now.getDay())%7||7; out.push(['Monday morning, 8:00 AM',at(toMon,8)]);
+    return out;
+  }
+  function schedBag(which){ return which==='compose'?M().compose:M().composer; }
+  function schedRepaint(which){ if(which==='compose') paintComposeModal(); else paintComposer(); }
+  function mbSchedPanel(which,c){
+    var sc=c&&c.sched; if(!sc||!sc.open) return '';
+    var zone=myZone();
+    return '<div class="mb-sched" role="group" aria-label="Schedule send">'+
+      '<div class="fs-13 fw6">Send it later</div>'+
+      '<div class="mb-sched-quick">'+quickTimes().map(function(q){ var p=localParts(q[1]);
+        return '<button type="button" class="btn btn-xs btn-outline" onclick="mbSchedPick(\''+which+'\',\''+p.date+'\',\''+p.time+'\')">'+esc(q[0])+'</button>'; }).join('')+'</div>'+
+      '<div class="mb-sched-row">'+
+        '<label class="fs-11 c-text2">Date <input type="date" class="sel" id="mb-sched-date-'+which+'" value="'+escAttr(sc.date||'')+'" onchange="mbSchedField(\''+which+'\',\'date\',this.value)"></label>'+
+        '<label class="fs-11 c-text2">Time <input type="time" class="sel" id="mb-sched-time-'+which+'" value="'+escAttr(sc.time||'')+'" onchange="mbSchedField(\''+which+'\',\'time\',this.value)"></label>'+
+        '<span class="fs-12 c-text3">Your time'+(zone?': '+esc(zone):'')+'</span>'+
+      '</div>'+
+      '<div class="fs-12 c-amber">For now PACE runs on a free server that sleeps when nobody is using it. A scheduled email goes out on time while PACE is in use; overnight it can go out a few hours late.</div>'+
+      (sc.err?'<div class="fs-12 c-red">'+esc(sc.err)+'</div>':'')+
+      '<div class="mb-sched-btns">'+
+        '<button class="btn btn-outline btn-sm" onclick="mbSchedClose(\''+which+'\')">Not now</button>'+
+        '<button class="btn btn-primary btn-sm" onclick="mbSchedConfirm(\''+which+'\')"'+(sc.busy?' disabled':'')+'>'+(sc.busy?'Scheduling…':'Schedule send')+'</button>'+
+      '</div>'+
+    '</div>';
+  }
+  window.mbSchedOpen=function(which){
+    var c=schedBag(which); if(!c) return;
+    if(which==='compose'){ mbChipFlush(); ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById('mb-c-'+k); if(el) c[k]=el.value; }); }
+    else { mbChipFlush(); ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value; }); }
+    var first=localParts(quickTimes()[0][1]);
+    c.sched=c.sched&&c.sched.open?{open:false}:{ open:true, date:(c.sched&&c.sched.date)||first.date, time:(c.sched&&c.sched.time)||first.time };
+    schedRepaint(which);
+  };
+  window.mbSchedClose=function(which){ var c=schedBag(which); if(!c) return; c.sched={open:false,date:c.sched&&c.sched.date,time:c.sched&&c.sched.time}; schedRepaint(which); };
+  window.mbSchedField=function(which,k,v){ var c=schedBag(which); if(c&&c.sched){ c.sched[k]=v; c.sched.err=''; } };
+  window.mbSchedPick=function(which,date,time){ var c=schedBag(which); if(!c||!c.sched) return; c.sched.date=date; c.sched.time=time; c.sched.err=''; schedRepaint(which); };
+  window.mbSchedConfirm=function(which){
+    var m=M(), c=schedBag(which); if(!c||!c.sched||c.sched.busy) return;
+    mbChipFlush();
+    var pre=which==='compose'?'mb-c-':'mb-comp-';
+    ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById(pre+k); if(el) c[k]=el.value; });
+    var dEl=document.getElementById('mb-sched-date-'+which), tEl=document.getElementById('mb-sched-time-'+which);
+    if(dEl) c.sched.date=dEl.value; if(tEl) c.sched.time=tEl.value;
+    var dm=/^(\d{4})-(\d{2})-(\d{2})$/.exec(c.sched.date||''), tm=/^(\d{2}):(\d{2})$/.exec(c.sched.time||'');
+    if(!dm||!tm){ c.sched.err='Pick a date and a time'; schedRepaint(which); return; }
+    var when=new Date(+dm[1],+dm[2]-1,+dm[3],+tm[1],+tm[2],0,0);
+    if(!(when.getTime()>Date.now()+60000)){ c.sched.err='That time has already passed — pick a later one, or press Send'; schedRepaint(which); return; }
+    var fwd=which!=='compose'&&c.mode==='forward';
+    var kind=which==='compose'?'new':(fwd?'forward':'reply');
+    if(kind==='new'&&!String(c.to||'').trim()){ c.sched.err='Who is this going to?'; schedRepaint(which); return; }
+    if(kind==='forward'&&!String(c.to||'').trim()){ c.sched.err='Who are you forwarding this to?'; schedRepaint(which); return; }
+    if(kind!=='forward'&&mbBodyBlank(c.body)){ c.sched.err='Write a message first'; schedRepaint(which); return; }
+    var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
+    if(total>MAX_ATTACH_BYTES){ c.sched.err='Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit'; schedRepaint(which); return; }
+    var body={
+      kind:kind, send_at:when.toISOString(), timezone:myZone(),
+      to:c.to, cc:c.cc, subject:c.subject, body:c.body, include_signature:!!c.sig,
+      attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
+    };
+    if(kind!=='new') body.message_id=c.msgId;
+    if(kind==='reply') body.reply_all=(c.mode==='replyAll');
+    if(mbIsFormatted(c)) body.formatted=true;
+    if((c.labels||[]).length) body.label_ids=c.labels.map(function(l){return l.id;});
+    var acct=c.acct||m.activeId;
+    c.sched.busy=true; c.sched.err=''; schedRepaint(which);
+    apiPost('/mailbox/'+encodeURIComponent(acct)+'/schedule',body).then(function(){
+      var words=when.toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+      showToast('Scheduled for '+words+' — it is in Inbox → Scheduled, where you can cancel it','success');
+      if(which==='compose'){ if(m.compose===c){ m.compose=null; if(winOnScreen('mailCompose')) closeModal(); } else if(window.Dock) Dock.discardCtx(c); }
+      else { draftClear(c); if(m.composer===c){ m.composer=null; if(winOnScreen('mailReply')) closeModal(); } else if(window.Dock) Dock.discardCtx(c); }
+      m.sched=null;                      // the Scheduled tab reads afresh
+      paint();
+    }).catch(function(e){
+      c.sched.busy=false; c.sched.err=(e&&e.message)||'Could not schedule it'; schedRepaint(which);
+    });
+  };
+
   window.mbOpenCrm=function(email,ev){
     if(ev&&ev.stopPropagation)ev.stopPropagation();
     var link=(M().crm||{})[String(email||'').toLowerCase()];
@@ -1673,16 +1767,132 @@
       ? '<span class="fs-12 c-ink3">'+esc(folder.name)+
         (list.length?' · '+list.length+noun+' loaded':'')+'</span>'
       : '';
+    // Scheduled (emails waiting to go, and the person's reminders — owner, 19 Oct: "scheduled can come in as a new tab, with
+    // reminders in that") and Draft (what is being written on this device, and the mailbox's own Drafts folder) — R-273.
+    var sched=(m.sched&&m.sched.items)||null;
+    var mine=myReminders();
+    var drafts=deviceDrafts();
     return UI.tabs([
-      { id:'all',    label:'All',    n:list.length, onclick:"mbSetFilter('all')" },
-      { id:'unread', label:'Unread', n:unread,      onclick:"mbSetFilter('unread')" }
-    ], m.filter||'all', right);
+      { id:'all',       label:'All',       n:list.length, onclick:"mbSetFilter('all')" },
+      { id:'unread',    label:'Unread',    n:unread,      onclick:"mbSetFilter('unread')" },
+      { id:'scheduled', label:'Scheduled', n:sched?sched.length+mine.length:undefined, onclick:"mbSetFilter('scheduled')" },
+      { id:'draft',     label:'Draft',     n:drafts.length, onclick:"mbSetFilter('draft')" }
+    ], m.filter||'all', (m.filter==='scheduled'||m.filter==='draft')?'':right);
   }
 
-  // A view filter over what is already loaded — deliberately NOT a server
-  // query. "Unread" here means "unread among the messages on screen", which is
-  // the honest reading of a list that pages in 25 at a time.
-  window.mbSetFilter=function(f){ var m=M(); m.filter=f; paint(); };
+  // All / Unread are a view over what is already loaded — deliberately NOT a server query. "Unread" here means "unread among
+  // the messages on screen", the honest reading of a list that pages in 25 at a time. Scheduled reads the person's scheduled
+  // emails (and reminders); Draft reads this device.
+  window.mbSetFilter=function(f){
+    var m=M(); m.filter=f;
+    if(f==='scheduled'||f==='draft'){ m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; m.sel={}; }
+    if(f==='scheduled'){ loadScheduled(); if(typeof loadReminders==='function'&&!(STATE.reminders||[]).length) loadReminders(); }
+    paint();
+  };
+
+  // ── the Scheduled tab ──
+  function loadScheduled(){
+    var m=M(); if(m.schedLoading) return;
+    m.schedLoading=true;
+    apiGet('/mailbox-scheduled').then(function(d){ m.sched={ items:(d&&d.items)||[], ready:!d||d.ready!==false }; m.schedLoading=false; paint(); })
+      .catch(function(e){ m.sched={ items:[], err:(e&&e.message)||'Could not read them' }; m.schedLoading=false; paint(); });
+  }
+  function myReminders(){
+    var uid=(STATE.user||{}).id;
+    return (STATE.reminders||[]).filter(function(r){ return r.user_id===uid&&r.status==='pending'; })
+      .sort(function(a,b){ return String(a.return_date||'').localeCompare(String(b.return_date||'')); });
+  }
+  function zoneWords(iso,tz){
+    try{ return new Date(iso).toLocaleString([], {weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit',timeZone:tz||undefined})+(tz&&tz!==myZone()?' ('+tz+')':''); }
+    catch(e){ return fmtFull(iso); }
+  }
+  function renderScheduled(){
+    var m=M();
+    if(!m.sched) return '<div class="dt-empty">Loading what you have scheduled…</div>';
+    var items=m.sched.items||[], rem=myReminders(), today=new Date().toISOString().slice(0,10);
+    var h='<div class="mb-sec-h">Emails waiting to go</div>';
+    if(m.sched.err) h+='<div class="dt-empty c-red">'+esc(m.sched.err)+'</div>';
+    else if(m.sched.ready===false) h+='<div class="dt-empty">Scheduling is not switched on yet.</div>';
+    else if(!items.length) h+='<div class="dt-empty">Nothing scheduled. In a reply or a new message, press <b>Schedule</b> to send it later.</div>';
+    else h+=items.map(function(x){
+      var failed=x.status==='failed', going=x.status==='sending';
+      return '<div class="mb-row mb-sched-item'+(failed?' is-failed':'')+'">'+
+        '<div class="mb-row-b">'+
+          '<div class="mb-row-t"><div class="mb-who">'+(x.kind==='forward'?'Forward to ':'To ')+esc(x.to||'—')+'</div>'+
+            '<div class="mb-when" title="'+escAttr(x.timezone||'')+'">'+esc(zoneWords(x.send_at,x.timezone))+'</div></div>'+
+          '<div class="mb-subj">'+esc(x.subject||(x.kind==='new'?'(no subject)':'Reply in the conversation'))+'</div>'+
+          '<div class="mb-prev">'+esc(x.preview||'')+(x.attachments&&x.attachments.length?' 📎 '+esc(x.attachments.join(', ')):'')+'</div>'+
+          '<span class="pill mute mb-acct">From '+esc(x.mailbox_email||'an email ID')+'</span>'+
+          (failed?'<div class="mb-sched-err">Did not send: '+esc(x.error||'')+'</div>':'')+
+          (going?'<div class="fs-12 c-text3">Sending now…</div>':
+          '<div class="mb-sched-acts">'+
+            '<button class="btn btn-xs btn-outline" onclick="mbSchedSendNow(\''+escAttr(x.id)+'\')">'+(failed?'Send again':'Send now')+'</button>'+
+            '<button class="btn btn-xs btn-outline" onclick="mbSchedCancel(\''+escAttr(x.id)+'\')">Cancel it</button>'+
+          '</div>')+
+        '</div></div>';
+    }).join('');
+    h+='<div class="mb-sec-h">Your reminders</div>';
+    h+=rem.length?rem.map(function(r){
+      var late=r.return_date&&String(r.return_date).slice(0,10)<today;
+      var who=r.contact_name||r.company_name||r.candidate_name||'';
+      var src=(r.source&&r.source.label)||'';
+      return '<div class="mb-row mb-sched-item">'+
+        '<div class="mb-row-b">'+
+          '<div class="mb-row-t"><div class="mb-who">'+esc(who||'Reminder')+'</div>'+
+            '<div class="mb-when'+(late?' c-red':'')+'">'+esc(r.return_date?(late?'Was due ':'Due ')+String(r.return_date).slice(0,10):'No date')+'</div></div>'+
+          '<div class="mb-prev">'+esc(r.note||'')+'</div>'+
+          (src?'<span class="pill mute">'+esc(src)+'</span>':'')+
+        '</div></div>';
+    }).join('')+'<div class="mb-sec-foot"><button class="btn btn-sm btn-outline" onclick="goPage(\'reminders\')">Open Reminders</button></div>'
+      :'<div class="dt-empty">No reminders waiting.</div>';
+    return h;
+  }
+  window.mbSchedCancel=function(id){
+    apiDelete('/mailbox-scheduled/'+encodeURIComponent(id)).then(function(){ showToast('Cancelled — it will not be sent','success'); loadScheduled(); })
+      .catch(function(e){ showToast('Could not cancel it: '+((e&&e.message)||e),'error'); loadScheduled(); });
+  };
+  window.mbSchedSendNow=function(id){
+    apiPost('/mailbox-scheduled/'+encodeURIComponent(id)+'/send-now',{}).then(function(){ showToast('It goes out within a couple of minutes','success'); loadScheduled(); })
+      .catch(function(e){ showToast('Could not do that: '+((e&&e.message)||e),'error'); loadScheduled(); });
+  };
+
+  // ── the Draft tab: replies being written on THIS device (kept as you type), and the mailbox's own Drafts folder ──
+  function deviceDrafts(){
+    var out=[];
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i); if(!k||k.indexOf('pace-mb-draft:')!==0) continue;
+        var parts=k.split(':'); if(parts.length<4) continue;
+        var v=JSON.parse(localStorage.getItem(k)||'null'); if(!v||!String(v.body||'').trim()) continue;
+        out.push({ key:k, acct:parts[1], msgId:parts.slice(2,parts.length-1).join(':'), mode:parts[parts.length-1]==='fwd'?'forward':'reply',
+          to:v.to||'', subject:v.subject||'', body:v.body||'', at:v.at||0 });
+      }
+    }catch(e){}
+    return out.sort(function(a,b){ return b.at-a.at; });
+  }
+  function renderDrafts(){
+    var m=M(), list=deviceDrafts();
+    var acctOfId=function(id){ return ((m.accounts||[]).filter(function(a){ return a.id===id; })[0]||{}).email_address||''; };
+    var h='<div class="mb-sec-h">Being written on this device</div>';
+    h+=list.length?list.map(function(d){
+      var words=String(d.body).replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+      return '<div class="mb-row" onclick="mbDraftOpen(\''+escAttr(d.acct)+'\',\''+escAttr(d.msgId)+'\',\''+d.mode+'\')">'+
+        '<div class="mb-row-b">'+
+          '<div class="mb-row-t"><div class="mb-who">'+(d.mode==='forward'?'Forward':'Reply')+(d.to?' to '+esc(d.to):'')+'</div>'+
+            '<div class="mb-when">'+esc(d.at?fmtWhen(new Date(d.at).toISOString()):'')+'</div></div>'+
+          '<div class="mb-subj">'+esc(d.subject||'(no subject)')+'</div>'+
+          '<div class="mb-prev">'+esc(words.slice(0,160))+'</div>'+
+          (acctOfId(d.acct)?'<span class="pill mute mb-acct">From '+esc(acctOfId(d.acct))+'</span>':'')+
+        '</div></div>';
+    }).join(''):'<div class="dt-empty">Nothing being written. A reply you start is kept here, on this device, until you send or discard it.</div>';
+    var draftsFolder=m.all?null:(m.folders||[]).filter(function(f){ return f.kind==='drafts'; })[0];
+    h+='<div class="mb-sec-h">Saved in '+(m.all?'Gmail or Outlook':(((m.accounts||[]).filter(function(a){ return a.id===m.activeId; })[0]||{}).platform==='Gmail'?'Gmail':'Outlook'))+'</div>'+
+      '<div class="mb-sec-foot fs-12 c-text3">Drafts you saved in Gmail or Outlook itself are in that email ID\'s Drafts folder. '+
+      (draftsFolder?'<button class="btn btn-sm btn-outline" onclick="mbSetFilter(\'all\');mbSelectFolder(\''+escAttr(draftsFolder.id)+'\')">Open the Drafts folder</button>':'Pick one email ID (not All inboxes) to open it.')+'</div>';
+    return h;
+  }
+  // Continue a draft: the email it answers opens, and its reply window comes back with the words (from this device).
+  window.mbDraftOpen=function(acct,msgId,mode){ mbOpenMessage(acct,msgId,{reply:true,mode:mode}); M().filter='all'; };
 
   // Nothing connected. This is a setup state, not an error — say what to do.
   function renderNoMailbox(){
@@ -1764,6 +1974,8 @@
 
   function renderList(){
     var m=M();
+    if(m.filter==='scheduled'||m.filter==='draft')
+      return '<div class="mb-list wide" id="mb-list">'+(m.filter==='scheduled'?renderScheduled():renderDrafts())+'</div>';
     var wide=!m.selectedId;
     var all=m.messages||[];
     var rows=(m.filter==='unread')?all.filter(function(x){return x.unread;}):all;
@@ -2150,9 +2362,11 @@
           '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+
           '<span class="mb-win-btns">'+
             '<button class="btn btn-outline" onclick="mbCancelComposer()">Discard</button>'+
+            '<button class="btn btn-outline" onclick="mbSchedOpen(\'reply\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
             '<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
           '</span>'+
         '</div>'+
+        mbSchedPanel('reply',c)+
       '</div>';
   }
   function paintComposer(open){

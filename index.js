@@ -4142,6 +4142,32 @@ engineRunner.register('storage_orphan_cleanup', {
   }
 });
 
+// ── SCHEDULE SEND (R-273, D-0163) ─────────────────────────────────────────
+// Emails a person scheduled from the in-app mailbox go out through the SAME send path as its Send button
+// (services/mailbox-send.js), from the mailbox they chose, when their time comes — checked every pass of the engine. On the free
+// server that is whenever PACE is awake (in use, or the heartbeat); the screen says so. A row a dead process left at 'sending'
+// is told plainly at boot and never re-sent.
+const scheduledSends = require('./services/scheduled-sends').createScheduledSends({
+  table: () => db.crossOrg('scheduled_sends'),
+  mailboxes: () => db.crossOrg('user_emails'),
+  sender: require('./services/mailbox-send').createMailboxSender({
+    mail: require('./services/mail-provider').createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider }),
+    gmailProvider, sendMicrosoftNewMessage, buildHtmlEmailBody, getMailboxSignature,
+  }),
+});
+engineRunner.register('scheduled_sends', {
+  everyMs: 60 * 1000,
+  quiet: true,               // usually nothing is due
+  description: 'Send the emails people scheduled from the inbox, once their time has come',
+  run: () => scheduledSends.runDue()
+});
+setTimeout(() => {
+  scheduledSends.recoverStuck().catch((err) => {
+    // Before migration 067 the table does not exist — nothing to recover.
+    if (!/scheduled_sends|relation|schema cache/i.test(String(err && err.message))) console.error('[scheduled_sends] recover failed:', err.message);
+  });
+}, 30 * 1000);
+
 engineRunner.register('candidate_outreach_drip', {
   everyMs: 10 * 60 * 1000,
   quiet: true,               // usually finds nothing due — don't log the no-ops
