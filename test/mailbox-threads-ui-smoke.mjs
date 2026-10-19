@@ -13,6 +13,8 @@ import path from 'node:path';
 import { chromium } from 'playwright-core';
 import { enterApp, waitForLogin } from './helpers/enter-app.mjs';
 const results = [];
+const SHOTS = process.env.SHOTS || '';   // SHOTS=dir saves pictures for the owner
+const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(SHOTS, name) }); } };
 const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };
 
 const PUBLIC_DIR = path.resolve(new URL('../public', import.meta.url).pathname);
@@ -112,6 +114,7 @@ try {
   step('…and reads it: the unread message further up is marked read too', (await calls(/\/mailbox\/mb1\/messages\/r2$/, 'PATCH')).length === 1);
   step('Reply all is on the open message even with one other person on it', await page.evaluate(() => /Reply all/.test(document.getElementById('mb-head').innerText) && !!document.querySelector('#mb-open .mb-replyall') && /Reply all/.test(document.querySelector('#mb-open .mb-msg-foot').innerText)));
   step('…and on each older message of the conversation', await page.evaluate(() => document.querySelectorAll('#mb-before .mb-replyall').length === 2));
+  await shot(page, 'b4-conversations.png');
 
   // reply-all on an older message opens THAT message's window
   await page.evaluate(() => document.querySelectorAll('#mb-before .mb-replyall')[1].click());
@@ -145,9 +148,14 @@ try {
   // ── R-273 schedule send ──
   await page.evaluate(() => window.mbSchedOpen('reply'));
   await page.waitForSelector('#layer .mb-sched', { timeout: 5000 });
+  await shot(page, 'b4-reply-bar-schedule.png');
   const panel = await page.evaluate(() => document.querySelector('#layer .mb-sched').innerText);
   step('Schedule opens a date and a time, in the person\'s own zone, with quick picks', /Date/.test(panel) && /Time/.test(panel) && /Your time/.test(panel) && /Tomorrow morning/.test(panel), panel.slice(0, 200));
   step('…and it says plainly that on the free server it can go out late', /free server/.test(panel) && /late/.test(panel));
+  step('…and the date, the time and the Schedule button are on screen, not below the window\'s edge', await page.evaluate(() => {
+    const vh = window.innerHeight, inView = (el) => { const r = el && el.getBoundingClientRect(); return !!r && r.top >= 0 && r.bottom <= vh; };
+    return inView(document.getElementById('mb-sched-date-reply')) && inView([...document.querySelectorAll('#layer .mb-sched button')].find(b => /Schedule send/.test(b.textContent)));
+  }));
   await page.evaluate(() => { document.getElementById('mb-sched-date-reply').value = '2001-01-01'; document.getElementById('mb-sched-time-reply').value = '08:00'; window.mbSchedConfirm('reply'); });
   await page.waitForTimeout(100);
   step('a time that has passed is refused in the window, nothing is sent to the server', /already passed/.test(await page.evaluate(() => document.querySelector('#layer .mb-sched').innerText)) && (await calls(/\/schedule$/, 'POST')).length === 0);
@@ -160,8 +168,12 @@ try {
   step('…and the window closes (its draft goes too)', await page.evaluate(() => !document.querySelector('#layer [data-win="mailReply"]') && !Object.keys(localStorage).some(k => /pace-mb-draft:mb1:r2:/.test(k))));
 
   // ── Archive acts on the conversation ──
+  const toasts = [];
+  await page.evaluate(() => { window.__toasts = []; const st = window.showToast; window.showToast = function (m, k) { __toasts.push([m, k]); return st && st.apply(this, arguments); }; });
   await page.evaluate(() => window.mbArchive('r3'));
   await page.waitForTimeout(150);
+  const archToast = await page.evaluate(() => (__toasts.find(t => /Archived/.test(t[0])) || [''])[0]);
+  step('…and says so truthfully ("Archived 1", not "0 · 1 could not be changed")', archToast === 'Archived 1', archToast);
   const bulk = (await calls(/\/mailbox\/mb1\/bulk$/, 'POST'))[0];
   step('Archive on a conversation archives its messages in the Inbox (one request)', !!bulk && bulk[2].action === 'archive' && JSON.stringify(bulk[2].ids) === '["r2"]', JSON.stringify(bulk && bulk[2]));
   step('…and the conversation leaves the list, the reader closes', await page.evaluate(() => !STATE.mailbox.messages.some(x => x.thread_id === 'T1') && !STATE.mailbox.selectedId));
@@ -182,6 +194,7 @@ try {
   const rows = await page.evaluate(() => [...document.querySelectorAll('#mb-list .mb-row')].map(r => r.innerText.replace(/\s+/g, ' ')));
   step('All inboxes lists every email ID\'s inbox together', (await calls(/^\/mailbox-all\/inbox\?view=threads/)).length === 1 && rows.length === 2);
   step('…each row says which email ID it arrived at', /prince@vhcstaffing\.com/.test(rows.find(r => /Timesheet/.test(r)) || '') && /prince@futeglobal\.com/.test(rows.find(r => /Dialpad/.test(r)) || ''), JSON.stringify(rows));
+  await shot(page, 'b4-all-inboxes.png');
   step('…an email ID it could not read is named, not silently missing', /old@zoho\.test/.test(await page.evaluate(() => document.getElementById('mb-list').innerText)));
   await page.evaluate(() => window.mbOpen('o1'));
   await page.waitForFunction(() => (STATE.mailbox.message || {}).id === 'o1', { timeout: 8000 });
@@ -195,7 +208,9 @@ try {
   await page.waitForTimeout(100);
   const sched = await page.evaluate(() => document.getElementById('mb-list').innerText);
   step('Scheduled lists the emails waiting to go: to, subject, from which email ID, the file names', /To ray@y\.com/.test(sched) && /Following up/.test(sched) && /From prince@futeglobal\.com/.test(sched) && /cv\.pdf/.test(sched), sched.slice(0, 300));
+  step('a scheduled reply says it is a reply (not "To —")', /Reply to the conversation/.test(sched) && !/To —/.test(sched));
   step('…one that did not go says why, and offers Send again', /Did not send: The email ID's sign-in had expired/.test(sched) && /Send again/.test(sched));
+  await shot(page, 'b4-scheduled-tab.png');
   step('…and the person\'s reminders are in the same tab', /Your reminders/.test(sched) && /Call Ray about the start date/.test(sched) && /Open Reminders/.test(sched));
   await page.evaluate(() => window.mbSchedCancel('s1'));
   await page.waitForTimeout(100);
@@ -208,6 +223,7 @@ try {
   const dr = await page.evaluate(() => document.getElementById('mb-list').innerText);
   step('Draft shows the reply being written on this device, from which email ID', /Reply to ray@y\.com/.test(dr) && /Half written/.test(dr) && /From prince@futeglobal\.com/.test(dr), dr.slice(0, 200));
   step('…and points to the Drafts saved in Gmail / Outlook', /Drafts folder/.test(dr));
+  await shot(page, 'b4-draft-tab.png');
   step('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
   step('the page part ran to the end', false, String(e && e.stack || e));

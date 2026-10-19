@@ -445,7 +445,7 @@ function oiChart(series,bucket){
   function line(k,cls){ return '<polyline class="oi-line '+cls+'" fill="none" points="'+series.map(function(p,i){ return x(i).toFixed(1)+','+y(p[k]).toFixed(1); }).join(' ')+'"></polyline>'; }
   var grid=[0,0.25,0.5,0.75,1].map(function(f){ var v=Math.round(max*f), yy=y(v); return '<line class="oi-grid" x1="'+L+'" y1="'+yy+'" x2="'+R+'" y2="'+yy+'"></line><text class="oi-ax" x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end">'+v+'</text>'; }).join('');
   var every=Math.max(1,Math.ceil(series.length/8));
-  var labels=series.map(function(p,i){ if(i%every&&i!==series.length-1) return ''; var d=new Date(p.key+'T00:00:00Z'); return '<text class="oi-ax" x="'+x(i)+'" y="'+(B+20)+'" text-anchor="middle">'+(bucket==='week'?'wk ':'')+d.toLocaleDateString('en-US',{day:'numeric',month:'short',timeZone:'UTC'})+'</text>'; }).join('');
+  var labels=series.map(function(p,i){ if(i%every&&i!==series.length-1) return ''; var d=new Date(p.key+'T00:00:00Z'); return '<text class="oi-ax" x="'+x(i)+'" y="'+(B+20)+'" text-anchor="'+(i===series.length-1&&series.length>1?'end':(i===0?'start':'middle'))+'">'+(bucket==='week'?'wk ':'')+d.toLocaleDateString('en-US',{day:'numeric',month:'short',timeZone:'UTC'})+'</text>'; }).join('');
   // a point per day with its counts in a tooltip — hovering a day shows that day's numbers
   var hits=series.map(function(p,i){ return '<circle class="oi-hit" cx="'+x(i)+'" cy="'+y(p.emailed)+'" r="6"><title>'+p.key+': '+p.emailed+' emailed, '+p.opened+' opened, '+p.replied+' replied</title></circle>'; }).join('');
   return '<svg class="oi-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Emailed, opened and replied '+(bucket==='week'?'each week':'each day')+'">'+grid+

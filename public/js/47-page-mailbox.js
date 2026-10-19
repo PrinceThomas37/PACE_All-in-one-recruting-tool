@@ -540,10 +540,12 @@
     if(!picked.length||m.bulkBusy) return Promise.resolve();
     // A ticked conversation stands for its messages; in All inboxes each goes to its own mailbox. The count said back is
     // of what was ticked (conversations or emails), never of the messages underneath.
-    var byAcct={}, rowsDone={};
+    // What each ticked row stands for is worked out NOW — once it has been archived it is no longer in the list to ask.
+    var byAcct={}, standsFor={};
     picked.forEach(function(id){
       var row=rowOf(id), acct=(row&&row.mailbox_id)||m.activeId;
-      (row&&row.id===id?idsOf(row,action):[id]).forEach(function(mid){ (byAcct[acct]=byAcct[acct]||[]).push(mid); });
+      standsFor[id]=(row&&row.id===id?idsOf(row,action):[id]);
+      standsFor[id].forEach(function(mid){ (byAcct[acct]=byAcct[acct]||[]).push(mid); });
     });
     m.bulkBusy=true; paint();
     var accts=Object.keys(byAcct), results=[], listKey=lkey();
@@ -556,7 +558,7 @@
     },Promise.resolve()).then(function(){
       if(lkey()!==listKey){ m.bulkBusy=false; return; }
       var okSet={}; results.forEach(function(r){ if(r.ok) okSet[r.id]=1; });
-      var okRows=picked.filter(function(id){ var row=rowOf(id)||{id:id}; return idsOf(row,action).some(function(x){ return okSet[x]; }) || okSet[id]; });
+      var okRows=picked.filter(function(id){ return standsFor[id].some(function(x){ return okSet[x]; }); });
       var failed=picked.length-okRows.length;
       listCachePut();
       m.bulkBusy=false;
@@ -1284,13 +1286,13 @@
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
           '<div style="margin-bottom:12px">'+labelRowHtml('compose',c)+'</div>'+
           renderSigRow(c.sig,'mbComposeSetSig',c.acct||M().activeId)+
+          mbSchedPanel('compose',c)+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="mbCancelCompose()">Cancel</button>'+
           '<button class="btn btn-outline" onclick="mbSchedOpen(\'compose\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
           '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
-        mbSchedPanel('compose',c)+
       '</div>';
   }
   function paintComposeModal(open){
@@ -1534,6 +1536,8 @@
     var first=localParts(quickTimes()[0][1]);
     c.sched=c.sched&&c.sched.open?{open:false}:{ open:true, date:(c.sched&&c.sched.date)||first.date, time:(c.sched&&c.sched.time)||first.time };
     schedRepaint(which);
+    // The panel sits at the foot of the window's body: bring it into view, date and time boxes and the button included.
+    if(c.sched.open) setTimeout(function(){ var el=document.querySelector('#layer .mb-sched'); if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'}); },30);
   };
   window.mbSchedClose=function(which){ var c=schedBag(which); if(!c) return; c.sched={open:false,date:c.sched&&c.sched.date,time:c.sched&&c.sched.time}; schedRepaint(which); };
   window.mbSchedField=function(which,k,v){ var c=schedBag(which); if(c&&c.sched){ c.sched[k]=v; c.sched.err=''; } };
@@ -1818,7 +1822,7 @@
       var failed=x.status==='failed', going=x.status==='sending';
       return '<div class="mb-row mb-sched-item'+(failed?' is-failed':'')+'">'+
         '<div class="mb-row-b">'+
-          '<div class="mb-row-t"><div class="mb-who">'+(x.kind==='forward'?'Forward to ':'To ')+esc(x.to||'—')+'</div>'+
+          '<div class="mb-row-t"><div class="mb-who">'+(x.kind==='forward'?'Forward to '+esc(x.to||'—'):(x.to?'To '+esc(x.to):(x.kind==='reply'?'Reply to the conversation':'To —')))+'</div>'+
             '<div class="mb-when" title="'+escAttr(x.timezone||'')+'">'+esc(zoneWords(x.send_at,x.timezone))+'</div></div>'+
           '<div class="mb-subj">'+esc(x.subject||(x.kind==='new'?'(no subject)':'Reply in the conversation'))+'</div>'+
           '<div class="mb-prev">'+esc(x.preview||'')+(x.attachments&&x.attachments.length?' 📎 '+esc(x.attachments.join(', ')):'')+'</div>'+
@@ -2357,6 +2361,7 @@
           renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
           labelRowHtml('reply',c)+
           renderSigRow(c.sig,'mbCompSetSig',c.acct)+
+          mbSchedPanel('reply',c)+
         '</div>'+
         '<div class="mb-win-ft">'+
           '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+
@@ -2366,7 +2371,6 @@
             '<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
           '</span>'+
         '</div>'+
-        mbSchedPanel('reply',c)+
       '</div>';
   }
   function paintComposer(open){

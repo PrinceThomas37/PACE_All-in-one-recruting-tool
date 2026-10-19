@@ -65,6 +65,7 @@ try {
   await pg.waitForSelector('#sq-fusubj0');
   ok('choosing "a new email" is saved at once', posts.some(p => p[0] === '/outreach-plan' && p[1].key === 'fu1_thread' && p[1].value === 'new'), JSON.stringify(posts));
   ok('…and the follow-up gets a subject of its own', !!(await pg.$('#sq-fusubj0')));
+  if (process.env.SHOTS) { await pg.evaluate(() => document.querySelector('[data-sq="futhread"]').scrollIntoView({ block: 'center' })); await pg.waitForTimeout(200); await pg.screenshot({ path: process.env.SHOTS + '/r286-followup-thread.png' }); }
   await pg.click('#sq-fusubj0'); await pg.keyboard.type('A fresh note about ');
   await pg.click('[data-sq="menu"][data-menu="fu0"]'); await pg.click('[data-menu="fu0"] ~ .sq-menu [data-k="pos"]');
   ok('a detail from the menu goes into the follow-up\'s subject when that is where the cursor is', (await pg.innerHTML('#sq-fusubj0')).includes('data-k="pos"'), await pg.innerHTML('#sq-fusubj0'));
