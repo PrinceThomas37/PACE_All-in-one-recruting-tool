@@ -1201,3 +1201,6 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## 2026-10-19 (Session 49, later) — mailbox daily limit routes (R-266)
 - gateway: `routes/auth.js` — `PATCH /users/:id/emails/:eid` decides through `services/mailbox-limit.js` (staff any whole number >=1, owner lower only, else 403/400); `POST /users/:id/emails` validates a typed number the same way and otherwise uses the company default; new literal `GET /users/email-limit-changes` (admin) sits above the `:id` routes. Both writes log to `record_history` (entity `mailbox`). Also moved the stray "Who a user reports to" comment back above its route.
+
+## 2026-10-19 — R-266 follow-up
+- gateway: the 403 for a raise names the limit ("Type N or less").

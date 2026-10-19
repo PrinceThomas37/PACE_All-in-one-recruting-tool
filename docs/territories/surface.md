@@ -1428,3 +1428,6 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
 - surface: R-266 — limit box per mailbox on the user profile (`saveMailboxLimit`, `openMailboxLimitChanges` in `12-manager-users.js`), My Setup "Lower daily limit"; Add email ID window has no typed default.
+
+## 2026-10-19 — R-266 follow-up
+- surface: My Setup button is "Edit daily limit"; too-high number shows "an admin set N, type N or less" and asks again.

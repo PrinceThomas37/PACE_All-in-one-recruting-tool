@@ -21,7 +21,7 @@ function decideLimitChange({ staff, owner, current, fallback, requested, warnAbo
   if (!staff) {
     if (!owner) return { ok: false, status: 403, error: 'Only an admin or team lead can change a mailbox\'s daily limit.' };
     const now = whole(current) >= 1 ? Number(current) : Number(fallback);
-    if (now >= 1 && value > now) return { ok: false, status: 403, error: 'You can lower your own daily limit, but only an admin can raise it.' };
+    if (now >= 1 && value > now) return { ok: false, status: 403, error: `Too high: an admin set ${now} for this mailbox. Type ${now} or less — only an admin can raise it.` };
   }
   const line = Number(warnAbove);
   const warn = line >= 1 && value > line
