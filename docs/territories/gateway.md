@@ -1204,3 +1204,7 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## 2026-10-19 — R-266 follow-up
 - gateway: the 403 for a raise names the limit ("Type N or less").
+## Session 50 (19 Oct)
+- R-284 (filed as R-266 before the merge): `routes/settings.js` org helper fixed (`ctx.orgIdFor`, not `ctx.orgOf`). A route test must build `ctx` the way `index.js` does — with `orgIdFor` — or the org path is never run. Guard: `test/settings-org-smoke.mjs`.
+- R-268 (Session 50): `/next-actions` and `/client-intel/digest` call `answeredFromMailbox` (own threads only) before ranking; `next-actions` builds its own mail provider from ctx (`graphMailRequest`, `getMicrosoftToken`, `gmailProvider`).
+- Batch 2 (Session 50): `/me/preferences` allows `leads_per_page` ∈ {10,20,50} (R-280). Finder: `readAccess` default ON when nothing stored (D-0158, R-283); `applySizeChoice(orgs, search, {checked})` leaves out unknown-size FREE companies only when the Apollo lookup ran (R-276); result line says "N left out because their size is not known". `index.js` send-from-reminder stamps `updated_at` (R-281).

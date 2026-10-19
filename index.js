@@ -1002,7 +1002,7 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     }).select().single();
     if (error) throw error;
 
-    if (reminder_id) await db.forRequest(req).from('reminders').update({ status: 'sent' }).eq('id', reminder_id).eq('user_id', req.user.id);
+    if (reminder_id) await db.forRequest(req).from('reminders').update({ status: 'sent', updated_at: new Date() }).eq('id', reminder_id).eq('user_id', req.user.id);   // updated_at = when it was closed (R-281)
     await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${filledSubject}`, null, null);
 
     res.status(201).json({ success: true, email_id: row.id });

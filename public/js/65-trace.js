@@ -43,8 +43,20 @@
         if(inb) meta.lastInbound={ email:String(inb.from).replace(/^.*<|>.*$/g,'').trim(), name:inb.person||'' };
       }
       if(who){
-        var w=String(who).toLowerCase(), mine=tl.filter(function(m){ return String(m.person||'').toLowerCase().indexOf(w)>=0||String(m.from&&m.from.name||'').toLowerCase().indexOf(w)>=0; });
-        if(mine.length) tl=mine;
+        // Their emails are found by their name; OURS carry no name, so they are kept by WHO THEY WENT TO (R-268, owner
+        // 19 Oct: "it does not read our outgoing emails" — narrowing by name alone dropped every reply of ours).
+        var w=String(who).toLowerCase(), addr=function(x){ return String(x||'').toLowerCase().replace(/^.*<|>.*$/g,'').trim(); };
+        var theirs=tl.filter(function(m){ return m.direction==='inbound'&&(String(m.person||'').toLowerCase().indexOf(w)>=0||String(m.from&&m.from.name||'').toLowerCase().indexOf(w)>=0); });
+        var their=theirs.map(function(m){ return addr(m.from); }).filter(Boolean);
+        var ours=tl.filter(function(m){ if(m.direction==='inbound') return false; var to=String(m.to||'').toLowerCase(); return !to||their.some(function(a){ return to.indexOf(a)>=0; }); });
+        if(theirs.length) tl=theirs.concat(ours).sort(function(a,b){ return String(b.sent_at).localeCompare(String(a.sent_at)); });
+      }
+      // The chip marks the email it is about: "the reply you owe" is THEIR newest, "your last email" OUR newest — not simply
+      // the top row, which is ours once we have answered (R-268).
+      var chipAt=0;
+      if(firstChip==='the reply you owe'||firstChip==='your last email'){
+        var dir=firstChip==='the reply you owe'?'inbound':'outbound';
+        chipAt=-1; for(var k=0;k<tl.length;k++){ if((tl[k].direction==='inbound')===(dir==='inbound')){ chipAt=k; break; } }
       }
       var items=tl.slice(0,SHOWN).map(function(m,i){
         var inbound=m.direction==='inbound';
@@ -53,7 +65,7 @@
           primary:(inbound?'They wrote':'You wrote')+(m.person?' — '+m.person:''),
           secondary:m.subject||'(no subject)',
           body:clip(m.text,700),
-          chips:(i===0&&firstChip)?[firstChip]:[],
+          chips:(i===chipAt&&firstChip)?[firstChip]:[],
           when:day(m.sent_at)
         };
         if(inbound&&m.can_open_full){

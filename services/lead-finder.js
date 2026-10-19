@@ -185,13 +185,23 @@ function sizeVerdict(employees, search) {
   return ranges.some(([lo, hi]) => n >= lo && n <= hi) ? 'in' : 'out';
 }
 
-/** Companies split by the size choice: the ones to keep (a company whose size is not known is kept, and marked), and how many were left out. */
-function applySizeChoice(orgs, search) {
+/**
+ * Companies split by the size choice. A company outside the choice is left out. A company from the FREE job sources whose size
+ * nobody knows is left out too (owner, 19 Oct, R-276, chose "leave them out": big companies were slipping in as "Size not
+ * confirmed"). A company Apollo returned was already filtered BY SIZE inside Apollo, so one without a headcount number on its row
+ * still fits and is kept (marked). `leftOut` counts the wrong size, `unknown` the free ones not known — both said, never silent.
+ */
+// `checked` = the size lookup for the free companies actually RAN. When it could not (no Apollo, no credit left, an error) nothing
+// was learned, so they are kept and marked, and the result line says the size was not checked — never an empty page for that.
+function applySizeChoice(orgs, search, { checked = true } = {}) {
   const kept = []; let leftOut = 0, unknown = 0;
   (orgs || []).forEach((o) => {
     const v = sizeVerdict(o.employees, search);
     if (v === 'out') { leftOut++; return; }
-    if (v === 'unknown') { o.size_unknown = true; unknown++; }
+    if (v === 'unknown') {
+      if (o.source === 'free' && checked) { unknown++; return; }
+      o.size_unknown = true;
+    }
     kept.push(o);
   });
   return { kept, leftOut, unknown };
@@ -495,10 +505,12 @@ const jsearchKey = (orgId, now) => 'finder_jsearch_' + (orgId || 'default') + '_
 const revealKey = (userId, now) => 'finder_reveals_' + userId + '_' + dayOf(now);
 const accessKey = (userId) => 'finder_user_' + userId;
 /** { enabled, daily } from the stored JSON; anything unreadable is "not enabled". */
+// A person nobody has switched on or off has the Lead Finder ON (owner, 19 Oct, D-0158/R-283: "yes, everyone automatically …
+// for now keep it ON"; later it follows what the company pays for). An admin's explicit "off" still turns it off.
 function readAccess(value) {
   let v = null;
   try { v = typeof value === 'string' ? JSON.parse(value) : value; } catch (_) { v = null; }
-  if (!v || typeof v !== 'object') return { enabled: false, daily: null };
+  if (!v || typeof v !== 'object') return { enabled: true, daily: null };
   const d = Number(v.daily);
   return { enabled: v.enabled === true, daily: Number.isFinite(d) && d >= 0 ? Math.floor(d) : null };
 }

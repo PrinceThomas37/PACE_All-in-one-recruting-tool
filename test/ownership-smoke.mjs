@@ -242,7 +242,8 @@ t('D-0022: the choice is stored against the USER', () => {
 
 t('and only named values are accepted', () => {
   // This row goes straight back out to every one of that user's browsers.
-  assert.ok(/ALLOWED_PREFS = \{ theme: \['light', 'dark', 'system'\] \}/.test(settings));
+  // The allow-list may hold more than the theme (R-280 added leads_per_page) — what matters is that the theme is a named list.
+  assert.ok(/ALLOWED_PREFS = \{[^}]*theme: \['light', 'dark', 'system'\]/.test(settings));
   assert.ok(/status\(400\)/.test(settings));
 });
 

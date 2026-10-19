@@ -634,6 +634,8 @@ window.toggleTheme=function(){
 window.loadThemePreference=function(){
   if(!(STATE&&STATE.token)||typeof apiGet!=='function')return;
   apiGet('/me/preferences').then(function(p){
+    // The same per-person row carries the Leads page size (R-280).
+    if(p&&[10,20,50].indexOf(Number(p.leads_per_page))>=0){ STATE.leadsPageSize=Number(p.leads_per_page); if(STATE.page==='leads'&&typeof render==='function')render(); }
     if(!p||!p.theme)return;
     if(p.theme==='system'){ if(!isAutoTheme())applyAutoTheme(); return; }
     if(p.theme==='light'||p.theme==='dark'){

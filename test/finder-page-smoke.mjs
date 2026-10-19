@@ -692,9 +692,10 @@ try {
 
   await page.evaluate(() => { window.__holdFind = true; window.fdFindNow(); });
   await page.waitForTimeout(150);
-  const busy = await page.evaluate(() => { const p = document.querySelector('#content .fd-progress'); return { has: !!p, text: p ? p.textContent : '', bar: !!(p && p.querySelector('.fd-bar > span')), spin: !!(p && p.querySelector('.fd-spin')), anim: p && p.querySelector('.fd-bar > span') ? getComputedStyle(p.querySelector('.fd-bar > span')).animationName : '', btn: [...document.querySelectorAll('#content .btn-primary')].map(b => b.textContent + ':' + b.disabled).join('|') }; });
-  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/finder-searching-bar-only.png' });
-  step('while it searches the page SAYS so, with a moving bar and what to expect (so nobody wonders if it froze)', busy.has && /Finding leads for your search/.test(busy.text) && /up to a minute/.test(busy.text) && busy.bar && busy.anim === 'fdSlide' && !busy.spin, JSON.stringify(busy).slice(0, 220));
+  const busy = await page.evaluate(() => { const p = document.querySelector('#content .fd-progress'); return { has: !!p, text: p ? p.textContent : '', bar: !!(p && p.querySelectorAll('.fd-dots > i').length === 28), spin: !!(p && p.querySelector('.fd-spin')), anim: p && p.querySelector('.fd-dots > i') ? getComputedStyle(p.querySelector('.fd-dots > i')).animationName : '', dotsW: p && p.querySelector('.fd-dots') ? p.querySelector('.fd-dots').getBoundingClientRect().width : -1, oldBar: !!(p && p.querySelector('.fd-bar')), btn: [...document.querySelectorAll('#content .btn-primary')].map(b => b.textContent + ':' + b.disabled).join('|') }; });
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/finder-searching-dots.png' });
+  step('while it searches the page SAYS so, with a moving dot-matrix and what to expect (so nobody wonders if it froze)', busy.has && /Finding leads for your search/.test(busy.text) && /up to a minute/.test(busy.text) && busy.bar && busy.anim === 'fdDot' && !busy.spin, JSON.stringify(busy).slice(0, 220));
+  step('R-282: the animation is a small dot-matrix, not a bar across the screen (owner, 19 Oct)', busy.dotsW > 20 && busy.dotsW < 120 && !busy.oldBar, 'width=' + busy.dotsW);
   step('the button cannot be pressed twice while it works', /Finding….*:true|Finding…:true/.test(busy.btn), busy.btn);
   await page.evaluate(() => { window.__holdFind = false; window.__releaseFind(); });
   await page.waitForTimeout(400);

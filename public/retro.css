@@ -1035,6 +1035,16 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-bar>span{position:absolute;top:0;bottom:0;left:-35%;width:35%;background:var(--accent);animation:fdSlide 1.3s ease-in-out infinite}
 @keyframes fdSlide{from{left:-35%}to{left:100%}}
 @media (prefers-reduced-motion:reduce){.fd-bar>span{animation:none;left:0;width:100%;opacity:.45}}
+/* Find Leads "searching…": a compact dot-matrix ripple (R-282). 4×7 square dots; .fd-dN = the dot's diagonal = its delay. */
+.fd-run{flex-direction:row;align-items:center;gap:16px}
+.fd-run-txt{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fd-dots{display:grid;grid-template-columns:repeat(7,6px);grid-auto-rows:6px;gap:3px;flex:none}
+.fd-dots>i{display:block;background:var(--accent);opacity:.15;animation:fdDot 1.2s linear infinite}
+.fd-dots>.fd-d1{animation-delay:.1s}.fd-dots>.fd-d2{animation-delay:.2s}.fd-dots>.fd-d3{animation-delay:.3s}
+.fd-dots>.fd-d4{animation-delay:.4s}.fd-dots>.fd-d5{animation-delay:.5s}.fd-dots>.fd-d6{animation-delay:.6s}
+.fd-dots>.fd-d7{animation-delay:.7s}.fd-dots>.fd-d8{animation-delay:.8s}.fd-dots>.fd-d9{animation-delay:.9s}
+@keyframes fdDot{0%,60%,100%{opacity:.15}20%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.fd-dots>i{animation:none;opacity:.5}}
 .fd-lastfind{margin:10px 0}
 .fd-tag{display:inline-block;padding:0 6px;font-size:11px;font-weight:700;border:2px solid var(--ctl-brd);background:var(--card-solid)}
 .fd-posts{font-size:12.5px;line-height:1.6;flex:1;min-width:220px}
@@ -1206,3 +1216,7 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
   .sq .sq-card{padding:14px}
   .sq-menu{position:fixed;left:16px;right:16px;bottom:16px;top:auto;width:auto}
 }
+/* Today, before a new sales manager has set up (R-283) */
+.setup-steps{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:12px}
+.setup-step{display:flex;gap:12px;align-items:flex-start}
+.setup-step-n{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:2px solid var(--ctl-brd,var(--border2));font-weight:700}

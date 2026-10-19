@@ -1431,3 +1431,5 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-19 — R-266 follow-up
 - surface: My Setup button is "Edit daily limit"; too-high number shows "an admin set N, type N or less" and asks again.
+- R-268 (Session 50): `65-trace.js` leadEmails — when narrowed to one person, THEIR mail is matched by name, OURS by `to` (outbound rows have `person:null`); the 'reply you owe' chip sits on their newest email, 'your last email' on ours.
+- Batch 2 (Session 50): Leads strip counts `stripBase` (every filter but the stage buttons, R-279 — reverses "counts from ALL leads"); "Show 10/20/50 per page" (`#leads-per-page`, `STATE.leadsPageSize`, `setLeadsPageSize` saves `/me/preferences.leads_per_page`, loaded in `loadThemePreference`, R-280); Reminders "Recently dismissed" = last 7 days by `updated_at` (R-281); Find Leads searching = `.fd-dots` dot-matrix (R-282, `retro.css`); finder card says "Revenue 52M" (R-276); Today for a bd/bd_lead who owes a sequence = `renderSetupDashboard` only (`isSetupHeld`, `loadSetupOwed` → POST /my-setup/sync; error = ordinary Today) (R-283). `.setup-step*` in `retro.css`.

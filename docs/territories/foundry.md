@@ -1308,3 +1308,8 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## 2026-10-19 (Session 49, later) — new test (R-266)
 - foundry: `test/user-mailbox-limit-smoke.mjs` (22) pins who may change a mailbox limit and the change log; removing the lower-only check fails 4. `mysetup-page-smoke` still pins the words "set by an admin" on My Setup, so the wording keeps them.
+## Session 50 (19 Oct)
+- Two new guards: `test/settings-org-smoke.mjs` (R-284 ex R-266, mounts routes/settings.js with the server's real ctx incl. `orgIdFor`) and `test/candidate-nul-smoke.mjs` (R-267). Both reintroduce-the-bug checked. Lesson: suites that hand-build `ctx` without `orgIdFor` never execute the org branch.
+- R-268 (Session 50): new `test/next-actions-answered-smoke.mjs` — first REAL drive of GET /next-actions (ownership-smoke only greps it). `trace-smoke` fixture fixed to the server's outbound shape (`person:null`, `to`) — the old fixture hid the bug. Lesson again: a fixture must be the route's real projection.
+- R-274: `test/mail-attachments-smoke.mjs` drives the real Gmail/Outlook adapters with fake providers (iPhone-shaped payload).
+- Batch 2 (Session 50): new `test/owner-19oct-screens-smoke.mjs` (Chromium, 18; SHOTS=dir). Updated `finder-routes-smoke` (people start explicitly OFF; default-ON step), `lead-finder-smoke` (R-276/R-283 rules), `finder-page-smoke` (dot-matrix, width < 120px). A generic API stub must answer GETs with `[]` — `{}` crashed `STATE.bd.jobOrders.find`.

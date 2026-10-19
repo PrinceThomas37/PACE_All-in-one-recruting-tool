@@ -18,6 +18,13 @@ function renderJobs(){
       return false;
     });
   }
+  if(f.industries&&f.industries.length)jobs=jobs.filter(function(j){return f.industries.indexOf(j.industry||j.company_ind||"")>-1;});
+  // "Assigned to" — one person's leads, or the ones nobody owns (owner, 8 Oct: the admin should see leads per assigned user).
+  if(f.assignee)jobs=jobs.filter(function(j){return f.assignee==='none'?!j.assigned_to_bd:j.assigned_to_bd===f.assignee;});
+  if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
+  if(f.dateRange==="custom"){if(f.dateFrom)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=f.dateFrom;});if(f.dateTo)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)<=f.dateTo;});}
+  // Every filter but the stage buttons, applied: what the number strip counts (R-279, below). The stage filter comes after.
+  var stripBase=jobs;
   if(f.stages&&f.stages.length)jobs=jobs.filter(function(j){return f.stages.indexOf(j.stage)>-1;});
   // CONNECTED, NEWEST FIRST (Session 31). The owner: "just show those
   // connected based on the created date". Looking at Connected is looking for
@@ -28,11 +35,6 @@ function renderJobs(){
       return String(b.created_at||b.created_date||'').localeCompare(String(a.created_at||a.created_date||''));
     });
   }
-  if(f.industries&&f.industries.length)jobs=jobs.filter(function(j){return f.industries.indexOf(j.industry||j.company_ind||"")>-1;});
-  // "Assigned to" — one person's leads, or the ones nobody owns (owner, 8 Oct: the admin should see leads per assigned user).
-  if(f.assignee)jobs=jobs.filter(function(j){return f.assignee==='none'?!j.assigned_to_bd:j.assigned_to_bd===f.assignee;});
-  if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
-  if(f.dateRange==="custom"){if(f.dateFrom)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=f.dateFrom;});if(f.dateTo)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)<=f.dateTo;});}
 
   var stages=["Unassigned","Assigned","Connected","Rejected","Future","Qualified"];
   var stageOpts=stages.map(function(st){return '<option value="'+st+'"'+(f.stage===st?" selected":"")+'>'+st+'</option>';}).join("");
@@ -60,11 +62,13 @@ function renderJobs(){
   // How many of the ticked leads are still Unassigned and unowned — the ones "Take lead" can take.
   var leadTakeN=leadSelectable.filter(function(j){return leadSel[j.id]&&j.stage==='Unassigned'&&!j.assigned_to_bd;}).length;
   var leadSelHidden=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length-leadSelCount;
-  var _tp=Math.max(1,Math.ceil(jobs.length/20));
+  // Leads per page: the person's own choice, 10 / 20 / 50 (owner, 19 Oct, R-280; saved with their preferences, D-0022).
+  var _per=[10,20,50].indexOf(STATE.leadsPageSize)>=0?STATE.leadsPageSize:20;
+  var _tp=Math.max(1,Math.ceil(jobs.length/_per));
   var _pg=Math.min(STATE.leadsPage||0,_tp-1);
   // Rows for UI.table — arrays of cells, so the column list below is the only
   // place that decides what a lead row shows.
-  var rows=jobs.slice(_pg*20,(_pg+1)*20).map(function(j){
+  var rows=jobs.slice(_pg*_per,(_pg+1)*_per).map(function(j){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
     var hasEmail=(cs.find(function(c){return c.is_primary;})||cs[0]||{}).email;
@@ -211,14 +215,16 @@ function renderJobs(){
   '</div>';
 
   // ── the stat strip ────────────────────────────────────────────────────
-  // Counts come from ALL of this user's leads, never the filtered set: the
-  // strip is the denominator you filter against, so filtering must not move it.
+  // The numbers follow the filters (owner, 19 Oct, R-279: "Even if I clicked on today the leads number don't change above,
+  // because that's what user reads") — search, industry, who and date. NOT the stage buttons themselves: those ARE this
+  // strip, and following them would zero every other stage the moment one is clicked. (This reverses the Session-era rule
+  // "counts come from ALL leads, never the filtered set".)
   //
   // These used to be number-and-colour chips with the name only on hover — a
   // workaround for having nowhere to put the label. The strip has room, so the
   // name is back and the stage colour stays as the dot. Clicking a stage
   // filters to it; clicking Total clears the stage filter.
-  var allJobs=getMyJobs(u);
+  var allJobs=stripBase;
   var stageCounts={};
   var stageList=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
   stageList.forEach(function(st){stageCounts[st]=allJobs.filter(function(j){return j.stage===st;}).length;});
@@ -318,7 +324,11 @@ function renderJobs(){
           : 'No leads yet.'
       })+
       '<div class="fs-12_5 c-ink3" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
-        '<div>'+jobs.length+' lead'+(jobs.length===1?'':'s')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>'+jobs.length+' lead'+(jobs.length===1?'':'s')+'</span>'+
+          '<label class="fs-12_5 c-ink3" style="display:flex;align-items:center;gap:6px">Show '+
+            '<select class="sel sel-sm" id="leads-per-page" aria-label="Leads per page" onchange="setLeadsPageSize(this.value)">'+
+              [10,20,50].map(function(n){ return '<option value="'+n+'"'+(n===_per?' selected':'')+'>'+n+'</option>'; }).join('')+
+            '</select> per page</label></div>'+
         (_tp>1?'<div style="display:flex;gap:6px;align-items:center">'+
           '<button class="btn btn-sm btn-outline" onclick="setLeadsPage('+(_pg-1)+')"'+(_pg===0?' disabled style="opacity:.5"':'')+'>&lsaquo; Prev</button>'+
           '<span>Page '+(_pg+1)+' / '+_tp+'</span>'+

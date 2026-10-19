@@ -34,7 +34,13 @@ window.savePendingEmailEdit=function(id){
 document.addEventListener('click',function(){
   if(STATE.openDrop!==null){STATE.openDrop=null;render();}
 });
-window.setLeadsPageSize=function(n){STATE.leadsPageSize=n;STATE.leadsPage=0;render();}
+// Leads per page — 10 / 20 / 50, the person's own (owner, 19 Oct, R-280). Saved against the ACCOUNT (D-0022), so it follows them
+// to another device and never to the next person on a shared one. A failed save still applied on screen.
+window.setLeadsPageSize=function(n){
+  n=Number(n); if([10,20,50].indexOf(n)<0) return;
+  STATE.leadsPageSize=n; STATE.leadsPage=0; render();
+  if(STATE.token&&typeof apiFetch==='function') apiFetch('PUT','/me/preferences',{leads_per_page:n}).catch(function(){});
+};
 
 // ── MAIL MERGE ─────────────────────────────────
 window.openMailMerge=function(ids){

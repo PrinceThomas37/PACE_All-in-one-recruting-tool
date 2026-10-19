@@ -348,3 +348,4 @@ The send loop, follow-up queue and cancel path now ask `services/contact-status.
 
 ## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
 - harbour: a mailbox's daily limit is edited via `PATCH /users/:id/emails/:eid` (rule `services/mailbox-limit.js`, R-266); the send loop and `assignmentQueue` still read `user_emails.daily_send_limit` unchanged.
+- R-274 (Session 50): an attachment is 'inline' (hidden) only when it is an image the body shows (`isInlinePart` in `services/mail-provider.js`). Never go back to 'has a Content-ID = logo' — phone apps tag real files that way. Graph attachments list keeps its `$select` (no contentId: asking for it downloads every file).

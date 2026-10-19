@@ -132,6 +132,19 @@ module.exports = (ctx) => {
     return value;
   }
 
+  // "Did we answer?" from the caller's OWN mailboxes, for the list headlines (R-268, services/sent-side.js).
+  const replyCheck = sentSide.createReplyCheck({ mail });
+  async function answeredFromMailbox(req, threads) {
+    try {
+      const addrs = sentSide.addressesToCheck(threads);
+      if (!addrs.length) return 0;
+      const { data: boxes } = await supabase.from('user_emails')
+        .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
+      const latest = await replyCheck.latest(req.user.id, boxes || [], addrs);
+      return sentSide.addOurReplies(threads, latest);
+    } catch (_) { return 0; }   // unreadable = unchanged: the card stays (the safe direction)
+  }
+
   async function loadMessages(req, subject, opts) {
     const leadIds = subject.leadIds || [];
     const companyId = subject.companyId;
@@ -519,11 +532,11 @@ module.exports = (ctx) => {
       const teamIds = active.filter(id => leadById[id].assigned_to_bd !== req.user.id).slice(0, DIGEST_TEAM);
       const pb = ci.playbookFor('recruiting');
 
-      const itemFor = async (id, withSummary) => {
+      const itemFor = async (id, withSummary, loaded) => {
         const l = leadById[id];
         const name = [l.position, l.company && l.company.name].filter(Boolean).join(' · ') || 'this lead';
         const subject = { kind: 'lead', id, name, companyId: null, leadIds: [id] };
-        const { messages } = await loadMessages(req, subject);
+        const { messages } = loaded || await loadMessages(req, subject);
         const ledger = ci.buildLedger(messages);
         // The summary is read ONLY for the owner's own rows (D-0040).
         const saved = withSummary ? await savedSummary(req, subject) : null;
@@ -536,7 +549,11 @@ module.exports = (ctx) => {
         const { data: sv } = await supabase.from('app_settings').select('value').eq('key', dismissals.settingsKey(req.user.id)).maybeSingle();
         if (sv && sv.value) store = dismissals.prune(typeof sv.value === 'string' ? JSON.parse(sv.value) : sv.value, Date.now());
       } catch (_) { store = {}; }   // a store that cannot be read only makes the list noisier — the safe direction
-      const mineAll = ci.sortDigest(await Promise.all(mineIds.map(id => itemFor(id, true)))).filter(Boolean);
+      // YOUR rows first ask your own mailboxes whether you already answered (R-268): a reply sent from Gmail, Outlook or
+      // PACE's mailbox is stored nowhere, so without this the headline said "You haven't replied" to people you had.
+      const mineLoaded = await Promise.all(mineIds.map(id => loadMessages(req, { kind: 'lead', id, companyId: null, leadIds: [id] })));
+      await answeredFromMailbox(req, mineLoaded.map(r => ({ messages: r.messages, addresses: r.contacts.map(c => c.email) })));
+      const mineAll = ci.sortDigest(await Promise.all(mineIds.map((id, i) => itemFor(id, true, mineLoaded[i])))).filter(Boolean);
       const mine = mineAll.filter(it => !dismissals.isDismissed(store, ci.completionItem(it), Date.now()))
         // the browser echoes this back to POST /next-actions/dismiss, so it never builds the item itself
         .map(it => Object.assign({}, it, { complete: ci.completionItem(it) }));

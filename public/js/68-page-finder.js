@@ -703,7 +703,8 @@
   function renderCard(c){
     var blocked=c.decision&&c.decision.blocked;
     var place=[c.city,c.state].filter(Boolean).join(', ');
-    var facts=[place, c.employees?plural(c.employees,'employee'):'', c.revenue||''].filter(Boolean).join(' · ');
+    // Revenue says it is revenue (owner, 19 Oct, R-276): a bare "52M" beside the place read as 52 million employees.
+    var facts=[place, c.employees?plural(c.employees,'employee'):'', c.revenue?('Revenue '+c.revenue):''].filter(Boolean).join(' · ');
     var links=[c.website?'<a href="'+esc(/^https?:/i.test(c.website)?c.website:'https://'+c.website)+'" target="_blank" rel="noopener">'+esc(c.domain||c.website)+'</a>':'',
                c.linkedin_url?'<a href="'+esc(c.linkedin_url)+'" target="_blank" rel="noopener">LinkedIn</a>':'', c.phone?esc(c.phone):''].filter(Boolean).join(' · ');
     var chips=(c.chips||[]).map(function(x){ return '<span class="fd-chip">'+esc(x)+'</span>'; }).join('');
@@ -1145,9 +1146,14 @@
   function searchingBox(){
     if (!F.running) return '';
     var what = F.running==='find' ? 'Finding leads for your search' : (F.running==='all' ? 'Running your saved searches' : 'Running this search');
-    return '<div class="card fd-progress" role="status" aria-live="polite"><strong>'+what+'…</strong>'+
-      '<div class="fd-bar" aria-hidden="true"><span></span></div>'+
-      '<div class="fd-hint">This usually takes up to a minute — it looks at the company database and the job sites. Stay on this page; the cards appear here when it is done.</div></div>';
+    // A small dot-matrix that ripples corner to corner (owner, 19 Oct, R-282: "the finding lead animation is very common, I need a
+    // dot matrix animation, its not required to be full length of the screen"). Each dot's class names its diagonal, which sets
+    // its delay in CSS — no timer, no repaint.
+    var dots=''; for (var r=0;r<4;r++) for (var c=0;c<7;c++) dots+='<i class="fd-d'+(r+c)+'"></i>';
+    return '<div class="card fd-progress fd-run" role="status" aria-live="polite">'+
+      '<div class="fd-dots" aria-hidden="true">'+dots+'</div>'+
+      '<div class="fd-run-txt"><strong>'+what+'…</strong>'+
+      '<div class="fd-hint">This usually takes up to a minute — it looks at the company database and the job sites. Stay on this page; the cards appear here when it is done.</div></div></div>';
   }
   function renderPage(){
     var acc=F.access;

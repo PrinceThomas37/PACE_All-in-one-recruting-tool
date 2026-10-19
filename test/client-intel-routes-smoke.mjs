@@ -65,7 +65,11 @@ aiProvider.complete = async () => { aiCalls++; return { text: aiText, model: 'st
 // Stub mailbox: the full original, as the mailbox would return it.
 const mp = require('../services/mail-provider.js');
 let mailFetches = 0;
-mp.createMailProvider = () => ({ forMailbox: () => ({ getMessage: async () => { mailFetches++; return {
+// R-268: the Sent folder's list, for "did we answer?". null = the mailbox cannot be listed (the default, as before).
+let sentFolder = null, sentLists = 0;
+mp.createMailProvider = () => ({ forMailbox: () => ({
+  listMessages: async ({ q }) => { sentLists++; if (!sentFolder) throw new Error('not listed'); return { messages: sentFolder.filter(m => JSON.stringify(m).toLowerCase().includes(String(q).toLowerCase())) }; },
+  getMessage: async () => { mailFetches++; return {
   subject: 'Re: HVAC roles', date: '2026-09-20T10:00:00Z',
   body_html: '<p>Thanks. What are your rates? I will decide next week.</p><p>On Mon Lisa wrote:</p><blockquote>Here are three profiles.</blockquote><script>alert(1)</script>' }; } }) });
 
@@ -274,6 +278,37 @@ setting('client_intel_ai_per_user_daily', 10);
   T.app_settings = T.app_settings.filter(r => r.key !== storeKey);
   d = (await dg(sam)).body;
   step('digest: completing is per person — the manager\'s own list and the report\'s row in the team view are unaffected', d.mine.length === 1 && d.team.length === 1);
+
+  // ── R-268: a reply WE sent from Gmail / Outlook / PACE's mailbox counts (owner, 19 Oct) ──
+  const freshDigest = () => {
+    delete require.cache[require.resolve('../routes/client-intel.js')];
+    const r = require('../routes/client-intel.js')({ supabase, auth: (_q, _s, n) => n(), hasRole: (req, x) => (req.user.roles || []).includes(x),
+      withOrg: (query, req) => query.eq('org_id', req.orgId), orgStamp: (req) => ({ org_id: req.orgId }) });
+    const h = r.stack.find(l => l.route && l.route.path === '/client-intel/digest').route.stack.slice(-1)[0].handle;
+    return (user) => call(h, null, user, {});
+  };
+  const waiting = (body) => !!(body.mine[0] && body.mine[0].state === 'needs_reply') || /You haven't replied/.test(JSON.stringify(body.mine));
+  sentFolder = null;
+  d = (await freshDigest()(priya)).body;
+  step('R-268: a mailbox that cannot be listed changes nothing — the card still says it waits on you (the safe direction)', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
+  sentFolder = [{ id: 's0', subject: 'Re: HVAC roles', date: '2026-09-21T08:00:00Z', to: [{ email: 'maria@acme.com' }] }];
+  d = (await freshDigest()(priya)).body;
+  step('R-268: a send of ours from BEFORE their last email does not count as an answer', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
+  sentFolder = [{ id: 's1', subject: 'Re: HVAC roles', date: '2026-09-23T09:00:00Z', to: [{ email: 'someone@else.com' }], snippet: 'cc maria@acme.com' }];
+  d = (await freshDigest()(priya)).body;
+  step('R-268: a loose search hit that was not addressed to them does not count', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
+  sentFolder = [{ id: 's2', subject: 'Re: HVAC roles', date: '2026-09-23T09:00:00Z', to: [{ email: 'Maria@Acme.com' }] }];
+  sentLists = 0;
+  const dgLive = freshDigest();
+  d = (await dgLive(priya)).body;
+  step('R-268: our reply sent from the mailbox AFTER theirs → the card no longer says "You haven\'t replied"', d.mine.length === 1 && !waiting(d), JSON.stringify(d.mine[0] && { state: d.mine[0].state, h: d.mine[0].headline }));
+  step('R-268: …asked with headers only — no email body was opened for the list', sentLists > 0, 'lists=' + sentLists);
+  const listsAfterFirst = sentLists;
+  await dgLive(priya);
+  step('R-268: …and opening Today again within minutes asks the mailbox nothing new (cached)', sentLists === listsAfterFirst, 'lists=' + sentLists);
+  d = (await dgLive(sam)).body;
+  step('R-268: a manager\'s TEAM view is not read from anyone\'s mailbox (their own only)', d.team.length === 1 && d.team[0].waiting === 1);
+  sentFolder = null;
   setting('client_intel_enabled', 0);
   delete require.cache[require.resolve('../config/settings.js')];
   delete require.cache[require.resolve('../routes/client-intel.js')];
