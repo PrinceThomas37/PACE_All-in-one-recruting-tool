@@ -1,8 +1,9 @@
 // DELIVERABILITY IS THE ADMIN'S, AND THE SPAM CHECK LIVES WHERE THE WORDING IS WRITTEN (owner, 8 Oct), in a real browser:
 //   * the Deliverability tab is in the menu for an admin only — not a BD Lead, an RA Lead or a BD — and the page refuses them
 //   * the page no longer carries "Reply rate by template" or the stand-alone spam checker, nor the Personal / My team toggle
-//   * Email → Sequence → My wording has "Check for spam triggers": it checks the subject and body AS TYPED (saved or not), shows the
-//     answer in its own box without repainting the editor, and says "write the email first" instead of checking nothing
+//   * the sequence builder (where the wording is written since D-0161; the old Email → Sequence → My wording tab is gone, R-286)
+//     has "Check for spam triggers": it checks the subject and body AS TYPED (saved or not), shows the answer in its own box,
+//     keeps what was typed, and says "write the email first" instead of checking nothing
 // Usage: node test/deliverability-admin-smoke.mjs
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -51,19 +52,24 @@ try{
 
   console.log('\nThe spam check, where the wording is written');
   await switchRole(page,'bd'); 
-  await ev(()=>{ STATE.emailTab='sequence'; STATE.seqView='wording'; STATE.page='email'; render(); }); await page.waitForTimeout(500);
-  step('"My wording" has a "Check for spam triggers" button', !!(await ev(()=>[...document.querySelectorAll('#content button')].find(b=>/Check for spam triggers/.test(b.textContent)))));
-  await ev(()=>{ const s=document.querySelector('#content input[id*="subj" i]'), b=document.querySelector('#content textarea[id*="body" i]'); if(s) s.value=''; if(b) b.value=''; window.__calls.length=0; STATE.toasts=[]; [...document.querySelectorAll('#content button')].find(b=>/Check for spam triggers/.test(b.textContent)).click(); });
-  await page.waitForTimeout(250);
-  step('with nothing written it says to write the email first and asks the server nothing', !(await ev(()=>window.__calls)).some(c=>/spam-check/.test(c[1])) && (await ev(()=>STATE.toasts.map(t=>t.msg))).some(m=>/Write the email first/.test(m)));
-  await ev(()=>{ const s=document.querySelector('#content input.inp[id*="subj" i], #content input[id*="subj" i]'); const b=document.querySelector('#content textarea[id*="body" i]'); if(s) s.value='FREE guarantee — act now'; if(b) b.value='Hi {{firstname}}, this is a free guarantee, unsaved yet.'; });
-  await ev(()=>{ window.__calls.length=0; [...document.querySelectorAll('#content button')].find(b=>/Check for spam triggers/.test(b.textContent)).click(); });
-  await page.waitForTimeout(400);
+  await ev(()=>{
+    const get=window.apiGet;
+    window.apiGet=(p)=>{ if(p==='/my-setup/sequence') return Promise.resolve({ mode:'template', first:{subject:'',body:'',versions:[]}, followups:[], followup_max:5, teach:null, teach_options:{angles:[]}, sample:{ vars:{fn:'Dana',company:'Acme'}, example:true, name:'Dana Lee', company:'Acme' } }); return get(p); };
+    window.openSequenceSetup();
+  });
+  await page.waitForSelector('#sq-root #sq-body',{timeout:6000});
+  const spamBtn='[data-sq="spam"][data-slot="first"]';
+  step('the builder has a "Check for spam triggers" button where the email is written', !!(await page.$(spamBtn)) && /Check for spam triggers/.test(await page.textContent(spamBtn)));
+  await ev(()=>{ window.__calls.length=0; }); await page.click(spamBtn); await page.waitForTimeout(250);
+  step('with nothing written it says to write the email first and asks the server nothing', !(await ev(()=>window.__calls)).some(c=>/spam-check/.test(c[1])) && /Write the email first/.test(await page.textContent('#sq-root')));
+  await page.click('#sq-subj'); await page.keyboard.type('FREE guarantee — act now');
+  await page.click('#sq-body'); await page.keyboard.type('Hi, this is a free guarantee, unsaved yet.');
+  await ev(()=>{ window.__calls.length=0; }); await page.click(spamBtn); await page.waitForSelector('#sq-root .seq-spam-box',{timeout:6000});
   const call=(await ev(()=>window.__calls)).find(c=>c[0]==='POST'&&/spam-check/.test(c[1]));
   step('it checks the subject and body AS TYPED (not the saved copy)', call && /FREE guarantee/.test(call[2].subject) && /unsaved yet/.test(call[2].body), JSON.stringify(call&&call[2]).slice(0,120));
-  const box=await ev(()=>{ const e=document.querySelector('#seq-spam .seq-spam-box'); return e?e.innerText.replace(/\s+/g,' '):null; });
+  const box=await ev(()=>{ const e=document.querySelector('#sq-root .seq-spam-box'); return e?e.innerText.replace(/\s+/g,' '):null; });
   step('the answer shows in its own box — score, level and the reasons', box && /42\/100/.test(box) && /warn/.test(box) && /free, guarantee/.test(box), box);
-  step('…and the editor was not repainted (what was typed is still there)', /unsaved yet/.test(await ev(()=>document.querySelector('#content textarea[id*="body" i]').value)));
+  step('…and what was typed is still there', /unsaved yet/.test(await page.textContent('#sq-body')) && /FREE guarantee/.test(await page.textContent('#sq-subj')));
   step('no script errors', errs.length===0, errs.join(' | ').slice(0,300));
 } catch(e){ console.error(e); step('ran to the end',false,String(e).slice(0,300)); }
 finally{ if(browser) await browser.close(); server.close(); }

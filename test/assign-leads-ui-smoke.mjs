@@ -19,8 +19,10 @@ const results=[]; const step=(n,ok,d='')=>{results.push(!!ok);console.log((ok?'[
 function findChromium(){ if(process.env.PLAYWRIGHT_CHROMIUM) return process.env.PLAYWRIGHT_CHROMIUM; const b=process.env.PLAYWRIGHT_BROWSERS_PATH; if(b&&fs.existsSync(path.join(b,'chromium'))) return path.join(b,'chromium'); return 'chromium'; }
 const rep=(r,b,status=200)=>r.fulfill({status,contentType:'application/json',body:JSON.stringify(b)});
 const calls=[];
-const people=[{id:'boss',name:'Bo Manager',role:'bd_lead',is_me:true,mailboxes:1},{id:'amy',name:'Amy Rep',role:'bd',is_me:false,mailboxes:2},{id:'nia',name:'Nia NoMail',role:'bd',is_me:false,mailboxes:0}];
-const mbs={ boss:[{id:'b1',email:'bo@x.test',room:100}], amy:[{id:'a1',email:'amy@co-a.test',room:70},{id:'a2',email:'amy@co-b.test',room:50}] };
+const people=[{id:'boss',name:'Bo Manager',role:'bd_lead',is_me:true,mailboxes:1},{id:'amy',name:'Amy Rep',role:'bd',is_me:false,mailboxes:2},{id:'zed',name:'Zed Small',role:'bd',is_me:false,mailboxes:2},{id:'nia',name:'Nia NoMail',role:'bd',is_me:false,mailboxes:0}];
+// The server's own shape (routes/lead-assign.js): each email ID's daily limit and what is left of it today.
+const mbs={ boss:[{id:'b1',email:'bo@x.test',limit:100,room:100}], amy:[{id:'a1',email:'amy@co-a.test',limit:80,room:70},{id:'a2',email:'amy@co-b.test',limit:60,room:50}],
+  zed:[{id:'z1',email:'zed@small.test',limit:3,room:3},{id:'z2',email:'zed@big.test',limit:50,room:50}] };
 let browser; const errs=[];
 try{
   browser=await chromium.launch({executablePath:findChromium(),headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
@@ -55,11 +57,18 @@ try{
   step('a person with no email ID is listed but cannot be picked', await ev(()=>{ const o=[...document.querySelectorAll('.modal select option')].find(x=>/Nia/.test(x.textContent)); return !!o && o.disabled && /no email ID/.test(o.textContent); }));
   await ev(()=>assignPickPerson('amy')); await page.waitForFunction(()=>document.getElementById('as-n-a1'),null,{timeout:6000});
   const auto=await ev(()=>[document.getElementById('as-n-a1').value,document.getElementById('as-n-a2').value]);
-  step('switching to a team member loads THEIR email IDs, on the automatic split by room (70:50 of 12 = 7:5)', auto.join()==='7,5' && calls.some(c=>/^GET \/leads\/assign\/mailboxes\?user_id=amy/.test(c)), auto.join());
+  step('switching to a team member loads THEIR email IDs, split EQUALLY to start (owner, D-0158: 12 → 6 and 6)', auto.join()==='6,6' && calls.some(c=>/^GET \/leads\/assign\/mailboxes\?user_id=amy/.test(c)), auto.join());
+  // An email ID that can send only 3 a day is never STARTED above 3; the rest goes to the other ("the math should always be correct").
+  await ev(()=>assignPickPerson('zed')); await page.waitForFunction(()=>document.getElementById('as-n-z1'),null,{timeout:6000});
+  const capped=await ev(()=>[document.getElementById('as-n-z1').value,document.getElementById('as-n-z2').value,document.getElementById('as-go').disabled]);
+  step('the equal start stops at an email ID\'s daily limit and gives the rest to the other (12 → 3 and 9), Assign on', capped.join()==='3,9,false', capped.join());
+  await page.fill('#as-n-z1','5'); await page.fill('#as-n-z2','7');
+  step('more than an email ID can send in a day is an error in words, and Assign goes off — even when the total adds up', await ev(()=>document.getElementById('as-go').disabled && !document.getElementById('as-over-z1').hidden && /zed@small\.test can send 3 a day/.test(document.getElementById('as-sum').textContent)));
+  await ev(()=>assignPickPerson('amy')); await page.waitForFunction(()=>document.getElementById('as-n-a1'),null,{timeout:6000});
   await ev(()=>{ window.__r=0; const o=window.render; window.render=function(){ window.__r++; return o.apply(this,arguments); }; });
   await page.fill('#as-n-a1','9');
   step('typing a number repaints nothing', (await ev(()=>window.__r))===0);
-  step('numbers that do not add up (9 + 5 of 12) turn the line red and switch Assign OFF', await ev(()=>document.getElementById('as-go').disabled && /Given out: 14 of 12/.test(document.getElementById('as-sum').textContent) && /c-red/.test(document.getElementById('as-sum').className)));
+  step('numbers that do not add up (9 + 6 of 12) turn the line red and switch Assign OFF', await ev(()=>document.getElementById('as-go').disabled && /Given out: 15 of 12/.test(document.getElementById('as-sum').textContent) && /c-red/.test(document.getElementById('as-sum').className)));
   await page.fill('#as-n-a1','4'); await page.fill('#as-n-a2','8');
   const say=await ev(()=>document.getElementById('as-say').textContent);
   step('numbers that add up switch Assign ON and the sentence says the split in words', await ev(()=>!document.getElementById('as-go').disabled) && /Give 12 leads to Amy Rep — 4 from amy@co-a\.test, 8 from amy@co-b\.test\./.test(say), say);

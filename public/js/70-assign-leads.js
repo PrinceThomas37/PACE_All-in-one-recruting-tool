@@ -19,10 +19,18 @@
   }
 
   // The starting split: EQUAL across every email ID (owner, 19 Oct, D-0158: "by default all are selected and leads are equally
-  // distributed"); what does not divide evenly goes one each to the first IDs. The person can change any number.
+  // distributed"); what does not divide evenly goes one each to the first IDs. An email ID is never started above its daily limit
+  // ("the math should always be correct"): its share stops there and the rest goes to the others. If together they cannot take
+  // them all, the line says so ("Given out: 10 of 12") and Assign stays off. The person can change any number.
   function suggest(mbs,n){
-    var out={}, base=Math.floor(n/mbs.length), extra=n-base*mbs.length;
-    mbs.forEach(function(m,i){ out[m.id]=base+(i<extra?1:0); });
+    var out={}, cap=function(m){ return m.limit==null?Infinity:Math.max(0,Number(m.limit)||0); };
+    mbs.forEach(function(m){ out[m.id]=0; });
+    var left=n, open=mbs.filter(function(m){ return cap(m)>0; });
+    while(left>0&&open.length){
+      var share=Math.floor(left/open.length)||1;
+      open.forEach(function(m){ if(left<=0) return; var give=Math.min(share,cap(m)-out[m.id],left); out[m.id]+=give; left-=give; });
+      open=open.filter(function(m){ return out[m.id]<cap(m); });
+    }
     return out;
   }
   // The math must be right (D-0158): no email ID may be given more leads than it can send in a day (its limit, set by the admin).
