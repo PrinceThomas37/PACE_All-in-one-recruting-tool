@@ -1305,3 +1305,6 @@ New `test/user-password-smoke.mjs` (16 checks): add user with / without a passwo
 
 ## 2026-10-15 (Session 48, later) — `login-repaint-smoke` (R-263)
 Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repaints (LOGIN/SPINNER/SHELL). A "duplicated tab" is seeded through `addInitScript` into sessionStorage. Mutation-checked: with the four source files reverted, 6 of 7 checks fail (7 login repaints).
+
+## Session 50 (19 Oct)
+- Two new guards: `test/settings-org-smoke.mjs` (R-266, mounts routes/settings.js with the server's real ctx incl. `orgIdFor`) and `test/candidate-nul-smoke.mjs` (R-267). Both reintroduce-the-bug checked. Lesson: suites that hand-build `ctx` without `orgIdFor` never execute the org branch.

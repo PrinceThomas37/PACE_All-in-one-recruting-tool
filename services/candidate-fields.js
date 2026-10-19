@@ -39,9 +39,18 @@ module.exports = function createCandidateFields(core) {
       if (src[k] === undefined) return;
       const v = src[k];
       if (k === 'experience_years') { out[k] = (v === '' || v === null) ? null : v; return; }
-      out[k] = (v === '') ? null : v;
+      out[k] = (v === '') ? null : noNul(v);
     });
     return out;
+  }
+  // The database refuses any text holding the invisible "null" character (\u0000): "unsupported Unicode escape
+  // sequence", and the whole candidate is not added (R-267, owner 19 Oct). Some PDF makers leave it in the
+  // text a resume reader pulls out. It carries nothing a person can see, so it is dropped here, the one place every
+  // candidate's fields pass through on the way to the database.
+  function noNul(v) {
+    if (typeof v === 'string') return v.indexOf('\u0000') === -1 ? v : v.replace(/\u0000/g, '');
+    if (Array.isArray(v)) return v.map(noNul);
+    return v;
   }
 
   // Normalizers — mirror the generated columns created in migration 012.

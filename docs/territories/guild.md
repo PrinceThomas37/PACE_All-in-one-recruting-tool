@@ -828,3 +828,6 @@ Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.j
 
 ## 2026-10-14 (Session 45, later)
 `routes/recruiting/job-orders.js` `GET /job-orders/browse`: the select names `pay_period`; if the database answers "no such column" for it (migration 065 not applied) the same list is read without it, so the job board is never empty. Migration 065 is now applied on the live database. Nothing else in the recruiting domain changed; the lead-side changes (Edit lead People, same-person question) are in gateway.md and surface.md.
+
+## Session 50 (19 Oct)
+- R-267: `pickCandidateFields` drops the `\u0000` character (PDF text) that made Postgres refuse a candidate ("unsupported Unicode escape sequence"). All candidate writes go through it — keep it that way. Guard: `test/candidate-nul-smoke.mjs`.

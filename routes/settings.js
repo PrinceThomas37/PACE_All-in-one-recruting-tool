@@ -15,7 +15,7 @@ const followupSteps = require('../services/followup-steps');
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole } = ctx;
-  const orgOf = (req) => (ctx.orgIdFor ? ctx.orgOf(req) : undefined);   // the caller's organisation (D-0124)
+  const orgOf = (req) => (ctx.orgIdFor ? ctx.orgIdFor(req) : undefined);   // the caller's organisation (D-0124)
 
 // ── PER-USER PREFERENCES (Session 24, D-0022) ───────────────────────────────
 // The owner: "a change in the theme in one user is reflected to other users, it
