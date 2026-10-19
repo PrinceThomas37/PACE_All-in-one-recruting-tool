@@ -59,6 +59,9 @@ try {
       return Promise.resolve(p.indexOf('/emails') === 0 ? [] : {});
     };
     window.apiPost = function (p, b) {
+      // Only the mailbox window's own calls are this suite's business: Today's "Finish your setup" check (R-283) also posts
+      // /my-setup/sync when the app opens, and must not read as the window calling the server.
+      if (p === '/my-setup/sync') return Promise.resolve({ owed: [] });
       window.__posts.push([p, JSON.parse(JSON.stringify(b || {}))]);
       if (/^\/smtp\/connect\//.test(p)) return Promise.resolve(window.__connectAnswers.shift());
       return Promise.resolve({});
