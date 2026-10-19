@@ -120,12 +120,13 @@
     var plat=platformOf(m);
     return '<div class="ms-box">'+
       '<div class="fd-row fd-between"><div class="fd-grow"><div class="fs-14 fd-strong">'+esc(m.email_address)+'</div>'+
-        '<div class="fd-hint">'+plat+' · shown to recipients as “'+esc(m.display_name||m.email_address)+'” · '+(m.daily_send_limit?'up to '+esc(String(m.daily_send_limit))+' emails a day':'daily limit set by an admin')+' (set by an admin)</div></div>'+
+        '<div class="fd-hint">'+plat+' · shown to recipients as “'+esc(m.display_name||m.email_address)+'” · '+(m.daily_send_limit?'up to '+esc(String(m.daily_send_limit))+' emails a day':'daily limit set by an admin')+' (set by an admin; you can lower it)</div></div>'+
         badge(m)+'</div>'+
       writesFor(m)+
       '<div class="fd-row">'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupEdit(\''+m.id+'\')">'+(m.sends_as?'Edit sender &amp; signature':'Set up sender &amp; signature')+'</button>'+
         '<button class="btn btn-sm '+(isConnected(m)?'btn-outline':'btn-primary')+'" onclick="mySetupConnect(\''+m.id+'\')">'+(isConnected(m)?'Reconnect':(plat==='App password'?'Enter the app password':'Connect '+plat))+'</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mySetupLowerLimit(\''+m.id+'\')">Edit daily limit</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupRemove(\''+m.id+'\')">Remove</button>'+
       '</div></div>';
   }
@@ -156,6 +157,19 @@
         '<button class="btn btn-sm btn-primary" onclick="mySetupWinSave()">Save</button>'+
         (eff.narrowed?'<button class="btn btn-sm btn-outline" onclick="mySetupWinReset()">Use my organisation\'s hours</button>':'')+'</div></div>';
   }
+  window.mySetupLowerLimit = function(id){
+    var list=(STATE.userEmailsCache&&STATE.userEmailsCache[meId()])||[], m=list.filter(function(x){ return x.id===id; })[0]||{};
+    var max=Number(m.daily_send_limit)||0, v='', who=m.email_address||'this mailbox';
+    for(;;){
+      v=window.prompt('Daily limit for '+who+(max?' (type '+max+' or less — an admin set '+max+')':'')+':', v);
+      if(v===null) return;
+      var n=parseInt(v,10);
+      if(!(n>=1)){ showToast('Type a whole number of 1 or more','error'); continue; }
+      if(max && n>max){ showToast('Too high: an admin set '+max+' for this mailbox. Type '+max+' or less.','error'); continue; }
+      break;
+    }
+    window.saveMailboxLimit(meId(), id, v);
+  };
   window.mySetupWinDay = function(d){ var f=M.winForm; if(!f) return; var i=f.days.indexOf(d); if(i>=0) f.days.splice(i,1); else f.days.push(d); };
   window.mySetupWinHour = function(){ var f=M.winForm; if(!f) return; var s=document.getElementById('ms-win-start'), e=document.getElementById('ms-win-end'); if(s) f.start=Number(s.value); if(e) f.end=Number(e.value); };
   window.mySetupWinSave = function(){

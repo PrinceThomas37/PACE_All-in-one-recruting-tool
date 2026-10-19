@@ -5,7 +5,9 @@
 // Route paths, handler logic and behaviour are unchanged from the original.
 // ============================================================================
 const express = require('express');
-const dailyLimit = require('../services/daily-limit');            // a new mailbox starts at the admin's number (D-0123)
+const dailyLimit = require('../services/daily-limit');
+const mailboxLimit = require('../services/mailbox-limit');            // who may change a limit, and the change log (R-266)
+const { getSetting } = require('../config/settings');            // a new mailbox starts at the admin's number (D-0123)
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, OWN_SIGNATURE_MARK } = require('../email-signature');
@@ -122,10 +124,36 @@ router.get('/users', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Who a user reports to — any user may report to any other user (flexible
-// hierarchy, not a fixed role ladder); admin-only to change. Rejects a cycle
-// (setting someone's manager to one of their own reports, direct or
-// transitive) and self-management.
+  // Every change to a mailbox's daily limit leaves a line in record_history (who, from, to). A failed write never blocks the change.
+  async function logLimitChange(req, mailboxId, from, to, note) {
+    try {
+      await supabase.from('record_history').insert({
+        entity_type: 'mailbox', entity_id: mailboxId, action: 'daily_limit', field: 'daily_send_limit',
+        old_value: from == null ? null : { value: String(from) }, new_value: { value: String(to) }, note: note || null,
+        actor_id: (req.user && req.user.id) || null, ...(orgIdFor(req) ? { org_id: orgIdFor(req) } : {}),
+      });
+    } catch (_) { /* the trail is best-effort; the limit itself is already saved */ }
+  }
+  const warnLine = async (req) => getSetting(supabase, 'daily_limit_warn_above', orgIdFor(req) || undefined).catch(() => null);
+
+// Who changed which mailbox's daily limit, newest first (admin only). Literal path, above every '/users/:id…' route.
+router.get('/users/email-limit-changes', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    const { data: rows, error } = await withOrg(supabase.from('record_history')
+      .select('entity_id,old_value,new_value,note,actor_id,created_at').eq('entity_type', 'mailbox').eq('action', 'daily_limit'), req)
+      .order('created_at', { ascending: false }).limit(200);
+    if (error) throw error;
+    const ids = [...new Set((rows || []).map(r => r.entity_id))];
+    const actors = [...new Set((rows || []).map(r => r.actor_id).filter(Boolean))];
+    const boxes = ids.length ? (await withOrg(supabase.from('user_emails').select('id,email_address').in('id', ids), req)).data || [] : [];
+    const people = actors.length ? (await withOrg(supabase.from('users').select('id,name').in('id', actors), req)).data || [] : [];
+    const box = Object.fromEntries(boxes.map(b => [b.id, b.email_address]));
+    const who = Object.fromEntries(people.map(u => [u.id, u.name]));
+    res.json((rows || []).map(r => mailboxLimit.describeChange(r, who[r.actor_id], box[r.entity_id])));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Deactivated people (admin only): the ones "Deactivate" took off the roster, so an admin can bring one back. Literal path, above every
 // '/users/:id…' route. Nothing about them is returned beyond what the roster already shows.
 router.get('/users/deactivated', auth, async (req, res) => {
@@ -151,6 +179,10 @@ router.post('/users/:id/reactivate', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Who a user reports to — any user may report to any other user (flexible
+// hierarchy, not a fixed role ladder); admin-only to change. Rejects a cycle
+// (setting someone's manager to one of their own reports, direct or
+// transitive) and self-management.
 router.put('/users/:id/manager', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
@@ -346,6 +378,14 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       const why = sendsAsProblem(sendsAsClean);
       if (why && (!staff || sends_as !== undefined)) return res.status(400).json({ error: why, field: 'sends_as' });
     }
+    // The admin's number if an admin/lead typed one (any whole number from 1), else this organisation's default.
+    const defaultLimit = await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req));
+    let startLimit = defaultLimit, limitWarn = null;
+    if (staff && daily_send_limit !== undefined && daily_send_limit !== null && daily_send_limit !== '') {
+      const d = mailboxLimit.decideLimitChange({ staff: true, requested: daily_send_limit, warnAbove: await warnLine(req) });
+      if (!d.ok) return res.status(d.status).json({ error: d.error, field: 'daily_send_limit' });
+      startLimit = d.value; limitWarn = d.warn;
+    }
     const mbGate = await entitlements.gate(supabase, req, 'mailboxes', { orgIdFor });
     if (mbGate.blocked) return res.status(mbGate.status).json(mbGate.body);
     // If setting as primary, unset others first
@@ -361,9 +401,10 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       is_primary: staff ? (is_primary || false) : false,
       is_active: true,
       // This organisation's default (Admin → System settings), never a number typed here. Only an admin / lead may choose another.
-      daily_send_limit: staff ? (daily_send_limit || await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))) : await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))
+      daily_send_limit: startLimit
     }).select().single();
     if (error) throw error;
+    await logLimitChange(req, data.id, null, startLimit, 'Mailbox added');
     if (sendsAsClean && !sendsAsProblem(sendsAsClean)) {
       await supabase.from('app_settings').upsert([
         { key: sendsAsKey(data.id), value: JSON.stringify(sendsAsClean), updated_at: new Date() },
@@ -371,7 +412,7 @@ router.post('/users/:id/emails', auth, async (req, res) => {
         { key: mailboxSignatureKey(data.id), value: (typeof signature_html === 'string' && signature_html.trim()) ? cleanSignatureForSave(signature_html, true) : signatureFromSendsAs(sendsAsClean), updated_at: new Date() },
       ], { onConflict: 'key' });
     }
-    res.status(201).json({ ...data, sends_as: sendsAsClean && !sendsAsProblem(sendsAsClean) ? sendsAsClean : null });
+    res.status(201).json({ ...data, limit_warning: limitWarn, sends_as: sendsAsClean && !sendsAsProblem(sendsAsClean) ? sendsAsClean : null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -381,8 +422,20 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
     if (!(await guardUser(req, res, req.params.id))) return;
     const { is_active, is_primary, display_name, daily_send_limit, platform } = req.body;
     // The daily limit is the organisation's control, not the mailbox owner's.
-    if (daily_send_limit !== undefined && !hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Only an admin or team lead can change a mailbox\'s daily limit.' });
+    // Admin / team lead: any whole number from 1. The mailbox's own person: lower only. Anyone else: no.
     const updates = { updated_at: new Date() };
+    let limitWarn = null, limitFrom = null;
+    if (daily_send_limit !== undefined) {
+      const { data: cur } = await supabase.from('user_emails').select('daily_send_limit').eq('id', req.params.eid).eq('user_id', req.params.id).maybeSingle();
+      if (!cur) return res.status(404).json({ error: 'Mailbox not found' });
+      limitFrom = cur.daily_send_limit;
+      const d = mailboxLimit.decideLimitChange({
+        staff: hasRole(req, 'admin', 'bd_lead'), owner: req.user.id === req.params.id, current: cur.daily_send_limit,
+        fallback: await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req)), requested: daily_send_limit, warnAbove: await warnLine(req),
+      });
+      if (!d.ok) return res.status(d.status).json({ error: d.error, field: 'daily_send_limit' });
+      updates.daily_send_limit = d.value; limitWarn = d.warn;
+    }
 
     // Enforce max 4 active per user
     if (is_active === true) {
@@ -394,7 +447,6 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
 
     if (is_active !== undefined) updates.is_active = is_active;
     if (display_name !== undefined) updates.display_name = display_name;
-    if (daily_send_limit !== undefined) updates.daily_send_limit = daily_send_limit;
     if (platform !== undefined) updates.platform = platform;
 
     // If setting as primary, unset others first
@@ -414,7 +466,8 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
     if (is_active === false) {
       reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
     }
-    res.json({ ...data, reassignment });
+    if (updates.daily_send_limit !== undefined && Number(limitFrom) !== updates.daily_send_limit) await logLimitChange(req, req.params.eid, limitFrom, updates.daily_send_limit);
+    res.json({ ...data, reassignment, limit_warning: limitWarn });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
