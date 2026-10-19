@@ -1199,7 +1199,12 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 - `index.js`: `aiWriterContext()` factored out of `aiWriteFirstEmail` (lead, sender, sends-as, style note, teach of the MAILBOX OWNER); new `aiWriteFollowup()`; hook in the send loop after the claim, before delivery: `aiReady && isFollowup && template_variant !== 'ai' && aiTeach.followupFor(<runner's teach>, step) && aiFirstChoice.allows(...)`. The runner's teach key is loaded with the other choice keys, so an untaught follow-up costs no extra query.
 - `routes/emails.js`: `ai_will_write` is also true for a pending follow-up its sender taught.
 
+## 2026-10-19 (Session 49, later) — mailbox daily limit routes (R-266)
+- gateway: `routes/auth.js` — `PATCH /users/:id/emails/:eid` decides through `services/mailbox-limit.js` (staff any whole number >=1, owner lower only, else 403/400); `POST /users/:id/emails` validates a typed number the same way and otherwise uses the company default; new literal `GET /users/email-limit-changes` (admin) sits above the `:id` routes. Both writes log to `record_history` (entity `mailbox`). Also moved the stray "Who a user reports to" comment back above its route.
+
+## 2026-10-19 — R-266 follow-up
+- gateway: the 403 for a raise names the limit ("Type N or less").
 ## Session 50 (19 Oct)
-- R-266: `routes/settings.js` org helper fixed (`ctx.orgIdFor`, not `ctx.orgOf`). A route test must build `ctx` the way `index.js` does — with `orgIdFor` — or the org path is never run. Guard: `test/settings-org-smoke.mjs`.
+- R-284 (filed as R-266 before the merge): `routes/settings.js` org helper fixed (`ctx.orgIdFor`, not `ctx.orgOf`). A route test must build `ctx` the way `index.js` does — with `orgIdFor` — or the org path is never run. Guard: `test/settings-org-smoke.mjs`.
 - R-268 (Session 50): `/next-actions` and `/client-intel/digest` call `answeredFromMailbox` (own threads only) before ranking; `next-actions` builds its own mail provider from ctx (`graphMailRequest`, `getMicrosoftToken`, `gmailProvider`).
 - Batch 2 (Session 50): `/me/preferences` allows `leads_per_page` ∈ {10,20,50} (R-280). Finder: `readAccess` default ON when nothing stored (D-0158, R-283); `applySizeChoice(orgs, search, {checked})` leaves out unknown-size FREE companies only when the Apollo lookup ran (R-276); result line says "N left out because their size is not known". `index.js` send-from-reminder stamps `updated_at` (R-281).

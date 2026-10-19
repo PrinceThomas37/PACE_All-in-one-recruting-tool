@@ -1,4 +1,4 @@
-// ADMIN → SYSTEM SETTINGS OPENS (R-266). The owner (19 Oct) clicked System Settings and saw "Failed to load settings:
+// ADMIN → SYSTEM SETTINGS OPENS (R-284, first filed as R-266). The owner (19 Oct) clicked System Settings and saw "Failed to load settings:
 // ctx.orgOf is not a function": routes/settings.js asked for the caller's organisation through a function the server never
 // passes (it passes ctx.orgIdFor). The same helper also reads the company's follow-up limit. This mounts the REAL router with
 // the context the server really gives it and asks for the admin numbers and the follow-up limit as an admin.
