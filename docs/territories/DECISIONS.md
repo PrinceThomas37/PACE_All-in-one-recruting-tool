@@ -2172,3 +2172,17 @@ Owner, answering the ten questions on R-266…R-283:
 8. **Candidate opened from a job:** the job description and client in a panel next to the candidate (R-275).
 9. **Stage-change notes:** in the Notes tab with the date and time of the change (R-275).
 10. **Dashboard:** not just de-duplication — the owner wants a restructure and a new idea of what is useful to the user; a design proposal comes before any build (R-278).
+
+### D-0158 — Owner's follow-up answers on the 19 Oct list (19 Oct 2026)
+
+1. **Sequences — it is about the screen.** Every way to start a sequence ("Sequence", "+ New sequence", "Add to sequence", any new-sequence moment) opens the NEW builder for everyone, not only during onboarding. Sequences already written and running (the owner's, Martin's) are left exactly as they are; even for those people, a new sequence is made in the new builder (R-269).
+2. **Scheduled sends and reminders share one "Scheduled" tab** in the email window, shown side by side as labels; a scheduled email can be cancelled there. **Unread and Draft** tabs are added to the email window too (R-273).
+3. **Splitting leads across email IDs: the arithmetic must be right everywhere.** Numbers that do not add up, or a share larger than what that email ID may send, are an ERROR that stops the assignment (with a warning that says why) — not a warning that lets it through (R-277).
+4. **Leads per page: each person chooses** 10 / 20 / 50 for themselves (R-280).
+5. **The new Lead Finder is on for everyone for now**; once billing, permissions and resource allocation exist, paid features stay open and unpaid ones close (R-283).
+6. **AI for candidates and conversation summaries uses the existing free pool** until paid tokens are added — and the current workflow must not be hampered by it (R-270, R-268).
+7. **Dashboard:** a picture of a proposed layout first, then build (R-278).
+
+### D-0159 — The new builder holds many named sequences (19 Oct 2026)
+
+Asked: the new builder stores ONE sequence per person; the old screen let a person keep many named ones. Owner chose **many named sequences**: the new builder gets a name and a list, "+ New sequence" adds another (for leads or for candidates), and the sending engine must know which sequence each lead is on. A structural change (R-269/R-270): existing sequences keep running untouched (D-0158).

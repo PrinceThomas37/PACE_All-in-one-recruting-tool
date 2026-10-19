@@ -1308,3 +1308,4 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## Session 50 (19 Oct)
 - Two new guards: `test/settings-org-smoke.mjs` (R-266, mounts routes/settings.js with the server's real ctx incl. `orgIdFor`) and `test/candidate-nul-smoke.mjs` (R-267). Both reintroduce-the-bug checked. Lesson: suites that hand-build `ctx` without `orgIdFor` never execute the org branch.
+- R-268 (Session 50): new `test/next-actions-answered-smoke.mjs` — first REAL drive of GET /next-actions (ownership-smoke only greps it). `trace-smoke` fixture fixed to the server's outbound shape (`person:null`, `to`) — the old fixture hid the bug. Lesson again: a fixture must be the route's real projection.

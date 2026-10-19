@@ -1201,3 +1201,4 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## Session 50 (19 Oct)
 - R-266: `routes/settings.js` org helper fixed (`ctx.orgIdFor`, not `ctx.orgOf`). A route test must build `ctx` the way `index.js` does — with `orgIdFor` — or the org path is never run. Guard: `test/settings-org-smoke.mjs`.
+- R-268 (Session 50): `/next-actions` and `/client-intel/digest` call `answeredFromMailbox` (own threads only) before ranking; `next-actions` builds its own mail provider from ctx (`graphMailRequest`, `getMicrosoftToken`, `gmailProvider`).

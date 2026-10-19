@@ -47,12 +47,26 @@ const dismissals = require('../services/next-action-dismissals');
 const ownership = require('../services/ownership');
 const { decodeEntities } = require('../services/html-entities');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
+const sentSide = require('../services/sent-side');
+const { createMailProvider } = require('../services/mail-provider');
 
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, orgIdFor, withOrg, today } = ctx;
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
+  // "Did we answer?" from the caller's own mailboxes (R-268, services/sent-side.js). Unreadable = unchanged.
+  const mail = createMailProvider({ graphMailRequest: ctx.graphMailRequest, getMicrosoftToken: ctx.getMicrosoftToken, gmailProvider: ctx.gmailProvider });
+  const replyCheck = sentSide.createReplyCheck({ mail });
+  async function answeredFromMailbox(req, threads) {
+    try {
+      const addrs = sentSide.addressesToCheck(threads);
+      if (!addrs.length) return 0;
+      const { data: boxes } = await supabase.from('user_emails')
+        .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
+      return sentSide.addOurReplies(threads, await replyCheck.latest(req.user.id, boxes || [], addrs));
+    } catch (_) { return 0; }
+  }
   const MAX_THREAD_PEOPLE = 300;   // bounded so one big org can't stall the request
 
   // Display names for the owners of a set of items. A count with nobody named
@@ -192,12 +206,14 @@ module.exports = (ctx) => {
         const stored = msgsByContact.get(c.id) || [];
         const messages = stored.length ? stored.slice() : [];
 
+        // The sends PACE logged are OUR side, stored or not (R-268): the stored conversation is what the reply sweep
+        // keeps, and the sweep keeps what came IN — leaving these out made every stored thread read "You haven't replied".
+        for (const e of (sentByContact.get(c.id) || [])) {
+          messages.push({ direction: 'outbound', sent_at: e.sent_at || e.created_at, body: e.subject || '' });
+        }
         if (!stored.length) {
-          // Fallback shape from what already exists: the sends we logged, plus
-          // the single reply snippet the old sweep kept. Thin, but honest.
-          for (const e of (sentByContact.get(c.id) || [])) {
-            messages.push({ direction: 'outbound', sent_at: e.sent_at || e.created_at, body: e.subject || '' });
-          }
+          // Fallback shape from what already exists: the single reply snippet
+          // the old sweep kept. Thin, but honest.
           if (c.replied_at) {
             messages.push({ direction: 'inbound', sent_at: c.replied_at, body: decodeEntities(c.reply_snippet || '') });
           }
@@ -273,6 +289,10 @@ module.exports = (ctx) => {
         if (!cand) continue;
         const stored = msgsByCandidate.get(cand.id) || [];
         const messages = stored.length ? stored.slice() : [];
+        // Our tracked sends are our side, stored conversation or not (R-268) — see the contacts block.
+        for (const e of (sentByCandidate.get(cand.id) || [])) {
+          messages.push({ direction: 'outbound', sent_at: e.sent_at, body: e.subject || '' });
+        }
 
         if (!stored.length) {
           // Thinner fallback, same shape as the contacts one: the sends we
@@ -282,9 +302,6 @@ module.exports = (ctx) => {
           // carries timing but an empty body, which is enough for the "waiting
           // on you" / staleness signals even though intent classification
           // degrades to none until 037 is applied and real bodies are stored).
-          for (const e of (sentByCandidate.get(cand.id) || [])) {
-            messages.push({ direction: 'outbound', sent_at: e.sent_at, body: e.subject || '' });
-          }
           if (cand.last_reply_at) {
             messages.push({ direction: 'inbound', sent_at: cand.last_reply_at, body: '' });
           }
@@ -331,6 +348,9 @@ module.exports = (ctx) => {
       // waiting on you" over a due reminder of their own — and put the org's
       // "gone quiet" count and "N more" under the admin's personal list.
       const ownThreads = threads.filter(t => ownership.isMine(t, me));
+      // Replies sent from Gmail, Outlook or PACE's mailbox are stored nowhere: ask the caller's OWN mailboxes whether
+      // the newest waiting conversations were already answered, before anything is ranked as "reply due" (R-268).
+      await answeredFromMailbox(req, ownThreads.map(t => Object.assign(t, { addresses: t.email ? [t.email] : [] })));
       const ownRemRows = (remRows || []).filter(r => ownership.isMine({ owner_id: r.user_id }, me));
 
       const reminders = ownRemRows.map(r => {

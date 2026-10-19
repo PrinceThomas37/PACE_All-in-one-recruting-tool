@@ -136,4 +136,108 @@ async function readOurSide({ mail, mailboxes, addresses, have, trim, full }) {
   return { messages, ok, reason: ok ? null : (read === 0 ? 'unreadable' : 'partial'), mailboxes_read: read, mailboxes_failed: failed };
 }
 
-module.exports = { readOurSide, alreadyHave, isDateOnly, normSubject, FOLDER, MAX_MAILBOXES, MAX_ADDRESSES, PER_SEARCH, MAX_BODIES };
+// ── "DID WE ANSWER?" FOR THE LISTS (R-268) ────────────────────────────────────────────────────────────────────────
+// The owner (19 Oct): Your client conversations and Needs you today said "You haven't replied" to people who HAD been
+// answered — from Gmail, Outlook or PACE's own mailbox. Those lists read only what PACE stores, and a reply typed in a
+// mailbox is stored nowhere (the mailbox rule: nothing is mirrored). The detail view already read the Sent folder live;
+// the lists, which write the headline, never did.
+//
+// So before a list calls a conversation "waiting on you", it asks the person's OWN mailboxes one cheap question per
+// address: when did we last send anything to this person? Headers only — no bodies, nothing stored, nothing shown that the
+// person could not open in their own mailbox. Bounded (the few conversations that would say "waiting on you", newest
+// first), cached for a few minutes, and given a time budget. A mailbox that cannot be read leaves the conversation as it
+// was: the card stays, which is the safe direction — a hidden reply-you-owe is worse than a shown one already answered.
+const CHECK_MAX = 15;          // conversations checked per request (the newest waiting ones)
+const CHECK_PER_SEARCH = 5;    // newest sent items per mailbox × address — only the latest date matters
+const CHECK_TTL_MS = 5 * 60 * 1000;
+const CHECK_BUDGET_MS = 8000;
+
+// Pure: the newest moment we wrote to each address, from list pages. `pages` = [{ addr, messages }].
+function latestSentByAddress(pages) {
+  const out = {};
+  for (const p of pages || []) {
+    const addr = norm(p && p.addr);
+    if (!addr) continue;
+    for (const m of (p && p.messages) || []) {
+      if (!m || m.is_draft) continue;
+      const to = [].concat(m.to || [], m.cc || [], m.bcc || []).map(a => norm(a && a.email));
+      if (!to.includes(addr)) continue;                       // a provider search is loose; only mail TO them counts
+      const t = Date.parse(m.date || '');
+      if (Number.isFinite(t) && (!out[addr] || t > Date.parse(out[addr]))) out[addr] = new Date(t).toISOString();
+    }
+  }
+  return out;
+}
+
+// Pure: a thread whose last message is from THEM, with a later send of ours to one of its addresses, gains that send as an
+// outbound message — so every rule downstream (headline, "reply you owe", ranking) sees the conversation as it really is.
+// threads: [{ messages:[{direction,sent_at}], addresses:[...] }]. Returns the number of threads changed.
+function addOurReplies(threads, latestByAddr) {
+  let changed = 0;
+  for (const t of threads || []) {
+    const msgs = t && t.messages;
+    if (!Array.isArray(msgs) || !msgs.length) continue;
+    const last = lastOf(msgs);
+    if (!last || last.direction !== 'inbound') continue;
+    const lastT = Date.parse(last.sent_at || '');
+    let ours = null;
+    for (const a of (t.addresses || [])) {
+      const at = latestByAddr && latestByAddr[norm(a)];
+      if (at && Date.parse(at) > lastT && (!ours || Date.parse(at) > Date.parse(ours))) ours = at;
+    }
+    if (ours) { msgs.push({ direction: 'outbound', sent_at: ours, body: '', source: 'mailbox' }); changed++; }
+  }
+  return changed;
+}
+function lastOf(msgs) {
+  let best = null;
+  for (const m of msgs) { if (m && (!best || Date.parse(m.sent_at || '') >= Date.parse(best.sent_at || ''))) best = m; }
+  return best;
+}
+
+// Which addresses a request should ask about: threads waiting on us, newest inbound first, at most CHECK_MAX.
+function addressesToCheck(threads, max = CHECK_MAX) {
+  const waiting = (threads || []).filter(t => { const l = t && Array.isArray(t.messages) && t.messages.length && lastOf(t.messages); return l && l.direction === 'inbound'; })
+    .sort((a, b) => Date.parse(lastOf(b.messages).sent_at || '') - Date.parse(lastOf(a.messages).sent_at || ''))
+    .slice(0, max);
+  return [...new Set([].concat(...waiting.map(t => (t.addresses || []).map(norm))).filter(Boolean))];
+}
+
+// The I/O half, per server process: a small cache per person and address, a time budget for the whole read.
+function createReplyCheck({ mail, now = () => Date.now(), ttlMs = CHECK_TTL_MS, budgetMs = CHECK_BUDGET_MS } = {}) {
+  const cache = new Map();   // userId|addr -> { at: iso|null, t }
+  async function latest(userId, mailboxes, addresses) {
+    const boxes = (mailboxes || []).slice(0, MAX_MAILBOXES);
+    const out = {}, todo = [];
+    for (const a of [...new Set((addresses || []).map(norm).filter(Boolean))]) {
+      const hit = cache.get(userId + '|' + a);
+      if (hit && now() - hit.t < ttlMs) { if (hit.at) out[a] = hit.at; } else todo.push(a);
+    }
+    if (!todo.length || !boxes.length) return out;
+    const read = (async () => {
+      const pages = [], okAddr = new Set(todo);
+      for (const mb of boxes) {
+        let adapter; try { adapter = mail.forMailbox(mb); } catch (_) { todo.forEach(a => okAddr.delete(a)); continue; }
+        await Promise.all(todo.map(async (addr) => {
+          try {
+            const page = await adapter.listMessages({ folderId: FOLDER[mb.platform] || FOLDER.Microsoft, q: addr, limit: CHECK_PER_SEARCH });
+            pages.push({ addr, messages: (page && page.messages) || [] });
+          } catch (_) { okAddr.delete(addr); }   // not read is not "never sent": no cache, no change
+        }));
+      }
+      return { pages, okAddr };
+    })();
+    const r = await Promise.race([read, new Promise(res => setTimeout(() => res(null), budgetMs))]);
+    if (!r) return out;                                         // too slow: change nothing this time
+    const found = latestSentByAddress(r.pages);
+    for (const a of todo) {
+      if (found[a]) out[a] = found[a];
+      if (r.okAddr.has(a)) cache.set(userId + '|' + a, { at: found[a] || null, t: now() });
+    }
+    return out;
+  }
+  return { latest, cacheSize: () => cache.size };
+}
+
+module.exports = { readOurSide, alreadyHave, isDateOnly, normSubject, FOLDER, MAX_MAILBOXES, MAX_ADDRESSES, PER_SEARCH, MAX_BODIES,
+  latestSentByAddress, addOurReplies, addressesToCheck, createReplyCheck, CHECK_MAX };

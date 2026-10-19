@@ -1425,3 +1425,4 @@ No screen code changed; the new numbers appear in System Settings automatically 
 ## 2026-10-16 (Session 49, later) — password eye (R-265)
 `pwBox(id, placeholder)` (12-manager-users.js) renders a password input with an eye; `togglePwVisible` flips it. Used by Add user (`u-pw`) and the profile's Set password (`ud-pw`). Classes `.pw-wrap`, `.pw-eye` in `ui.css`. Only typed text is revealed; there is no route that returns a saved password and none should be added.
 `render()` (03-core-render.js) keeps the typed text of any `input[data-keep-typed]` through a repaint; `pwBox` sets it. Use it for any box where losing typed text would cost the person something.
+- R-268 (Session 50): `65-trace.js` leadEmails — when narrowed to one person, THEIR mail is matched by name, OURS by `to` (outbound rows have `person:null`); the 'reply you owe' chip sits on their newest email, 'your last email' on ours.

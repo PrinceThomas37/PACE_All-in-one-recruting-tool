@@ -52,8 +52,10 @@ try {
     window.__asked = []; window.__opened = [];
     const TL = { enabled: true, owner: true, timeline: [
       { id: 'in:m3', direction: 'inbound', from: 'melanie@pinpoint.test', sent_at: '2026-10-03T10:00:00Z', person: 'Melanie Nero', subject: 'Re: Estimator role', text: 'Yes — we are interested. Can you send two profiles by Friday?', can_open_full: true },
-      { id: 'out:m2', direction: 'outbound', sent_at: '2026-09-30T10:00:00Z', person: 'Melanie Nero', subject: 'Estimator role', text: 'Hi Melanie, we have two strong estimators…', can_open_full: false },
-      { id: 'out:m1', direction: 'outbound', sent_at: '2026-09-28T10:00:00Z', person: 'Other Person', subject: 'Intro', text: 'Hello Other…', can_open_full: false } ] };
+      // OUR emails as the server really sends them (routes/client-intel.js): person:null, `to` = who they went to. A fixture
+      // that put a name on them hid R-268 — the window narrowed by name and dropped every reply of ours.
+      { id: 'out:m2', direction: 'outbound', sent_at: '2026-09-30T10:00:00Z', person: null, to: 'melanie@pinpoint.test', subject: 'Estimator role', text: 'Hi Melanie, we have two strong estimators…', can_open_full: false },
+      { id: 'out:m1', direction: 'outbound', sent_at: '2026-09-28T10:00:00Z', person: null, to: 'other@elsewhere.test', subject: 'Intro', text: 'Hello Other…', can_open_full: false } ] };
     window.apiGet = (p) => { __asked.push(p);
       if (p === '/leads/job-1/intel') return Promise.resolve(TL);
       if (p === '/leads/job-off/intel') return Promise.resolve({ enabled: false });
@@ -90,7 +92,8 @@ try {
   await clickRow('Melanie Nero');
   let d = await drawer();
   step('clicking a "Reply due" row opens the drawer — and says the rule in plain words', d && /^Melanie Nero/.test(d.title) && /their latest email to you has no reply from you after it/.test(d.hint) && /Right now: They replied 3 days ago/.test(d.hint), JSON.stringify(d && d.hint));
-  step('…the emails behind it, newest first, theirs and yours marked (narrowed to Melanie — not the other person\'s)', d.rows.length === 2 && d.rows[0].p === 'They wrote — Melanie Nero' && d.rows[0].tone === 'in' && d.rows[1].p === 'You wrote — Melanie Nero' && d.rows[1].tone === 'out', JSON.stringify(d.rows.map(r => r.p)));
+  step('…the emails behind it, newest first, theirs and yours marked (narrowed to Melanie — not the other person\'s)', d.rows.length === 2 && d.rows[0].p === 'They wrote — Melanie Nero' && d.rows[0].tone === 'in' && d.rows[1].p === 'You wrote' && d.rows[1].tone === 'out', JSON.stringify(d.rows.map(r => r.p)));
+  step('R-268: OUR email to her is kept although it carries no name (it is found by who it went to) — and the one to someone else is not, nothing hidden behind "earlier"', /two strong estimators/.test(d.rows[1].t) && !d.rows.some(r => /Hello Other/.test(r.t)) && !d.showAll, JSON.stringify([d.rows.map(r => r.t.slice(0, 30)), d.showAll]));
   step('…the email it was worked out from is flagged as the reply you owe, with its words', d.rows[0].chips.includes('the reply you owe') && /interested/.test(d.rows[0].t) && d.rows[0].s === 'Re: Estimator role');
   step('…and a "What to do" band names the step and carries the buttons (Reply / Mark completed / Not today)', /^Reply to Melanie Nero/.test(d.task) && d.taskBtns.join() === 'Reply to Melanie,Mark completed,Not today', JSON.stringify([d.task, d.taskBtns]));
   step('…and it asked for THIS lead\'s timeline, nothing else', await page.evaluate(() => __asked.includes('/leads/job-1/intel')));
