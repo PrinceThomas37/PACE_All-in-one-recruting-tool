@@ -832,3 +832,4 @@ Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.j
 ## Session 50 (19 Oct)
 - R-267: `pickCandidateFields` drops the `\u0000` character (PDF text) that made Postgres refuse a candidate ("unsupported Unicode escape sequence"). All candidate writes go through it — keep it that way. Guard: `test/candidate-nul-smoke.mjs`.
 - Batch 3 (Session 50): candidate sequences — `routes/recruiting/outreach.js` candidate_email channel sends what `sequenceV2.composeCandidateStep` decides (versions, AI switch on the FIRST step via `aiCandidateEmail` → `candidateBrief.briefForSequence` + `candidateEmailFor`, sender filled from the mailbox, unfilled field refused). Nurture (no job) never asks the AI.
+- R-278 (Session 50): the candidate_email channel's done-detail now includes the tracking `token` (routes/recruiting/outreach.js), so Outreach Insights can tell which sequence sent a candidate email.
