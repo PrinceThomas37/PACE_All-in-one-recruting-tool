@@ -1,3 +1,7 @@
+# Moving the database (R-292) — PLAN CHANGED 20 Oct, read D-0168 first
+
+> **Superseded in part.** The owner will move to PACE-owned accounts next month, and the target is now **Singapore for both the Render server and the database** (next customer is a team in India; Render has no Mumbai, so Singapore + Singapore). The new project and service are created **directly in the PACE accounts**, not transferred (neither can change region). Below, read "Ohio" as "the chosen region" until the tool's region guard is made a setting (R-297). The steps and safety rules are otherwise unchanged. Nothing has been created or run.
+
 # Moving the database from Seoul to Ohio (R-292, D-0166)
 
 **Why:** the database is in Seoul and the server is in Ohio, so every question the app asks the database crosses the world (~200 ms). Pages take seconds. Moving the database next to the server fixes most of it.
