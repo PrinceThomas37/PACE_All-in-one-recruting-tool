@@ -126,6 +126,11 @@ const engineRunner = createEngineRunner({ supabase });
 // platform's — so a client cannot spoof its way past a limit by sending its
 // own X-Forwarded-For.
 app.set('trust proxy', 1);
+// THE MEMORY WATCHER (R-291, services/memory-watch.js): when memory nears the free server's 512 MB it logs which requests and
+// engine jobs are running, so the next out-of-memory restart names its cause. Logs only; changes nothing anyone sees.
+const memoryWatch = require('./services/memory-watch').createMemoryWatch({ jobs: () => engineRunner.running() });
+app.use(memoryWatch.middleware);
+memoryWatch.start();
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
 // `verify` keeps the raw bytes on the request. Stripe signs the exact body it
 // sent, so a re-serialised object cannot be verified — see routes/plans.js.
