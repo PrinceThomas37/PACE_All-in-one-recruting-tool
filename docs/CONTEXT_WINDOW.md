@@ -1,103 +1,54 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
+> **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-15 (Session 47 CLOSED: #340 `755d832` R-258, #341 notes, #342 `e15777e` D-0155 + R-259 — all MERGED and LIVE) · **Last merged to `main`**: #342 (`e15777e`, sequence screen matches the app + AI writes each one taught by picks, 15 Oct) · #341 · #340 (`755d832`, write your first sequence) · #339 · #338 (`2f3f497`) · #333 (`a438825`). Merging is the release — then confirm Render deployed it (`list_deploys`).
-**Highest ids:** decision D-0156 · contract C-0038 · roadmap `R-261` (next `R-262`) · next migration `067` (065 and 066 are APPLIED on the live database, 14 Oct, with the owner's go; 064, 063 and 062 are APPLIED).
+**Updated**: 2026-10-20 (Session 50 closing). **Highest ids:** decision **D-0164** · contract C-0038 · roadmap **R-287** (next `R-288`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
 
-## Now
+## START HERE (Session 50, 19–20 Oct) — the owner's "Changes to be done next" doc
 
-**START HERE (Session 47 CLOSED, 15 Oct) — everything the owner asked for is MERGED and LIVE.** #340 `755d832` (R-258, live 13:01 UTC after a MANUAL deploy — Render got no event for that merge, no incident), #341 notes, #342 `e15777e` (D-0155 + R-259, Render auto-deployed, live 14:50 UTC; `/js/73-sequence-setup.js` confirmed served with "Teach the AI"). Final suites on #342: Node 22 270/271 → the one red source check fixed and re-run 30/30; Node 26.12.0 271/271.
-- **What is live — My Setup → "Write my sequence"** (Write → Start), now in the SAME look as the rest of PACE (D-0155: app cards/buttons/inputs/plain text; the "refined look" and its rollout R-261 are DROPPED).
-  - **"I write it"** (R-258): plain-words detail menu (first name, company, job title, city, industry, top skills, pay "if known" — a lead with no pay drops the whole sentence), "Stuck? Draft it with AI", up to 2 AI versions per email picked at random per lead (`own_v2`/`own_v3`), follow-ups N days after the first email; Start shows the server's fill for one real lead.
-  - **"AI writes each one"** (R-259, D-0156): **Teach the AI** — purpose (one line), what it may use from the job (top skills / why hard to fill / pay if the job says / on-site or remote / industry), ending (offer resumes / yes-or-no — NO "ask for a call": the checker's `meeting_ask` rejects it), length (short 70–100 / a bit longer 110–150 words), optional pasted email for voice; per follow-up: nudge / one more detail / last check-in + one line. Backup email + backup follow-ups required; "Write it from my answers" drafts the backup. Start: `POST /my-setup/sequence/ai-test` writes one real lead's first email + follow-up 1 (6 tests/person/hour), backup beside it, "See what the AI read", plain reason when AI did not write.
-  - **At send time:** first email = existing engine writer + style note + `aiTeach.firstBlock`; a TAUGHT follow-up = `aiWriteFollowup()` in `index.js` (from the first email that really went out + posting, house checker + one repair, stored before sending, `template_variant 'ai'`). Any failure → the backup goes unchanged. Budget lines `engine_followup`, `sequence_test`. Email page's "AI writes at send" tag covers taught follow-ups.
-- **Where:** `services/ai-teach.js` (one home for the answers; `u_<id>_ai_teach` JSON, cleared by "I write it"), `services/sequence-versions.js`, `routes/my-setup.js`, `index.js` (`aiWriterContext`, `aiWriteFirstEmail`, `aiWriteFollowup`), `routes/emails.js`, `public/js/73-sequence-setup.js` (own painter; input values and editor html are kept OUT of the skeleton; `repaint()` never reads editors back), `.sq-*` in `public/retro.css`. No migration. Tests: `sequence-setup-smoke` 42, `sequence-setup-ui-smoke` 32 (`SHOTS=dir`), `engine-draft-smoke` 19, `ai-style-smoke` 30.
-- **Owed by the owner:** try it on the live app (Ctrl+Shift+R; the free server takes ~30 s to wake) — **no real AI-written email has been seen by anyone yet** (the sandbox has no funded key; tests used stand-ins). Ask for a screenshot of the first real one and check it followed the answers. **Say again:** on the free AI tier roughly 25 AI emails a day, then every lead gets the backup; AI follow-ups use credits too.
-- **Next, not started (owner's go needed):** **R-260** candidate "let the AI read each resume" switch (owner: keep on the to-do list); **R-255** a plain automatic reply stops follow-ups; the "Who" step (waits for candidate sequences); R-249 (`{{local_line}}` says "Must be local" on ~3 leads in 4 where the job does not), R-252 (only 4% of leads carry the "why this role is open" note).
-- **Artifacts:** approved mock v5 https://claude.ai/artifact/63chan7L76bJ919Z4aQehd; look canvas https://claude.ai/artifact/7HFg6RToe4G5fzsgG2B4Z8 (now obsolete, D-0155); stray duplicate mock https://claude.ai/artifact/7gxQ32nwrVMbDKtgTjAEA6 — delete only on the owner's word.
-- **Process lessons:** (1) **after every merge, `list_deploys` must show a deploy on the merge commit within ~5 min; if not, `trigger_deploy`** (allowed 15 Oct) — sandbox curl to onrender.com is blocked, use Firecrawl (`maxAge:0`) or the Render tools; (2) a refactor breaks source-reading checks in OTHER suites (`ai-style-smoke`) — run the full suite, and when fixing such a check make it fail on a deliberate break (the first fix matched a twin line and could not); (3) a merged squash PR leaves the branch holding stale copies — restart the branch from `main` before new work; (4) a "refined" look nobody can see is not worth a rollout — show the owner side-by-side pictures before proposing app-wide visual work; (5) check a rule in the code before offering it on a screen (the "ask for a call" ending would always have failed).
+**Releases.**
+- **#348 MERGED and LIVE** (`e7c2979`, Render live 21:14 UTC 19 Oct): Batches 1–2 — settings crash (R-284), NUL in resumes (R-267), our replies seen by the digest / Needs you (R-268), inline images (R-274), Leads strip follows filters + per-person page size (R-279/R-280), dismissed reminders 7 days (R-281), Finder for everyone (R-276/R-283 card text), fresh manager sees only "Finish your setup" (R-283).
+- **#351 = Batches 3 + 4, owner approved (D-0164: "Nothing [is off]. Push it live", "Merge it after the check").** Set to merge once the Node 22 and Node 26 full runs pass on the final head. **First thing next window: check `main` contains #351's merge commit and Render (`list_deploys`, service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) deployed it; if not, finish it (merge if green; `trigger_deploy` if Render got no event).** The work lives on branch `claude/busy-darwin-fbkb3b` (built in worktree branch `batch3-wip`).
 
-**START HERE (Session 46, 14–15 Oct) — everything the owner asked for is MERGED and LIVE** (#337 `289d89c`, #338 `2f3f497`; Render deployed `2f3f497` at 22:50 UTC 14 Oct and it showed Live at 22:51; Node 22 and Node 26 full suites 269/269 on the final head). Built: (1) **typed text survives minimise** (root cause: the message body is a `contenteditable`, the dock re-filled only inputs and restored html drawn before the typing; the old tests read a hidden copy, never the box a person sees — they read the visible box now); (2) **several New message / Reply / Forward windows at once**, each with its own draft on its chip (`Dock.onPark`, D-0145; one reply window per email, an empty Reply swaps to Reply all); (3) **minimised tray bottom-right, chips drag anywhere**, and the narrow layout (≤860px or a zoomed-in browser) hugs the right too; (4) **Label row** in New message / Reply / Forward (R-244, D-0146): real mailbox labels, labels only; Outlook categories ride on the draft, Gmail labels the sent copy after the send, a label failure never fails or repeats a send. Detail: `docs/territories/surface.md`, `harbour.md`, `foundry.md` (Session 46).
-**Owed:** (a) **the owner tries all of it on the live app** (Ctrl+Shift+R first) — above all **a real Outlook/Gmail send with a label** (nothing here can send; the Sent copy carrying the label is NOT proven); (b) **R-241 blocked ≠ invalid, R-242 small senders never auto-pause, R-243 bounce lookup has no org filter** — written as PENDING, shown to the owner, **no go given**; the four contacts in the owner's Daniel-James screenshot were NOT looked up (needs a read-only live-database look and the owner's go); (c) the website booking form showed "did not go through" while the app was down — re-test once; if it still fails, check `WEBSITE_LEADS_ORG_ID` in Render (owner's to-do since 13 Oct); (d) the `MaxListenersExceededWarning` (11 `finish` listeners per response) in the Render logs is old and harmless but worth a clean-up row if wanted.
+**What #351 holds (all on screen and tested; screenshots were shown to the owner):**
+- **Batch 3:** the new sequence builder is the one door for every sequence (named sequences for leads and candidates, AI on/off for candidates — R-269/R-270, D-0158/D-0159); candidate drawer opened from a job shows that job + stage-move notes under Notes (R-275); lead split equal by default and never above an email ID's daily limit (R-277); manager Today and Outreach Insights as drawn (R-278, D-0160 — morning briefing kept, it was never removed); "My wording" / "AI style" moved into the builder (R-285, D-0161) with nothing lost: per follow-up same thread / new email, Rewrite with AI, spam check (R-286).
+- **Batch 4 (inbox):** conversations by default + switch saved per person (R-271); All inboxes with each row labelled (R-272); full formatting bar, Reply all on every message, Schedule send (date + time in the person's zone; free server can send late overnight — D-0163), Scheduled tab (+ reminders) and Draft tab (R-273). The three mailbox sends live in `services/mailbox-send.js` (one path, shared with Schedule send); engine job `scheduled_sends` (`services/scheduled-sends.js`).
+- New suites: `mailbox-threads-smoke`, `mailbox-threads-ui-smoke`, `schedule-send-smoke`, `sequence-builder-wording-ui-smoke`, `batch3-screens-smoke`, `outreach-insights-smoke`, `sequence-v2-smoke`.
+
+**Owed by the owner (say it plainly, once):**
+1. Try #351 on the live app (Ctrl+Shift+R; free server takes ~30 s to wake): a real conversation reply, All inboxes, one Schedule send to themselves (it may go late if PACE is asleep), a new named sequence.
+2. **R-205:** a fresh 64-hex `MAILBOX_SECRET_KEY` on Render, then one live Zoho app-password test.
+3. Earlier, still owed: `WEBSITE_LEADS_ORG_ID` = `92cf97db-d216-483a-8cc4-7ecae575415b` on Render (website booking form → PACE lead); a real labelled send (R-244) on the live app; a first real AI-written email seen and checked.
+4. **Paid always-on server before other customers use PACE** (owner, D-0163).
+
+## THE TO-DO LIST (owner asked for it; read `docs/ROADMAP.md` for the full rows)
+
+*Decided, build later (owner's go needed to START each):*
+- **R-287** continue a Gmail / Outlook draft inside PACE (owner: "yes, build it later", D-0164).
+- **R-250** several sequences per person, one Primary for sales.
+- **R-246 / R-254** the AI learns from the user's own emails and workflow.
+- **R-247 / R-248** plain-words detail picker; what happens when a detail is missing.
+- **R-260** candidates: "let the AI read each resume" switch (one credit per candidate).
+- **R-255** a plain automatic reply (no return date) stops the follow-ups.
+- **R-256** the test email built exactly like a real lead's first email.
+- **R-252** "why they are hiring / how long open" as a usable detail.
+
+*Fixes and safety (not started, no go given):*
+- **R-241** a "blocked" bounce must not mark a good contact Invalid · **R-242** bounce auto-pause misses small senders · **R-243** the bounce lookup has no org filter.
+- **R-204** numbers still typed into code (7-day reply look-back, the generator's draft counter default).
+- **R-206** a window that closes and reopens still blinks.
+- **R-262 / R-263** marked DOING from Session 47 (new user's first sign-in; login glitch after sign-out) — **check whether they are actually finished** before anything else is said about them.
+- Tidy-up: the dead `tmplHtml` (old My wording editor) in `public/js/07-page-email.js` and its helpers are computed and unused since D-0161.
+
+*Parked by the owner:* **R-253** real count of matching candidates in client emails.
+
+## Process lessons from Session 50 (read before building)
+- **A decision that removes a screen is not done until that screen's old TESTS have been run** — they list what it did (R-286 found three lost controls and three dead buttons that way).
+- **Building a layout "as drawn" must not drop what the drawing did not mention** (the morning briefing vanished for six roles until the full run caught it).
+- **Look at screenshots of every new screen before showing the owner** — they caught three bugs the suites passed (an archive count that said 0, a panel below the window's edge, "To —").
+- The engine runner treats a job's `skipped` field as "nothing to do": never name a counter that. `execCommand('fontSize')` reports success and does nothing inside the app window.
+- `pkill -f "node test/"` (or `run-all.mjs`) kills your own shell command too — its text matches. Use the PID.
+- Supabase `apply_migration` may be cancelled at the permission step: the owner can paste the file into the SQL editor; always read the table back afterwards.
+- Run the Node 22 and Node 26 full runs one after the other, on the exact head being merged; never merge on targeted suites.
+
 **Render facts learned this session (read these):** the Render tools (`list_services`, `list_deploys`, `list_events`, `list_logs`, `get_metrics`) work and are read-only; service `fute-lms-backend` = `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`, free plan, 512 MB (one OOM kill 14 Oct 16:00 UTC; normal use ~230–265 MB). **`trigger_deploy` was denied on 14 Oct, allowed on 15 Oct** — the owner starts a deploy by hand (Manual Deploy → Deploy latest commit) or adds a permission rule. **A Render incident (19:32–22:18 UTC, 14 Oct) paused deploys for free services**: #337 merged at 20:53 UTC and never deployed on its own, the app instance vanished ~21:30 and a restart did not bring it back until 22:19 (the static website kept working because it needs no instance). After an outage, check `list_deploys` — a merge during the pause deploys nothing. **15 Oct: #340 did not auto-deploy with NO incident (Render got no event at all) — after every merge, check `list_deploys` for the merge commit; if missing, `trigger_deploy` (allowed on 15 Oct). Sandbox curl to onrender.com is blocked; use Firecrawl or the Render tools.** `status.render.com/incidents/<id>` is readable.
-**Process lessons:** the targeted suites I ran for the labels work were NOT the whole run — the full run caught a real bug (`winLabels(...).filter is not a function` when a label list is not a list; a stub answering `{}`); never merge on targeted suites. A full run can stall silently (155 of 269, no exit line) — re-run it, do not wait on it. `pkill -f "test/run-all.mjs"` kills your own shell command too (its text contains the pattern). A guard on a hidden store passed while the screen came back blank — read what a person SEES. The owner reads screenshots of Render, not logs: ask for the Events tab / banner, or use the Render tools.
-
-**START HERE (Session 45, 14 Oct) — everything the owner asked for is MERGED (#333) and deploying; migrations 065/066 are applied; the 7-lead clean-up (R-231) is done.** Built: label-window flash fix, reply signature per mailbox, job pay period, same-posting guard + "already on another lead here" question, one-draw lead open, automatic replies / read receipts never move a lead to Connected (Auto-replied tag; an out-of-office with a return date pauses follow-ups), Edit lead (admin / RA lead / BD owner chain) with a People section for RA leads inside the admin's RA edit window, wrong-field mover, address suggestions under To/Cc, whole-mailbox search, Jobs opens on My Jobs. Tests: Node 22 267/268 + re-run 61/61, Node 26 268/268. **Owed:** (1) the owner tries the screens on a real screen; (2) **Rampart's review of the `canTouchJob` change**; (3) DONE with the owner's yes (14 Oct): 7 interested contacts taken back OFF the do-not-email list (wrongly put there by the old opt-out check, R-239; backups in the `backups` schema); offered: resume the 7 auto-reply leads' skipped follow-ups. A client's no is now Rejected (R-238). (The four "no thanks" leads were moved to Rejected, R-237; search now includes Spam and Trash for Gmail — Outlook's whole-mailbox list is documented, not tested live.) **Process lessons:** run the full suite with the MAXIMUM background timeout (the default 30 min killed one run at 70%); a hand-written org check is not the org guard (`withOrg`) — `org-scoping-guard-smoke` caught it; a count said in chat (I said 23) must be read from the database before it is written down (it was 22).
-
-**Earlier handoff (Session 44, 14 Oct), still true for what it covers.** Everything the owner asked for THEN is merged and deploying. What is owed:
-1. **The owner** tries the new screens on a real screen (they have only seen screenshots from the tests): Accept window, Find Leads (size choice kept — free sources, place suggestions, "Edit this search", Preview & edit on a saved lead, "Email another job / person" with the people search), Leads (Take lead, "Lead Finder" label, Show job description), Email → Pending (Delete). **The owner confirmed "Show job description" is what they meant for note 6.** How it FEELS is theirs to say.
-2. **R-205 (owner's to-do):** a FRESH 64-hex `MAILBOX_SECRET_KEY` on Render (service `fute-lms-backend` → Environment; the earlier pasted key is burned), then one live Zoho app-password test.
-3. **Known gaps:** R-206 (a window that closes and opens another still pops); R-204 (remaining typed-in numbers: the 7-day reply look-back, the generator's per-browser draft counter, background engines read shared values); a hard bounce still marks Invalid (no automatic "blocked"); the follow-up count picker still offers 1–5 when a company lowers `followup_max`.
-4. **Unanswered offers:** bring the online roadmap artifact `NQ4HUuMfAWJk34g9Vs5EdQ` up to date (it stops near R-199); the backlog the owner can pick from — R-201 (in-app inbox/warm-up/Sent copy for app-password mailboxes), the "Mailbox ready" first-login screen, R-204, R-206, a blocked-contacts list.
-5. **Process lessons this window:** two other sessions merged to `main` while I worked (#327, #330) and used the same D-/R- numbers — always fetch `main` before numbering a decision or roadmap row, and expect to renumber at merge. Run the Node 22 and Node 26 full suites one after the other when a result gates a merge (two at once made a browser suite time out). A `//` comment in the middle of a chained `.map(` swallows the rest of the line — a step asserting the visible result caught it.
-
-**Merged 14 Oct (D-0140, R-219…R-222):** the owner's third page of notes — people search in "Email another job / person", delete a pending email, preview/edit/send a lead's first email inside Find Leads, "Lead Finder" label instead of NEW. Owed: the owner tries them on a real screen.
-
-**Merged 14 Oct (D-0135, R-210…R-214):** the owner's handwritten notes — Find Leads keeps the company size (free-source companies get their size from one Apollo lookup; Tiny 1–10 band), state/city suggestions in the place box, **Take lead** for ticked/opened Unassigned leads, spinner removed (bar only), **Show job description** instead of Edit posting. Owed: the owner tries them on a real screen.
-
-**Company website (R-208/R-209, D-0128–D-0134, PR #327):** `company-site/` (the page for **paceconsultant.in**; the app is **app.paceconsultant.in**) is rebuilt in the owner's chosen look: morning by default with a night switch, two self-hosted pixel fonts (digits from Press Start 2P so numbers read right), approved prices/booking/legal kept. MERGED 13 Oct as #327 (`c39fb88`) on the owner's "Go, publish it". Whether Render has a static site serving `company-site/` at the root domain is NOT confirmed (cannot reach Render or the domain from the sandbox). The app's look (D-0132/D-0133: website look toned down, pixel text) is drawn only, not built. Concepts: https://claude.ai/artifact/WrsraVt3UE4JMrnDkdWtjM. **13 Oct, R-215 (D-0136): an interactive version is on the dev branch, NOT merged**: a working Today card, a reply sorter, a candidate email and live send-window clocks, a two-tab Sales/Recruiting walkthrough, a monthly/yearly switch. Clickable draft: https://claude.ai/artifact/HhLeCGjpneSLdRkp97E78a. Offered: R-216 (booking form into PACE as a lead), R-217 (drop the remaining game words). **13 Oct (D-0137):** yearly prices rounded ($79/$239/$479 a month), and the booking form now sends each request into PACE (R-216, built, NOT merged). **MERGED 13 Oct on "okay merge it" (D-0138)** before the organisation was chosen: until `WEBSITE_LEADS_ORG_ID` is set in Render, each request is kept and the visitor is told to email info@paceconsultant.in (the page never says "sent"). **Owner chose A (D-0139):** organisation **PACE** `92cf97db-d216-483a-8cc4-7ecae575415b` with an info@paceconsultant.in sign-in, created on the live database 13 Oct. **Owner to do:** set `WEBSITE_LEADS_ORG_ID` to that id in Render.
-
-The live site is #319. The owner has not been shown it. Do not send mail, do not touch the live database, do not merge.
-
-**Already done on the live database. Do not repeat.** Four Find Leads leads were moved from Assigned back to Unassigned (no email had been written). Backup: `backups.leads_unassign_finder_20261008`.
-- `b92277a4-d2ee-4ad9-bbb3-40415aa1d5ff` Business Network Consulting - BNC (BD Lead 1)
-- `a43f3e5f-ecdc-4492-8e3a-d47d02a7f9d2` Equipment One Company (BD Lead 1)
-- `52237021-141c-433f-b894-a22e1973d665` Xerxes Global (BD Lead 1)
-- `1f696520-2556-446d-ac61-80a3cdee17dd` Peak Retirement Planning, Inc. (BD Lead 2)
-Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolUpdate`.
-
-**On the dev branch, not live (D-0117):**
-- **Write with AI** (`services/sequence-draft.js`, `POST /wf/draft-email`) follows the instruction. Default 140–200 words, 3–4 short paragraphs. If they ask for shorter, that length. A draft that misses the topic is not used. Still short after one repair: used, and the note says so. The engine writer (`engine-draft.js`) was not retuned — it is still the short recruiting pitch.
-- **Rewrite with AI** and **Write a variant** keep every `{{variable}}`. If they cannot, the person's own text comes back, never the ready-made starter. Buttons on the sequence step and on My wording.
-- **AI writes first emails:** same as the company / on for me / off. Per email ID only when wording is per email ID. Follow-ups stay the person's wording. The send loop and the "AI writes at send" chip both use `services/ai-first-choice.js`.
-- **Minimised windows:** drag the chip sideways along the bottom. A drag does not open it. A later click does. × closes it. The spot lasts until reload. Phone (860px and under) stays a scrolling row.
-
-**Also on the dev branch (D-0118, R-192):** New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. A paste that brings a font, a colour, or a highlight is stripped. The send-time writer was not touched.
-
-**Merged in #325 (Session 44, R-193):** "Review & send" on a Find Leads lead opens Email → Pending on THAT lead's email only, ticked, with "Send selected (n)" (confirm names the recipients) and "Show all pending". Tick boxes on every Pending row. `POST /emails/send-selected` was brought level with Send all. **Waiting on the owner (asked 12 Oct):** several jobs in one email (R-194), multi-place search UX (R-195), which "ongoing search" to edit (R-196), the Accept-window pill / missing-details report (R-197), and the neutral-engine direction (R-198, with R-150).
-
-**Merged to `main` in #326 (R-200, D-0120/D-0121; migration 063 applied 13 Oct) — still owed: `MAILBOX_SECRET_KEY` on Render, one live Zoho mailbox test:** (a) the Email setup checklist under Admin → Company domains (PR #326); (b) app-password mailboxes — SMTP send, IMAP replies/bounces, Zoho first (migration 063 written, NOT applied; needs `MAILBOX_SECRET_KEY` on Render; one live test owed). Next, in the owner's order: (c) the employee first-login "Mailbox ready" screen. Left out of (b): in-app inbox, warm-up, Sent-folder copy (R-201). The Admin header still prints "Fute Global LLC" for every organisation (surface.md).
-
-## Still open (do not start unasked)
-
-- Watch the first real sends under the new follow-up rules (D-0114). The send-loop hook is tested through pure helpers, not against real mail.
-- R-178's automatic "Enable AI variants" (one variant per email, unasked) is not built. The on-demand button is.
-- R-067 per-organisation API keys before a second customer. D-0106 (a)–(e), R-149 notifications, R-150 industry playbook.
-- Dead mailboxes if still dead: kristy.scott@fute-global.com, princethomasfute@gmail.com.
-- `*.onrender.com` is blocked here. A merge is a release that this sandbox cannot watch.
-
-## What is live
-
-Leads engine, ATS, outreach, candidate outreach, in-app mailbox, reminders / needs you today, public apply page, ownership, retro look, search. Billing and self-serve signup are built and **off**.
-
-D-0114 on the live build: default no follow-ups; the chain is made when the first email is sent; a `chain_rules='own'` chain sends only the person's wording; older rows (NULL) keep the old behaviour.
-
-| setting | value (read 2026-09-26) | meaning |
-|---|---|---|
-| `sys_engine_ai_first_email` | **1** | company switch: AI writes first emails. A person can now override it (D-0117, not live until merged). |
-| `int_ai_active` | **groq** | Groq leads the chain |
-
-A setting with no row reads its schema default (`config/settings.js`).
-
-## Tests
-
-Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the short-draft repair assertion changed on purpose), `ai-first-choice-smoke` 18, `ai-wording-ui-smoke` 9, `window-dock-smoke` 30, `engine-draft-smoke` 17, `wording-scope-smoke` 45, `ai-style-smoke` 30, `sequence-builder-smoke` 31, `scope-emails-warmup-smoke` 52, `mail-format-smoke` 10, `mailbox-smoke` 136, `mailbox-page-smoke` 80. Full suite not re-run (not merging). Sandbox Node 22; Render Node 26 — run Node 26 before a merge.
-
-## How these two files stay true
-
-This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCHIVE.md` is append-only. `docs/ROADMAP.md` gets a row the turn a suggestion is made. `DECISIONS.md` gets an entry the moment the owner decides; never edit an old one. `node scripts/memory-check.mjs` before finishing.
-
-**Standing rule (D-0123, owner, 12 Oct):** no number that limits a customer is typed into the code — the admin decides (mail counts, AI counts, any count). Mailbox daily limit = `services/daily-limit.js` (admin default, one fallback in `config/limits.js`); new caps go in `SETTINGS_SCHEMA`. Older caps: R-202. Settings are deployment-wide, not per organisation: R-203 (owner's call).
-
-**D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. (Migration 063 was later applied by the owner — see D-0125 note.)
-
-**D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063: applied by the owner in the SQL editor on 13 Oct (the assistant's apply was cancelled five times).
-
-**Owner to-do (R-205, 13 Oct):** set a fresh `MAILBOX_SECRET_KEY` on Render, then one live Zoho mailbox test. The key pasted in chat on 13 Oct is burned — do not use it.
-
-**D-0126 (13 Oct):** Find Leads batch (R-194…R-197) built on the dev branch — multi-job bullets email, place chips, progress panel, edit-in-place, window refresh fixed in the engine. R-206 = windows that close-and-reopen still blink.
-
-**D-0127 (13 Oct):** Blocked email status built; migration 064 (widens `contacts_email_status_check`) is written and NOT applied — owner runs it in the SQL editor.
-
-**Migration 064 APPLIED (13 Oct)** — the owner ran it in the Supabase SQL editor; read back from the live database: `contacts_email_status_check` now allows `blocked`. The Blocked menu saves once PR #328 is merged and deployed.
