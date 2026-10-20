@@ -137,7 +137,7 @@ window.saveNotes=function(){
 window.addContactPrompt=function(){showToast("Add contact: coming in full version","info");}
 window.openAddLead=function(){STATE.modal=renderAddLeadModal();render();}
 window.closeModal=function(){STATE.modal=null;render();}
-window.overlayClick=function(e){if(e.target.classList.contains("overlay"))closeModal();}
+window.overlayClick=function(e){if(e.target.classList.contains("overlay")){if(window.Dock&&Dock.outsideClick)Dock.outsideClick();else closeModal();}}
 
 var coNewMode=true;
 window.toggleCoMode=function(isNew){

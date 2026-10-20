@@ -114,6 +114,23 @@ try {
   await page.evaluate(() => window.mbSendCompose());
   await page.waitForFunction(() => window.__calls.some(x => x[0] === 'DELETE' && /d2$/.test(x[1])), { timeout: 8000 });
   step('sending it goes out as a new message and then retires the draft', (await calls(/\/mailbox\/mb1\/send$/, 'POST')).length === 1);
+
+  // ── a click on the dimmed area must not make the window vanish (owner 20 Oct) ──
+  await page.evaluate(() => { STATE.mailbox.compose = null; window.mbCompose('x@y.com'); });
+  await page.waitForFunction(() => !!document.querySelector('#layer [data-win="mailCompose"]'), { timeout: 8000 });
+  await page.evaluate(() => { const ed = document.getElementById('mb-c-editor'); ed.innerHTML = 'half written note'; window.mbEditorInput('compose'); });
+  await page.evaluate(() => document.querySelector('#layer .overlay').click());
+  await page.waitForTimeout(200);
+  step('clicking outside a message window MINIMISES it to the tray (it does not vanish)', await page.evaluate(() => Dock.count() === 1 && !document.querySelector('#layer [data-win="mailCompose"]') && !!document.querySelector('#win-tray .win-chip')));
+  await page.evaluate(() => document.querySelector('#win-tray .win-chip').click());
+  await page.waitForFunction(() => !!document.querySelector('#layer [data-win="mailCompose"]'), { timeout: 8000 });
+  step('…and coming back from the tray brings back what was written', await page.evaluate(() => /half written note/.test(document.getElementById('mb-c-editor').innerText)));
+  await page.evaluate(() => Dock.close());
+  // an ordinary window still closes on an outside click
+  await page.evaluate(() => window.openAddLead());
+  await page.evaluate(() => document.querySelector('#layer .overlay').click());
+  await page.waitForTimeout(150);
+  step('an ordinary window (Add lead) still just closes on an outside click', await page.evaluate(() => !STATE.modal && Dock.count() === 0));
   step('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
   step('the page part ran to the end', false, String(e && e.stack || e));
