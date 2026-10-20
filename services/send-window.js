@@ -1,3 +1,4 @@
+const { formatter: dtf, isZone } = require('./date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // ============================================================================
 // A PERSON'S SENDING DAYS AND HOURS (owner, 8 Oct 2026, D-0104).
 // ----------------------------------------------------------------------------
@@ -59,7 +60,7 @@ function dayAllowed(window, dayIndex) {
 
 /** The clock in a time zone: minutes since midnight and the weekday (0 = Sunday). `iana` is e.g. 'America/Chicago'. */
 function localParts(iana, date) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: iana, hour: 'numeric', minute: 'numeric', hour12: false, weekday: 'short' }).formatToParts(date);
+  const parts = dtf('en-US', { timeZone: iana, hour: 'numeric', minute: 'numeric', hour12: false, weekday: 'short' }).formatToParts(date);
   const get = (t) => parts.find((p) => p.type === t).value;
   const wd = DAYS.indexOf(get('weekday').toLowerCase().slice(0, 3));
   return { minutes: (parseInt(get('hour'), 10) % 24) * 60 + parseInt(get('minute'), 10), dayIndex: wd < 0 ? 0 : wd };

@@ -1,3 +1,4 @@
+const { formatter: dtf, isZone } = require('../services/date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // ============================================================================
 // THE IN-APP MAILBOX — read and work a connected mailbox without leaving PACE.
 // ----------------------------------------------------------------------------
@@ -606,7 +607,7 @@ module.exports = (ctx) => {
   const SCHEDULE_FIELDS = ['to', 'cc', 'subject', 'body', 'formatted', 'include_signature', 'reply_all', 'label_ids', 'attachments'];
   function validZone(tz) {
     if (!tz) return null;
-    try { new Intl.DateTimeFormat('en-US', { timeZone: String(tz) }); return String(tz).slice(0, 64); } catch (_) { return null; }
+    return isZone(String(tz)) ? String(tz).slice(0, 64) : null;
   }
   router.post('/mailbox/:mid/schedule', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);

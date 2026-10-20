@@ -1,3 +1,4 @@
+const { formatter: dtf, isZone } = require('./date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // An interview time that says WHICH clock it is on (R-095, owner 2026-09-30:
 // "All time zones. Our product should be used worldwide.").
 //
@@ -8,18 +9,18 @@
 
 function validZone(tz) {
   if (!tz || typeof tz !== 'string' || tz.length > 64) return null;
-  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch (_) { return null; }
+  return isZone(tz) ? tz : null;
 }
 
 function formatInterview(iso, tz) {
   const d = new Date(iso);
   if (!iso || isNaN(d.getTime())) return 'To be confirmed';
   const zone = validZone(tz) || 'UTC';
-  const when = d.toLocaleString('en-US', {
+  const when = dtf('en-US', {
     timeZone: zone, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit', timeZoneName: 'long',
-  });
-  const off = (new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
+  }).format(d);
+  const off = (dtf('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
     .formatToParts(d).find(p => p.type === 'timeZoneName') || {}).value || '';
   return when.replace(/[\u202f\u00a0]/g, ' ') + (off && !/^GMT$/.test(off) && !when.includes(off) ? ' (' + off.replace('GMT', 'UTC') + ')' : '');
 }

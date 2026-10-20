@@ -1,3 +1,4 @@
+const { formatter: dtf, isZone } = require('./date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // THE VIEWER'S OWN CLOCK, FOR DASHBOARDS AND REPORTS (R-103/R-105, D-0065).
 //
 // Lead Insights already cuts its days at the viewer's midnight (services/bd-insights.js). The
@@ -32,7 +33,7 @@ function windowsFor(now, tz) {
 // Minutes east of UTC that `zone` is at the instant `ms` (a whole number of seconds).
 function offsetMin(zone, ms) {
   const p = {};
-  new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  dtf('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
     .formatToParts(new Date(ms)).forEach(x => { p[x.type] = x.value; });
   return Math.round((Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour === 24 ? 0 : +p.hour, +p.minute, +p.second) - ms) / 60000);
 }

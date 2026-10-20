@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { formatter: dtf, isZone } = require('./services/date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
 const sequenceTemplates = require('./services/sequence-templates');
 const sequenceV2 = require('./services/sequence-v2');
@@ -415,7 +416,7 @@ async function getSendWindowHours(orgId) {
 
 function getLocalMinutesInLeadZone(tz, date = new Date()) {
   const iana = LEAD_TZ_IANA[tz] || LEAD_TZ_IANA.EST;
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: iana, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(date);
+  const parts = dtf('en-US', { timeZone: iana, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(date);
   const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
   const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
   return hour * 60 + minute;
@@ -460,9 +461,9 @@ function formatWindowOpensLabel(tz, window, date = new Date()) {
   if (minsUntil <= 0) return 'Now';
   const iana = LEAD_TZ_IANA[tz] || LEAD_TZ_IANA.EST;
   const openAt = new Date(date.getTime() + minsUntil * 60000);
-  const fmtDay = d => new Intl.DateTimeFormat('en-CA', { timeZone: iana, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const fmtDay = d => dtf('en-CA', { timeZone: iana, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
   const dayWord = fmtDay(openAt) === fmtDay(date) ? 'Today' : 'Tomorrow';
-  const timeStr = new Intl.DateTimeFormat('en-US', { timeZone: iana, hour: 'numeric', minute: '2-digit', hour12: true }).format(openAt);
+  const timeStr = dtf('en-US', { timeZone: iana, hour: 'numeric', minute: '2-digit', hour12: true }).format(openAt);
   return `${dayWord} ${timeStr} ${tz || 'EST'}`;
 }
 
@@ -1614,7 +1615,7 @@ async function resolveThreadParentMessageId({ jobId, contactId, followupType, us
 function formatQuoteDate(sentAt) {
   if (!sentAt) return '';
   try {
-    return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(sentAt));
+    return dtf('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(sentAt));
   } catch (_) { return String(sentAt); }
 }
 
