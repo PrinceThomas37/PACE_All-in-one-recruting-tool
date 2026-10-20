@@ -20,6 +20,7 @@ const express = require('express');
 module.exports = (ctx) => {
   const router = express.Router();
   const { runner, auth, hasRole } = ctx;
+  const isOperator = ctx.isOperator || (() => false);   // the engines are shared by every company: only the PACE operator runs them by hand (R-049)
 
   // Timing-safe-ish comparison. The secret is low-value (it triggers idempotent
   // background work, exposes nothing), but there's no reason to leak length.
@@ -113,7 +114,7 @@ module.exports = (ctx) => {
   // Force one job now, ignoring its cadence. Admin-only, for when someone wants
   // to see it work rather than wait for the schedule.
   router.post('/admin/engine/run/:job', auth, async (req, res) => {
-    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can run the background engines.' });
     try {
       const result = await runner.runJob(req.params.job, { triggeredBy: 'manual' });
       if (result.reason === 'unknown_job') return res.status(404).json({ error: 'unknown_job', jobs: runner.names() });

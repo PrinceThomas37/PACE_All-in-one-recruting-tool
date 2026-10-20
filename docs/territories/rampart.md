@@ -500,3 +500,10 @@ Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's passwo
 
 ## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
 - rampart: R-266 — who may change a mailbox limit: admin/team lead any; the mailbox's own person lower only; others 403; change log admin-only and org-scoped.
+
+## 2026-10-20 (Session 51) — keys per company, the PACE operator, per-company stop (R-067, R-049, R-243; D-0165)
+- API keys are per company (`int_<id>_<field>__org_<id>`); only the founding company inherits the pre-ownership keys and env-var keys; no company reads another's; a caller naming no company is served the old keys only while there is ONE company. Rule lives in `config/integrations.js` `scopeFor()`. A NEW caller of `getSecret/isConfigured/getActive*` MUST pass the company.
+- The PACE operator = admin in `OPERATOR_EMAILS`, else admin of the founding company (`services/operator.js`). Shared things are operator-only (engines, deployment-wide send times, cross-company sweeps, warm-up tick, the all-companies stop). A new route that changes something every company shares goes behind `isOperator(req)`, not `hasRole('admin')`.
+- Pause: platform || company || manager (`services/sending-pause.js`); `isManagerPaused(id)` already includes the company stop — new send paths keep calling it.
+- Bounce marking is scoped to the mailbox's company (`services/bounce-mark.js`). Guards: `org-isolation-r067-smoke`, `operator-routes-smoke`.
+

@@ -1442,3 +1442,5 @@ No screen code changed; the new numbers appear in System Settings automatically 
 - 2026-10-20: `dashScrollToReports()` returns false for managers (their Today has no report, D-0160) so Reports opens the page; the
   sequence builder preview resolves {{sender}}/{{senderemail}} from the sending email ID (`loadSenders`/`previewSender` in 73), never the
   profile; new cream surfaces (.td-tile/.oi-tile) must join the retro.css dark paper list. Outreach Plan tab tests retired (see archive).
+
+- Session 51 (R-049): `public/js/08-page-admin.js` / `09-page-workflows.js` — Emergency stop wording is "your company"; engine Run buttons and the warm-up tick hide when `/admin/sending/status` says `operator:false` (`STATE.isOperator===false`); the operator sees "Stop every company" (`togglePlatformSending`) only when `multi_org` is true.

@@ -13,6 +13,12 @@
 //   - getSecret() returns the real value for SERVER-SIDE use only.
 //   - Anthropic falls back to the ANTHROPIC_API_KEY env var if no UI key is set,
 //     so nothing that works today breaks.
+//   - WHOSE KEY (R-067, D-0055): every key belongs to ONE organisation. It is stored under
+//     "int_<id>_<field>__org_<orgId>" and read only for that organisation. The keys that existed
+//     before this (no suffix) and the env-var fallbacks belong to the deployment's FIRST
+//     organisation (the founding customer) and to nobody else: another organisation with no key of
+//     its own gets NOTHING, never someone else's. A caller that names no organisation is served
+//     the old keys only while the deployment has a single organisation.
 // (Hardening note: values are stored as-is, like the rest of app_settings. A
 //  future pass could encrypt-at-rest behind a KMS; out of scope here.)
 // ============================================================================
@@ -102,46 +108,95 @@ const INTEGRATIONS = [
 const BY_ID = new Map(INTEGRATIONS.map((i) => [i.id, i]));
 const keyName = (id, field) => `${PREFIX}${id}_${field}`;
 const mask = (v) => (v ? '••••••' + String(v).slice(-4) : null);
+const orgField = (id, field, orgId) => `${keyName(id, field)}__org_${orgId}`;
+const suffixed = (key, orgId) => (orgId ? `${key}__org_${orgId}` : key);
 
-// Real secret for server-side use: stored value first, then env fallback.
-async function getSecret(supabase, id, field = 'api_key') {
+// ── whose is the un-suffixed key? ─────────────────────────────────────────────────────────────────────────────
+// The founding organisation (oldest row, or DEFAULT_ORG_ID) inherits every key that was stored before keys had
+// owners. Resolved lazily and remembered; a failed lookup is NOT remembered, and until it succeeds nobody
+// inherits (a key withheld for a moment is better than a key handed to the wrong company).
+let legacy = { id: process.env.DEFAULT_ORG_ID || null, multi: null };
+async function loadOrgFacts(supabase) {
+  if (legacy.id && legacy.multi !== null) return legacy;
+  try {
+    const { data } = await supabase.from('organizations').select('id').order('created_at', { ascending: true }).limit(2);
+    if (Array.isArray(data)) {
+      if (!legacy.id && data[0]) legacy.id = data[0].id;
+      legacy.multi = data.length > 1;
+    }
+  } catch (_) { /* organizations table absent — a single-tenant database */ if (legacy.multi === null) legacy.multi = false; }
+  return legacy;
+}
+function noteOrgCreated() { legacy.multi = true; }
+function _resetForTests(over) { legacy = Object.assign({ id: process.env.DEFAULT_ORG_ID || null, multi: null }, over || {}); }
+
+// Who is asking, and which keys are theirs: { org, inherits }.
+//   org      — the organisation whose own keys are read/written (null: none named)
+//   inherits — may this caller fall back to the pre-ownership keys and the env vars?
+async function scopeFor(supabase, orgId) {
+  const f = await loadOrgFacts(supabase);
+  // One organisation on the whole deployment: the older keys can only be that organisation's, whichever id the caller carries.
+  if (orgId) return { org: orgId, inherits: f.multi === false || (!!f.id && orgId === f.id) };
+  return { org: null, inherits: f.multi === false };
+}
+
+async function readKey(supabase, key) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+    return (data && data.value) || null;
+  } catch (_) { return null; }
+}
+
+// Real secret for server-side use: the organisation's own value first, then (founding organisation only) the
+// older un-suffixed value, then the env fallback.
+async function getSecret(supabase, id, field = 'api_key', orgId = null) {
   const def = BY_ID.get(id);
   if (!def) return null;
-  try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', keyName(id, field)).maybeSingle();
-    if (data && data.value) return data.value;
-  } catch (_) {}
+  const sc = await scopeFor(supabase, orgId);
+  if (sc.org) { const own = await readKey(supabase, orgField(id, field, sc.org)); if (own) return own; }
+  if (!sc.inherits) return null;
+  const old = await readKey(supabase, keyName(id, field));
+  if (old) return old;
   const envVar = def.env_fallback && def.env_fallback[field];
   return envVar ? (process.env[envVar] || null) : null;
 }
 
-async function isConfigured(supabase, id) {
+async function isConfigured(supabase, id, orgId = null) {
   const def = BY_ID.get(id);
   if (!def) return false;
   for (const f of def.fields) {
     if (f.optional) continue;
-    const v = await getSecret(supabase, id, f.key);
+    const v = await getSecret(supabase, id, f.key, orgId);
     if (!v) return false;
   }
   return true;
 }
 
-// Registry + masked status for the admin UI. Never returns raw secrets.
-async function getAll(supabase) {
+// Registry + masked status for the admin UI. Never returns raw secrets. Shows ONLY the asking organisation's keys.
+async function getAll(supabase, orgId = null) {
+  const sc = await scopeFor(supabase, orgId);
+  const wanted = [];
+  INTEGRATIONS.forEach((def) => def.fields.forEach((f) => {
+    if (sc.org) wanted.push(orgField(def.id, f.key, sc.org));
+    if (sc.inherits) wanted.push(keyName(def.id, f.key));
+  }));
+  wanted.push(suffixed(ACTIVE_VERIFIER_KEY, sc.org), suffixed(ACTIVE_AI_KEY, sc.org));
+  if (sc.inherits) wanted.push(ACTIVE_VERIFIER_KEY, ACTIVE_AI_KEY);
   let rows = [];
   try {
-    const { data } = await supabase.from('app_settings').select('key,value').ilike('key', `${PREFIX}%`);
+    const { data } = await supabase.from('app_settings').select('key,value').in('key', wanted);
     rows = data || [];
   } catch (_) {}
   const stored = {}; rows.forEach((r) => { stored[r.key] = r.value; });
-  const activeVerifier = stored[ACTIVE_VERIFIER_KEY] || null;
-  const activeAi = stored[ACTIVE_AI_KEY] || null;
+  const pick = (id, field) => (sc.org && stored[orgField(id, field, sc.org)]) || (sc.inherits ? stored[keyName(id, field)] : undefined);
+  const activeVerifier = (sc.org && stored[suffixed(ACTIVE_VERIFIER_KEY, sc.org)]) || (sc.inherits ? stored[ACTIVE_VERIFIER_KEY] : null) || null;
+  const activeAi = (sc.org && stored[suffixed(ACTIVE_AI_KEY, sc.org)]) || (sc.inherits ? stored[ACTIVE_AI_KEY] : null) || null;
 
   const items = INTEGRATIONS.map((def) => {
     const fields = def.fields.map((f) => {
-      const raw = stored[keyName(def.id, f.key)];
+      const raw = pick(def.id, f.key);
       const envVar = def.env_fallback && def.env_fallback[f.key];
-      const fromEnv = !raw && envVar && !!process.env[envVar];
+      const fromEnv = !raw && sc.inherits && envVar && !!process.env[envVar];
       const isSecret = f.secret !== false;
       return {
         ...f,
@@ -169,78 +224,104 @@ async function getAll(supabase) {
   return { categories: order.map((c) => ({ category: c, items: groups[c] })), active_verifier: activeVerifier, active_ai: activeAi };
 }
 
+// Where a write goes: the organisation's own key. A caller that names no organisation writes the old key, but only on a
+// single-organisation deployment — with several, "which company's key is this?" has no answer, so the write is refused.
+async function writeScope(supabase, orgId) {
+  const sc = await scopeFor(supabase, orgId);
+  if (!sc.org && !sc.inherits) return { error: 'No organisation named for this key' };
+  return sc;
+}
+async function deleteKeys(supabase, keys) {
+  for (const k of keys) { try { await supabase.from('app_settings').delete().eq('key', k); } catch (_) {} }
+}
+
 // Save fields for one integration. Empty string clears (disconnects) that field.
-async function setIntegration(supabase, id, values) {
+async function setIntegration(supabase, id, values, orgId = null) {
   const def = BY_ID.get(id);
   if (!def) return { error: `Unknown integration "${id}"` };
+  const sc = await writeScope(supabase, orgId);
+  if (sc.error) return sc;
   const valid = new Set(def.fields.map((f) => f.key));
   const upserts = []; const deletes = [];
   for (const [k, v] of Object.entries(values || {})) {
     if (!valid.has(k)) continue;
-    if (v === '' || v === null) deletes.push(keyName(id, k));
-    else upserts.push({ key: keyName(id, k), value: String(v), updated_at: new Date() });
+    const key = sc.org ? orgField(id, k, sc.org) : keyName(id, k);
+    if (v === '' || v === null) {
+      deletes.push(key);
+      if (sc.org && sc.inherits) deletes.push(keyName(id, k));   // the founding organisation's "clear" must clear the older key too
+    } else upserts.push({ key, value: String(v), updated_at: new Date() });
   }
   if (upserts.length) { const { error } = await supabase.from('app_settings').upsert(upserts, { onConflict: 'key' }); if (error) return { error: error.message }; }
-  for (const k of deletes) { try { await supabase.from('app_settings').delete().eq('key', k); } catch (_) {} }
+  await deleteKeys(supabase, deletes);
   return { success: true };
 }
 
-async function clearIntegration(supabase, id) {
+async function clearIntegration(supabase, id, orgId = null) {
   const def = BY_ID.get(id);
   if (!def) return { error: `Unknown integration "${id}"` };
-  for (const f of def.fields) { try { await supabase.from('app_settings').delete().eq('key', keyName(id, f.key)); } catch (_) {} }
+  const sc = await writeScope(supabase, orgId);
+  if (sc.error) return sc;
+  const keys = [];
+  for (const f of def.fields) {
+    if (sc.org) keys.push(orgField(id, f.key, sc.org));
+    if (sc.inherits) keys.push(keyName(id, f.key));
+  }
+  await deleteKeys(supabase, keys);
   return { success: true };
 }
 
-async function setActiveVerifier(supabase, id) {
+async function setActive(supabase, baseKey, id, orgId) {
+  const sc = await writeScope(supabase, orgId);
+  if (sc.error) return sc;
+  const key = suffixed(baseKey, sc.org);
+  if (!id) { await deleteKeys(supabase, sc.org && sc.inherits ? [key, baseKey] : [key]); return { success: true }; }
+  const { error } = await supabase.from('app_settings').upsert({ key, value: id, updated_at: new Date() }, { onConflict: 'key' });
+  return error ? { error: error.message } : { success: true };
+}
+async function readActive(supabase, baseKey, orgId) {
+  const sc = await scopeFor(supabase, orgId);
+  if (sc.org) { const own = await readKey(supabase, suffixed(baseKey, sc.org)); if (own) return own; }
+  return sc.inherits ? readKey(supabase, baseKey) : null;
+}
+
+async function setActiveVerifier(supabase, id, orgId = null) {
   const def = id ? BY_ID.get(id) : null;
   if (id && (!def || !def.verifier)) return { error: 'Not an email-verification provider' };
-  if (!id) { try { await supabase.from('app_settings').delete().eq('key', ACTIVE_VERIFIER_KEY); } catch (_) {} return { success: true }; }
-  const { error } = await supabase.from('app_settings').upsert({ key: ACTIVE_VERIFIER_KEY, value: id, updated_at: new Date() }, { onConflict: 'key' });
-  return error ? { error: error.message } : { success: true };
+  return setActive(supabase, ACTIVE_VERIFIER_KEY, id, orgId);
 }
 
 // The AI provider the features should prefer. Only a *choice* is stored here —
 // whether it is usable (key present, server reachable) is decided at call time
 // by services/ai-provider.js, so choosing a provider and then losing its key
 // degrades to the next one rather than turning AI off.
-async function setActiveAi(supabase, id) {
+async function setActiveAi(supabase, id, orgId = null) {
   const def = id ? BY_ID.get(id) : null;
   if (id && (!def || !def.ai)) return { error: 'Not an AI provider' };
-  if (!id) { try { await supabase.from('app_settings').delete().eq('key', ACTIVE_AI_KEY); } catch (_) {} return { success: true }; }
-  const { error } = await supabase.from('app_settings').upsert({ key: ACTIVE_AI_KEY, value: id, updated_at: new Date() }, { onConflict: 'key' });
-  return error ? { error: error.message } : { success: true };
+  return setActive(supabase, ACTIVE_AI_KEY, id, orgId);
 }
 
-async function getActiveAi(supabase) {
-  try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', ACTIVE_AI_KEY).maybeSingle();
-    return data?.value || null;
-  } catch (_) { return null; }
+async function getActiveAi(supabase, orgId = null) {
+  return readActive(supabase, ACTIVE_AI_KEY, orgId);
 }
 
 // The verifier the send-time hook should use: the explicitly-active one if its
 // key is set, else the first configured verifier. Returns { id, key } or null.
-async function getActiveVerifier(supabase) {
-  let activeId = null;
-  try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', ACTIVE_VERIFIER_KEY).maybeSingle();
-    activeId = data?.value || null;
-  } catch (_) {}
+async function getActiveVerifier(supabase, orgId = null) {
+  const activeId = await readActive(supabase, ACTIVE_VERIFIER_KEY, orgId);
   const order = activeId ? [activeId, ...INTEGRATIONS.filter((i) => i.verifier && i.id !== activeId).map((i) => i.id)]
                          : INTEGRATIONS.filter((i) => i.verifier).map((i) => i.id);
   for (const id of order) {
     const def = BY_ID.get(id);
     if (!def || !def.verifier) continue;
-    const key = await getSecret(supabase, id, 'api_key');
+    const key = await getSecret(supabase, id, 'api_key', orgId);
     if (key) return { id, key };
   }
   return null;
 }
 
 // ── a key that belongs to ONE ORGANISATION (D-0099) ──────────────────────────────────────────────────────────
-// Most keys above are one per deployment (R-067 is the job of moving them). A free-job-source key must NOT be: it is bought on the
-// organisation's own plan and its allowance is that organisation's alone, so it lives under "int_<id>_api_key__org_<orgId>" and
+// Since R-067 every key above is per organisation too; this pair is the older, stricter form for a key that must NEVER be inherited
+// (not even by the founding organisation): a free-job-source key is bought on the organisation's own plan and its allowance is that organisation's alone, so it lives under "int_<id>_api_key__org_<orgId>" and
 // is only ever read for the organisation asking. Reads for the browser are masked, like every other secret here.
 const orgKeyName = (id, orgId) => `${PREFIX}${id}_api_key__org_${orgId}`;
 async function getOrgSecret(supabase, id, orgId) {
@@ -265,4 +346,5 @@ module.exports = {
   setActiveVerifier, getActiveVerifier,
   setActiveAi, getActiveAi,
   orgKeyName, getOrgSecret, setOrgSecret, orgMask,
+  noteOrgCreated, scopeFor, _resetForTests,
 };

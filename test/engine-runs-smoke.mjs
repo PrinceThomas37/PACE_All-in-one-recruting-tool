@@ -256,7 +256,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   const app = express();
   app.use(express.json());
-  app.use(makeCronRoutes({ runner: stubRunner, auth, hasRole }));
+  app.use(makeCronRoutes({ runner: stubRunner, auth, hasRole, isOperator: (req) => hasRole(req, 'admin') }));
 
   const server = await new Promise(res => { const s = app.listen(0, () => res(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;

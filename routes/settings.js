@@ -15,6 +15,7 @@ const followupSteps = require('../services/followup-steps');
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole } = ctx;
+  const isOperator = ctx.isOperator || (() => false);   // the two send times in /app-settings are one value for every company (R-049)
   const orgOf = (req) => (ctx.orgIdFor ? ctx.orgIdFor(req) : undefined);   // the caller's organisation (D-0124)
 
 // ── PER-USER PREFERENCES (Session 24, D-0022) ───────────────────────────────
@@ -122,7 +123,7 @@ router.post('/app-settings', auth, async (req, res) => {
     // Admin-only (was admin OR ra_lead) and allow-listed keys only — an
     // ra_lead of one org could otherwise overwrite the whole deployment's AI
     // key or another org's user's signature just by naming its key.
-    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can change the deployment-wide send times.' });
     const { key, value } = req.body;
     if (!key || value === undefined) return res.status(400).json({ error: 'key and value required' });
     if (!APP_SETTINGS_ALLOW.includes(key)) return res.status(400).json({ error: `key must be one of: ${APP_SETTINGS_ALLOW.join(', ')}` });

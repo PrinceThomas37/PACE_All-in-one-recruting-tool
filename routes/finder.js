@@ -289,8 +289,8 @@ module.exports = (ctx) => {
     const now = clock();
     const rows = await db.crossOrg('finder_searches').select('*').is('deleted_at', null).eq('active', true);
     if (rows.error) throw rows.error;
-    const key = await integrations.getSecret(supabase, 'apollo');
     const summary = { searches: 0, cards: 0, errors: 0 };
+    const apolloKeys = {};        // each organisation's OWN Apollo key (R-067) — a search never runs on another company's credits
     const budgets = {}, jsBudgets = {}, jsKeys = {}, defaults = await num('finder_cards_per_day');
     for (const s of (rows.data || [])) {
       try {
@@ -303,8 +303,9 @@ module.exports = (ctx) => {
         if (!(roles.includes('admin') || (acc.enabled && roles.some((r) => ADDERS.includes(r))))) continue;       // switched off since
         await housekeeping(scoped, s.user_id, now);
         budgets[s.org_id] = budgets[s.org_id] || await budgetFor(s.org_id, now);
+        if (!(s.org_id in apolloKeys)) apolloKeys[s.org_id] = await integrations.getSecret(supabase, 'apollo', 'api_key', s.org_id);
         if (s.source && s.source !== 'apollo' && !(s.org_id in jsKeys)) { jsKeys[s.org_id] = await jsKeyOf(s.org_id); jsBudgets[s.org_id] = await jsBudgetFor(s.org_id, now); }
-        const r = await runSearch({ scoped, orgId: s.org_id, userId: s.user_id, search: s, daily: finder.dailyFor(acc, defaults), key, budget: budgets[s.org_id], now, jsKey: jsKeys[s.org_id] || null, jsBudget: jsBudgets[s.org_id] || null });
+        const r = await runSearch({ scoped, orgId: s.org_id, userId: s.user_id, search: s, daily: finder.dailyFor(acc, defaults), key: apolloKeys[s.org_id] || null, budget: budgets[s.org_id], now, jsKey: jsKeys[s.org_id] || null, jsBudget: jsBudgets[s.org_id] || null });
         summary.searches++; summary.cards += r.cards; if (r.error) summary.errors++;
       } catch (e) { summary.errors++; console.error('[LeadFinder] search ' + s.id + ' failed:', e.message); }
     }
@@ -320,7 +321,7 @@ module.exports = (ctx) => {
       const now = clock(), orgId = orgOf(req);
       res.json({
         enabled: true, is_admin: a.is_admin, daily: a.daily,
-        apollo: { connected: await integrations.isConfigured(supabase, 'apollo') },
+        apollo: { connected: await integrations.isConfigured(supabase, 'apollo', orgOf(req)) },
         jobsource: { connected: !!(await jsKeyOf(orgId)), used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests', orgId), per_run: await num('finder_jsearch_requests_per_run', orgId) },
         credits: { used: await readCount(finder.creditKey(orgId, now)), limit: await num('finder_apollo_daily_credits', orgId) },
         reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day', orgOf(req)) },
@@ -338,7 +339,7 @@ module.exports = (ctx) => {
   router.get('/finder/diagnose', auth, async (req, res) => {
     try {
       if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       if (!key) return res.json({ connected: false, checks: [{ id: 'key', ok: false, text: 'Apollo is not connected. Add its key in Admin → Integrations.' }] });
       const now = clock(), budget = await budgetFor(orgOf(req), now), checks = [{ id: 'key', ok: true, text: 'An Apollo key is saved.' }];
       const people = await apollo.checkPeopleSearch({ key });
@@ -503,7 +504,7 @@ module.exports = (ctx) => {
       const now = clock(), prev = lastLookup.get(req.user.id);
       if (prev && now.getTime() - prev < LOOKUP_GAP_MS && !ctx.noRerunGap) return res.json({ suggestions: [], used_credit: false, skipped: true, note: '' });
       lastLookup.set(req.user.id, now.getTime());
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       if (!key) return res.json({ suggestions: [], used_credit: false, note: 'Apollo is not connected, so company names cannot be looked up. An admin adds its key in Admin → Integrations. You can still paste the company\'s website.' });
       const budget = await budgetFor(orgOf(req), now);
       if (budget.left() < 1) return res.json({ suggestions: [], used_credit: false, note: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + '). You can still paste the company\'s website.' });
@@ -529,7 +530,7 @@ module.exports = (ctx) => {
     const list = (data || []).filter((s) => (only ? s.id === only : s.active));
     if (only && !list.length) return res.status(404).json({ error: 'Search not found' });
     if (!list.length) return res.status(400).json({ error: 'You have no saved searches to run. Save one first.' });
-    const key = await integrations.getSecret(supabase, 'apollo');
+    const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
     await housekeeping(scoped, req.user.id, now);
     const budget = await budgetFor(orgId, now);
     const jsKey = list.some((s) => s.source && s.source !== 'apollo') ? await jsKeyOf(orgId) : null, jsBudget = await jsBudgetFor(orgId, now);
@@ -557,7 +558,7 @@ module.exports = (ctx) => {
       const prev = lastFind.get(req.user.id);
       if (prev && now.getTime() - prev < RERUN_GAP_MS && !ctx.noRerunGap) return res.json({ results: [{ search_id: null, name: 'One-off search', cards: 0, note: 'You just searched. Give it a minute.', skipped: true }], new_cards: 0 });
       lastFind.set(req.user.id, now.getTime());
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       await housekeeping(scoped, req.user.id, now);
       const budget = await budgetFor(orgId, now);
       const jsKey = v.value.source !== 'apollo' ? await jsKeyOf(orgId) : null, jsBudget = await jsBudgetFor(orgId, now);
@@ -762,7 +763,7 @@ module.exports = (ctx) => {
       const card = await cardOf(req, req.params.id);
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
       if (Array.isArray(card.postings)) return res.json({ postings: card.postings, signals: finder.postingSignals(card.postings), cached: true });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
       const now = clock(), budget = await budgetFor(orgOf(req), now);
       if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').' });
@@ -784,7 +785,7 @@ module.exports = (ctx) => {
       const card = await cardOf(req, req.params.id);
       // A saved card too: "Email another job / person" looks for more people at the company the lead was made from (owner, 14 Oct).
       if (!card || !['new', 'accepted'].includes(card.status)) return res.status(404).json({ error: 'Card not found' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
       const co = (card.payload && card.payload.company) || {};
       if (!co.domain) return res.status(409).json({ error: 'This company\'s website is not known, so people cannot be looked up for it. Add someone by hand below.' });
@@ -819,7 +820,7 @@ module.exports = (ctx) => {
       const now = clock(), orgId = orgOf(req);
       const mineKey = finder.revealKey(req.user.id, now), used = await readCount(mineKey), limit = await num('finder_reveals_per_day', orgOf(req));
       if (used >= limit) return res.status(429).json({ error: 'You have revealed your ' + limit + ' emails for today. More tomorrow, or ask an admin to raise it.' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
       const budget = await budgetFor(orgId, now);
       if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').' });

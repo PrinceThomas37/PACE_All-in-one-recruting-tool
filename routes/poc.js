@@ -216,7 +216,7 @@ module.exports = (ctx) => {
   }
 
   async function finderState(req) {
-    const apolloOn = await integrations.isConfigured(supabase, 'apollo');
+    const apolloOn = await integrations.isConfigured(supabase, 'apollo', orgIdFor(req));
     return {
       apollo: apolloOn,
       credits: {
@@ -319,7 +319,7 @@ module.exports = (ctx) => {
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can change it.' });
       if (!lead.company_id) return res.status(409).json({ error: 'This lead has no company to size.' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const budget = await creditBudget(req);
       const sz = await lookupSize(req, await leadContext(req, lead), key, budget, true);
@@ -345,7 +345,7 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can look for people on it.' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
       if (!key) return res.status(409).json({ error: notConnected(req) });
       // One slot ("Search contact" on it) or every empty one ("Search contacts").
       const only = req.body && req.body.slot_key ? String(req.body.slot_key) : null;
@@ -550,7 +550,7 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can search for people on it.' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const title = String((req.body && req.body.title) || '').trim().replace(/\s+/g, ' ');
       if (title.length > 100) return res.status(400).json({ error: 'That title is too long — 100 characters at most.' });
@@ -602,7 +602,7 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can uncover people for it.' });
-      const key = await integrations.getSecret(supabase, 'apollo');
+      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const ref = String((req.body && req.body.ref) || '');
       if (!REF_RE.test(ref)) return res.status(400).json({ error: 'Pick somebody from the search first.' });
