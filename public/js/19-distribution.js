@@ -34,6 +34,7 @@ window.openAssignToManager=function(managerId){
     '<div class="mh">'+
       '<div><div class="mt">Assign leads \u2014 '+htmlEsc(m.name)+'</div>'+
         '<div class="fs-12 c-text3" style="margin-top:3px">'+pool.total+' unassigned leads \u00b7 '+capacity+' email capacity today</div>'+
+        (pool.without_people?'<div class="fs-12 c-amber" style="margin-top:6px;line-height:1.5">\u26a0 '+pool.without_people+' of these '+(pool.without_people===1?'has':'have')+' no contact person with an email, so no email can be written \u2014 they will NOT be assigned and stay in the pool. Add the people first.</div>':'')+
       '</div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button>'+
     '</div>'+
@@ -98,6 +99,11 @@ window.setAssignMode=function(mode){
   }
 };
 
+// A share is shown as a whole percent (the split is stored exact — 19 of 43 is 44.1860465116279 — and that is never what a
+// person should read). Something real but under half a percent says "<1" rather than a misleading 0.
+function ratioPct(v){ var n=Number(v); if(!isFinite(n)) return '0'; if(n>0&&n<0.5) return '&lt;1'; return String(Math.round(n)); }
+window.ratioPct=ratioPct;
+
 function showRatioPreview(ratio){
   STATE._assignRatio=ratio;
   var prev=document.getElementById('assign-ratio-preview');
@@ -129,9 +135,9 @@ function showRatioPreview(ratio){
     engineNote+
     '<div class="fs-12 c-text2" style="line-height:1.6;margin-bottom:8px">'+htmlEsc(ratio.summary||'')+'</div>'+
     '<div class="fs-11_5" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Freshness</div>'+Object.keys(bf).map(function(k){return '<div>'+k+': <strong>'+bf[k]+'%</strong></div>';}).join('')+'</div>'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Industry</div>'+Object.keys(bi).filter(function(k){return bi[k]>0;}).map(function(k){return '<div>'+k+': <strong>'+bi[k]+'%</strong></div>';}).join('')+'</div>'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Timezone</div>'+Object.keys(btz).map(function(k){return '<div>'+k+': <strong>'+btz[k]+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Freshness</div>'+Object.keys(bf).map(function(k){return '<div>'+k+': <strong>'+ratioPct(bf[k])+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Industry</div>'+Object.keys(bi).filter(function(k){return bi[k]>0;}).map(function(k){return '<div>'+k+': <strong>'+ratioPct(bi[k])+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Timezone</div>'+Object.keys(btz).map(function(k){return '<div>'+k+': <strong>'+ratioPct(btz[k])+'%</strong></div>';}).join('')+'</div>'+
     '</div>'+
   '</div>';
   if(btn){btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';}
@@ -260,7 +266,7 @@ window.submitAssignToManager=function(){
   if(!ratio||!managerId)return;
   closeModal();
   apiPost('/distribute/execute',{manager_id:managerId,ratio:ratio}).then(function(res){
-    var msg=res.total_assigned+' leads assigned · emails sending automatically';
+    var msg=res.total_assigned+' leads assigned · emails sending automatically'+(res.skipped_no_people?' · '+res.skipped_no_people+' left in the pool (no contact person to write to)':'');
     showToast(msg,'success');
     STATE._assignRatio=null;STATE._assignManagerId=null;
     STATE.sendProgress=null;

@@ -16,13 +16,34 @@ function isExpiredAnswer(status,msg){return status===401&&/^(Invalid token|No to
 // Moves on every deliberate end of a session (sign out, a new sign-in) — see apiFetch.
 var _sessGen=0;
 window.endSessionCalls=function(){_sessGen++;};
-function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token,sentGen=_sessGen;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
+var NOT_JSON_MSG='PACE did not answer properly — the server may be waking up (it sleeps when nobody has used it for a while). Please try again in a few seconds.';
+function apiFetch(method,path,body,retried){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token,sentGen=_sessGen;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
   // AN ANSWER FOR A SESSION THAT WAS ENDED ON PURPOSE IS NEVER DELIVERED. Somebody signed out, or signed in as a different person
   // (`_sessGen` moves on both), while this call was in flight: its .then() would repaint the login screen over what the next
   // person is typing, write the LAST person's data into the new session, and a late 401 would sign the NEW person out. The call
   // simply never answers. A session that merely RAN OUT is not this: every call that failed with it still gets the plain sentence.
   if(sentGen!==_sessGen)return new Promise(function(){});
-  return r.json().then(function(d){if(!r.ok){if(hadSession&&isExpiredAnswer(r.status,d&&d.error)&&window.sessionExpired){window.sessionExpired();var x=new Error(SESSION_EXPIRED_MSG);x.status=401;x.expired=true;x.body=d;throw x;}var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
+  // AN ANSWER THAT IS NOT JSON IS NOT A BROKEN SCREEN (20 Oct, owner: opening a "Needs you today" card showed the browser's own
+  // "Failed to execute 'json' on 'Response': Unexpected end of JSON input"). The free server sleeps when idle; a request that
+  // lands while it wakes, restarts or drops the connection comes back EMPTY (or as a gateway page). A read (GET) is safe to ask
+  // again, so it is asked once more after a short wait; if the answer is still not JSON the person is told, in words, what
+  // happened and what to do — never the parser's sentence.
+  return r.text().then(function(raw){
+    var d,parsed=false;
+    if(raw){try{d=JSON.parse(raw);parsed=true;}catch(_){}}
+    if(!parsed){
+      if(method==='GET'&&!retried){
+        return new Promise(function(res){setTimeout(res,3000);}).then(function(){
+          if(sentGen!==_sessGen)return new Promise(function(){});     // the session ended while we waited: same rule as above
+          return apiFetch(method,path,body,true);
+        });
+      }
+      var u=new Error(NOT_JSON_MSG);u.status=r.status;u.unreachable=true;throw u;
+    }
+    if(!r.ok){if(hadSession&&isExpiredAnswer(r.status,d&&d.error)&&window.sessionExpired){window.sessionExpired();var x=new Error(SESSION_EXPIRED_MSG);x.status=401;x.expired=true;x.body=d;throw x;}var e=new Error((d&&d.error)||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}
+    return d;
+  });
+});}
 function apiGet(p){return apiFetch('GET',p);}
 function apiPost(p,b){return apiFetch('POST',p,b);}
 function apiPut(p,b){return apiFetch('PUT',p,b);}

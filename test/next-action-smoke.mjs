@@ -16,7 +16,11 @@
 
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { buildNextActions, summarize, KIND } = require('../next-action.js');
+const real = require('../next-action.js');
+const { summarize, KIND } = real;
+// This suite is about the OTHER rules (opt-outs, ownership, grouping, ranking), written with replies from the last few days. The "a reply is
+// owed only after N days" rule (R-290) has its own suite (needs-you-rules-smoke), so here it is switched off, explicitly.
+const buildNextActions = (o = {}) => real.buildNextActions(Object.assign({ replyDueAfterDays: 0 }, o));
 
 const results = [];
 const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail });

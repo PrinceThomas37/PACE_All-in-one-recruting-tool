@@ -145,6 +145,7 @@ module.exports = (ctx) => {
       }
 
       await supabase.from('gmail_tokens').delete().eq('user_email_id', userEmailId);
+      provider.forgetToken(userEmailId);       // a reconnect must not keep answering with the old access token
       const { error: insErr } = await supabase.from('gmail_tokens').insert({
         user_email_id: userEmailId, user_id: userId, email_address: emailAddress,
         access_token: tokens.access_token, refresh_token: tokens.refresh_token,
@@ -182,6 +183,7 @@ module.exports = (ctx) => {
       if (!mailbox) return res.status(404).json({ error: 'Not found' });
       if (!hasRole(req, 'admin', 'bd_lead') && mailbox.user_id !== req.user.id) return res.status(403).json({ error: 'You can only disconnect your own mailbox' });
       await supabase.from('gmail_tokens').delete().eq('user_email_id', req.params.userEmailId);
+      provider.forgetToken(req.params.userEmailId);
       await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
       // Move any leads still pointed at this mailbox before it went dead, so
       // they don't silently sit in "pending" forever — see mailbox-reassign.js.

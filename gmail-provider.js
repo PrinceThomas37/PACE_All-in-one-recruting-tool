@@ -79,11 +79,25 @@ function createGmailProvider(ctx) {
   }
 
   // ── Token (with refresh), mirroring getMicrosoftToken ───────────────────────
+  //
+  // A READ OF THE TOKEN ROW COSTS A DATABASE ROUND TRIP, AND EVERY GMAIL CALL USED TO MAKE ONE (20 Oct). The database is in Seoul and the
+  // server in Ohio (~200 ms each way), so a conversation list — one call for the list and one per conversation — paid for 25+ of
+  // them before showing a single row. A still-valid access token is now kept in memory for a few minutes; reconnecting or
+  // disconnecting a mailbox forgets it (forgetToken). It never outlives the token's own expiry margin.
+  const tokenCache = new Map();           // userEmailId -> { token, until }
+  const TOKEN_CACHE_MS = 5 * 60 * 1000;
+  const remember = (userEmailId, token, expiresAt) => {
+    const until = Math.min(new Date(expiresAt).getTime() - 5 * 60 * 1000, Date.now() + TOKEN_CACHE_MS);
+    if (Number.isFinite(until) && until > Date.now()) tokenCache.set(userEmailId, { token, until });
+  };
+  function forgetToken(userEmailId) { tokenCache.delete(userEmailId); }
   async function getToken(userEmailId) {
     requireConfigured();
+    const hit = tokenCache.get(userEmailId);
+    if (hit && hit.until > Date.now()) return hit.token;
     const { data: row, error } = await supabase.from('gmail_tokens').select('*').eq('user_email_id', userEmailId).single();
     if (error || !row) throw new Error('No Gmail token found. Please reconnect this mailbox.');
-    if (new Date(row.expires_at).getTime() - Date.now() > 5 * 60 * 1000) return row.access_token;
+    if (new Date(row.expires_at).getTime() - Date.now() > 5 * 60 * 1000) { remember(userEmailId, row.access_token, row.expires_at); return row.access_token; }
     // Every refresh ATTEMPT is recorded on the token row (R-037), the way the
     // Microsoft path already does, so a dead Google sign-in is a fact the
     // dashboard can state — not an inference from a stale expiry. Recording is
@@ -99,12 +113,14 @@ function createGmailProvider(ctx) {
       }
       throw new Error('Gmail token refresh failed: ' + (refreshed.error_description || refreshed.error));
     }
+    const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
     await supabase.from('gmail_tokens').update({
       access_token: refreshed.access_token,
-      expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+      expires_at: newExpiry,
       updated_at: new Date(),
     }).eq('user_email_id', userEmailId);
     await recordRefreshOutcome(supabase, 'gmail_tokens', userEmailId, true, null);
+    remember(userEmailId, refreshed.access_token, newExpiry);
     return refreshed.access_token;
   }
 
@@ -384,7 +400,7 @@ function createGmailProvider(ctx) {
   }
 
   return {
-    isConfigured, authorizeUrl, exchangeCode, getToken, getProfileEmail,
+    isConfigured, authorizeUrl, exchangeCode, getToken, forgetToken, getProfileEmail,
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
     // In-app mailbox reads (services/mail-provider.js)
