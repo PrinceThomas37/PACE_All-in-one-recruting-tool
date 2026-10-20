@@ -21,6 +21,8 @@
 const { analyzeThread } = require('./conversation-intel');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Below every live item, so a quiet nudge never pushes a real one down.
+const STALE_NUDGE_PRIORITY = 5;
 
 // Kinds, in rough order of how much it costs to ignore one.
 const KIND = {
@@ -68,7 +70,8 @@ function groupNudgesByLead(items) {
       subtitle: `${m.length} people`,
       email: null,                 // there is no single person to write to — the row opens the lead
       job_id: latest.job_id, owner_id: latest.owner_id || null,
-      reason: `You have emailed ${m.length} people here${Number.isFinite(days) ? ` (the latest ${fmtDays(days)} ago)` : ''} and nobody has replied.`,
+      stale: m.every(i => i.stale),
+      reason: `You have emailed ${m.length} people here${Number.isFinite(days) ? ` (the latest ${fmtDays(days)} ago)` : ''} and nobody has replied.${m.every(i => i.stale) ? ' Chase them, or drop the lead.' : ''}`,
       state: latest.state,
       intent: null,
       priority: Math.max.apply(null, m.map(i => i.priority)),
@@ -100,10 +103,14 @@ function groupNudgesByLead(items) {
 // Only NUDGES age out. Someone actually waiting on a reply never does: that is
 // a debt we owe, and it does not expire because we ignored it for a quarter.
 const NUDGE_MAX_AGE_DAYS = 45;
+// A reply is OWED once their email is this old (owner, 20 Oct: "show it if the reply is due after 4 days"). The admin sets the real number
+// (config/settings.js needs_reply_after_days); this is only the fallback for a caller that passes none. 0 = at once.
+const REPLY_DUE_AFTER_DAYS = 4;
 
-function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS } = {}) {
+function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS, replyDueAfterDays = REPLY_DUE_AFTER_DAYS } = {}) {
   const items = [];
   let staleNudges = 0;
+  let replyNotDueYet = 0;
 
   for (const t of threads) {
     const a = analyzeThread(t.messages, { now });
@@ -118,6 +125,8 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     if (a.state === 'opted_out' || a.state === 'closed_lost') continue;
 
     if (a.needs_reply) {
+      // Their email is too fresh to be OVERDUE: not listed yet, but counted, never silently dropped.
+      if (replyDueAfterDays > 0 && Number.isFinite(a.days_since_inbound) && a.days_since_inbound < replyDueAfterDays) { replyNotDueYet++; continue; }
       items.push({
         kind: KIND.REPLY_DUE,
         last_activity_at: lastAt,
@@ -153,19 +162,22 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         && Number.isFinite(a.days_since_outbound)
         && a.days_since_outbound > nudgeMaxAgeDays;
       if (!bdLeadNotEngagedYet && tooOldToNag) staleNudges++;
-      if (!bdLeadNotEngagedYet && !tooOldToNag) {
+      // A silence older than the limit is no longer hidden (owner, 20 Oct): it is shown, lower than everything else, as a decision —
+      // chase them or drop the lead.
+      if (!bdLeadNotEngagedYet) {
         items.push({
           kind: KIND.NUDGE,
+          stale: tooOldToNag,
           last_activity_at: lastAt,
           entity_type: t.entity_type, entity_id: t.entity_id,
           title: t.name || t.email || 'Unknown',
           subtitle: t.company || null,
           email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
           job_id: t.job_id || null, owner_id: t.owner_id || null,
-          reason: a.headline,
+          reason: tooOldToNag ? `You wrote ${fmtDays(a.days_since_outbound)} ago and heard nothing — chase them, or drop the lead.` : a.headline,
           state: a.state,
           intent: a.intent ? a.intent.id : null,
-          priority: a.priority,
+          priority: tooOldToNag ? Math.min(a.priority, STALE_NUDGE_PRIORITY) : a.priority,
           due_at: null,
           overdue_days: a.days_since_outbound,
         });
@@ -277,6 +289,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
   // without saying so is how "needs you today" starts lying.
   shown.overflow = Math.max(0, items.length - shown.length);
   shown.stale_nudges = staleNudges;
+  shown.reply_not_due_yet = replyNotDueYet;
   return shown;
 }
 
@@ -287,4 +300,4 @@ function summarize(items) {
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
 
-module.exports = { buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS };
+module.exports = { buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS, REPLY_DUE_AFTER_DAYS, STALE_NUDGE_PRIORITY };

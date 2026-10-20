@@ -49,6 +49,7 @@ const { decodeEntities } = require('../services/html-entities');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
 const sentSide = require('../services/sent-side');
 const { createMailProvider } = require('../services/mail-provider');
+const settingsConfig = require('../config/settings');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -362,11 +363,17 @@ module.exports = (ctx) => {
       });
 
       const now = Date.now();
+      // The admin's own numbers (D-0123), not ours: when a reply becomes owed, and when a silence becomes a quiet nudge.
+      const org = orgIdFor(req);
+      const replyDueAfterDays = Number(await settingsConfig.getSetting(supabase, 'needs_reply_after_days', org));
+      const nudgeQuietDays = Number(await settingsConfig.getSetting(supabase, 'nudge_quiet_after_days', org));
       const built = buildNextActions({
         threads: ownThreads,
         reminders: reminders || [],
         now,
         limit: Number(req.query.limit) || 50,
+        replyDueAfterDays,
+        nudgeMaxAgeDays: nudgeQuietDays,
       });
 
       // What this user has snoozed. Best-effort: a dismissal store that cannot
@@ -410,8 +417,10 @@ module.exports = (ctx) => {
         // saying how many is the disease, not the cure.
         snoozed: after.snoozed,
         stale_nudges: built.stale_nudges || 0,
+        reply_not_due_yet: built.reply_not_due_yet || 0,
+        reply_due_after_days: replyDueAfterDays,
         overflow: built.overflow || 0,
-        nudge_max_age_days: require('../next-action').NUDGE_MAX_AGE_DAYS,
+        nudge_max_age_days: nudgeQuietDays,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

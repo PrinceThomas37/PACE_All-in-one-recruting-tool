@@ -9,7 +9,9 @@
 //   * a snooze EXPIRES;
 //   * a snooze is VOID as soon as the thread changes, however long it had left.
 import d from '../services/next-action-dismissals.js';
-import { buildNextActions, NUDGE_MAX_AGE_DAYS } from '../next-action.js';
+import { buildNextActions as realBuild, NUDGE_MAX_AGE_DAYS } from '../next-action.js';
+// About snoozing, not about when a reply becomes owed (R-290 — needs-you-rules-smoke): that rule is switched off here, explicitly.
+const buildNextActions = (o = {}) => realBuild(Object.assign({ replyDueAfterDays: 0 }, o));
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -95,8 +97,9 @@ const thread = (daysSilent) => ({
 const fresh = buildNextActions({ threads: [thread(10)], now: NOW });
 const stale = buildNextActions({ threads: [thread(91)], now: NOW });
 ok('a 10-day silence still needs you today', fresh.some(i => i.kind === 'nudge'));
-ok('the 91-day silence is NOT on today\'s list', !stale.some(i => i.kind === 'nudge'));
-ok('but it is counted, so it can be decided once', stale.stale_nudges === 1);
+// 20 Oct (R-290, owner): a silence past the limit is no longer hidden — it is shown, lowest, as "chase or drop".
+ok('the 91-day silence IS on the list now, marked as a quiet nudge', stale.some(i => i.kind === 'nudge' && i.stale === true));
+ok('and it is still counted', stale.stale_nudges === 1);
 ok('the age limit is a real number', NUDGE_MAX_AGE_DAYS > 0 && NUDGE_MAX_AGE_DAYS < 91);
 // Someone waiting on US never ages out — that debt does not expire.
 const owed = {
@@ -110,8 +113,8 @@ const owedItems = buildNextActions({ threads: [owed], now: NOW });
 ok('a reply we owe is never aged out, however old',
   owedItems.some(i => i.kind === 'reply_due'));
 // Turning the gate off must be possible and explicit.
-ok('a 0 age limit disables the gate',
-  buildNextActions({ threads: [thread(91)], now: NOW, nudgeMaxAgeDays: 0 }).some(i => i.kind === 'nudge'));
+ok('a 0 age limit keeps every silence an ordinary chase (not marked quiet)',
+  buildNextActions({ threads: [thread(91)], now: NOW, nudgeMaxAgeDays: 0 }).some(i => i.kind === 'nudge' && !i.stale));
 
 // ── every item carries what a snooze fingerprints against ────────────────
 ok('items carry last_activity_at', fresh.every(i => 'last_activity_at' in i));

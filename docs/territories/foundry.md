@@ -1321,3 +1321,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - Session 51 (20 Oct): NEW test/api-not-json-smoke.mjs (cuts the real apiFetch out of 22-api.js and runs it against a scripted fetch). Run 9/9; with assign-leads, session-expiry and login-repaint suites green. Full Node 22 + 26 runs still owed before a merge.
 
 - Session 51 (20 Oct): NEW test/assign-needs-people-smoke.mjs (12; real pool-stats route over fake-postgrest with a contacts embed; guard verified — 4 checks fail with the rule removed). Full Node 22 and Node 26.12.0 runs of the PR #354 head started after this commit; results to be recorded before any merge.
+
+- Session 51 (20 Oct, R-290): NEW test/needs-you-rules-smoke.mjs (21; guard verified — 3 checks fail with the 4-day rule off). next-action-smoke and next-action-dismiss-smoke now switch the reply rule off explicitly (they test other rules); dismiss-smoke asserts a 91-day silence is now SHOWN as a quiet nudge.

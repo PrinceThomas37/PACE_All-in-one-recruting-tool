@@ -144,7 +144,10 @@
   window.clientDigestMineRows=function(excludeLeadIds){
     var s=STATE.clientDigest, ex=excludeLeadIds||{};
     if(!s||s.enabled===false||s._error) return [];
-    return (s.mine||[]).map(function(it,i){ return { it:it, i:i }; }).filter(function(x){ return !ex[x.it.id]; })
+    // A reply is OWED only once their email is old enough (the admin's number, R-290); a promise that came due is owed at once.
+    var after=Number(STATE.nextActions&&STATE.nextActions.reply_due_after_days)||0;
+    var notYet=function(it){ return after>0&&it.state==='needs_reply'&&!(it.promises_due>0)&&Number(it.days_since_last)<after; };
+    return (s.mine||[]).map(function(it,i){ return { it:it, i:i }; }).filter(function(x){ return !ex[x.it.id]&&!notYet(x.it); })
       .map(function(x){ return { id:x.it.id, html:row(x.it,true,x.i), replies:x.it.state==='needs_reply' }; });
   };
   // The team's conversations, as counts per person — for "Your team today".

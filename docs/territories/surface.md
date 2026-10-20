@@ -1448,3 +1448,5 @@ No screen code changed; the new numbers appear in System Settings automatically 
 - Session 51 (20 Oct): public/js/22-api.js apiFetch reads the body as text — an empty/non-JSON answer to a GET is asked once more after 3 s, then shown as a plain "server may be waking up" sentence (`NOT_JSON_MSG`, error.unreachable); a POST is never repeated. public/js/19-distribution.js: the Assign-leads preview shows shares as whole percents via `ratioPct()` (was raw 44.1860465116279).
 
 - Session 51 (20 Oct): the Assign leads window and page warn when leads in the pool have no contact person with an email (`pool.without_people`, amber line) and the result toast says how many were left in the pool.
+
+- Session 51 (20 Oct, R-290): `61-client-digest.js` `clientDigestMineRows` hides a digest row for a reply that is not yet due (`STATE.nextActions.reply_due_after_days`) unless a promise came due; NOT covered by a UI test (screenshot owed).
