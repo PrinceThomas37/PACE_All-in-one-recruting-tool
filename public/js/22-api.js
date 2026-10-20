@@ -129,9 +129,11 @@ function loadAppData(){
       STATE.appSettings=s||{};
       render();
     }).catch(function(){});
-    // Load current user's own email IDs for compose From selector
-    if(STATE.user){
-      apiGet('/users/'+STATE.user.id+'/emails').then(function(emails){
+    // Load current user's own email IDs for compose From selector — asked ONCE; the outreach-plan block below reuses the same answer
+    // (it used to ask a second time, R-298).
+    var myMailboxes=STATE.user?apiGet('/users/'+STATE.user.id+'/emails'):null;
+    if(myMailboxes){
+      myMailboxes.then(function(emails){
         STATE.userEmailsCache=STATE.userEmailsCache||{};
         STATE.userEmailsCache[STATE.user.id]=emails||[];
         render();
@@ -156,9 +158,7 @@ function loadAppData(){
         if(plan['compose_style_preset'])STATE.outreachStylePreset=plan['compose_style_preset'];
         render();
       }).catch(function(){});
-      apiGet('/users/'+STATE.user.id+'/emails').then(function(emails){
-        STATE.userEmailsCache=STATE.userEmailsCache||{};
-        STATE.userEmailsCache[STATE.user.id]=emails||[];
+      if(myMailboxes) myMailboxes.then(function(emails){
         var primary=(emails||[]).find(function(e){return e.is_primary;})||(emails||[])[0];
         if(primary){
           if(!STATE.sigEmailId)STATE.sigEmailId=primary.id;
@@ -170,14 +170,12 @@ function loadAppData(){
     // Load team assignments for admin/bd_lead
     if(STATE.user&&userHasAnyRole(STATE.user,'admin','bd_lead','ra_lead')){
       apiGet('/team-assignments').then(function(d){STATE.teamAssignments=d||[];render();}).catch(function(){});
-      // Pre-load email IDs for all users
-      apiGet('/users').then(function(users){
-        (users||[]).forEach(function(u){
-          apiGet('/users/'+u.id+'/emails').then(function(emails){
-            STATE.userEmailsCache=STATE.userEmailsCache||{};
-            STATE.userEmailsCache[u.id]=emails||[];
-          }).catch(function(){});
-        });
+      // Pre-load every colleague's email IDs (lead distribution, the users screen) in ONE request. It used to fetch /users again and
+      // then ask /users/:id/emails once per person, all in the same second — ten requests queueing the whole app behind them (R-298).
+      apiGet('/users-emails').then(function(byUser){
+        STATE.userEmailsCache=STATE.userEmailsCache||{};
+        Object.keys(byUser||{}).forEach(function(id){ STATE.userEmailsCache[id]=byUser[id]||[]; });
+        scheduleRender();
       }).catch(function(){});
     }
     STATE.loading=false;render();

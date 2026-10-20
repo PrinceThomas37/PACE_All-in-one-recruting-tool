@@ -2,7 +2,7 @@
 //   1 a client replied positively, still unanswered   2 a candidate replied positively, still unanswered
 //   3 any other client reply owed                     4 any other candidate reply owed
 //   5 an interview or submission needs a step         6 a reminder came due, or a promise date passed
-//   7 a lead went quiet
+//   (a lead that went quiet is no longer a tile at all — D-0169)
 // Before this, urgency alone decided: a reminder 5 days late (95 points) sat above a client's interested reply (80).
 // Also pinned: a POSITIVE reply is owed after 2 days (the admin's number), an ordinary one after 4; the owner's three pipeline
 // steps (interview today/tomorrow on the VIEWER's day · interview passed with no outcome · client silent on a submission);
@@ -40,14 +40,16 @@ const reminders = [{ id: 'rem1', user_id: 'me', return_date: ago(5).slice(0, 10)
 const pipeline = [{ submission_id: 's1', candidate_id: 'c-iv', name: 'Interview today', email: 'iv@x.com', job_title: 'HVAC Tech', company: 'Acme',
   job_order_id: 'jo1', owner_id: 'me', stage: 'Interview Scheduled', interview_at: new Date(NOW + 2 * 3600e3).toISOString() }];
 const items = buildNextActions({ threads, reminders, pipeline, now: NOW });
-// (A positive CANDIDATE reply also carries its existing "Replied — interested: move them forward?" row, group 5 — left out of this order check.)
-const order = items.filter(i => i.kind !== 'stage_suggested').map(i => i.title || i.entity_id);
-ok('the "move them forward?" row of a positive candidate reply sits in group 5', items.some(i => i.kind === 'stage_suggested' && i.tier === TIER.pipeline));
+const order = items.map(i => i.title || i.entity_id);
+// D-0169 (owner, 20 Oct): only what is OWED makes a tile — a lead that simply went quiet after our email is not one, and a positive
+// candidate reply is ONE row (no second "move them forward?" row; the reply row carries the candidate's stage for the stage move).
+ok('a lead that went quiet after OUR email makes no tile', !items.some(i => i.title === 'quiet-lead'), JSON.stringify(order));
+ok('a positive candidate reply is one row, carrying the stage for the move', items.filter(i => i.entity_id === 'cand-hot').length === 1 && items.find(i => i.entity_id === 'cand-hot').stage === 'Screening');
 ok('every item carries its group', items.every(i => Number.isFinite(i.tier)), JSON.stringify(items.map(i => [i.title, i.tier])));
 const pos = (t) => order.indexOf(t);
-ok('1 → 2 → 3 → 4 → 5 → 6 → 7: hot client, hot candidate, client reply, candidate reply, interview, reminder, quiet lead',
+ok('1 → 2 → 3 → 4 → 5 → 6: hot client, hot candidate, client reply, candidate reply, interview, reminder',
   pos('client-hot') === 0 && pos('cand-hot') === 1 && pos('client-plain') === 2 && pos('cand-plain') === 3
-  && pos('Interview today') === 4 && pos('Late reminder') === 5 && pos('quiet-lead') > 5, JSON.stringify(order));
+  && pos('Interview today') === 4 && pos('Late reminder') === 5 && order.length === 6, JSON.stringify(order));
 ok('a reminder 5 days late no longer outranks a client\'s positive reply (it scores more points, and still ranks below)',
   items.find(i => i.title === 'Late reminder').priority > items.find(i => i.title === 'client-hot').priority && pos('Late reminder') > pos('client-hot'));
 ok('a positive reply is marked hot', items.find(i => i.title === 'client-hot').hot === true && items.find(i => i.title === 'client-plain').hot === false);

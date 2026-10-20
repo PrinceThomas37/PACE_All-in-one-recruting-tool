@@ -351,11 +351,10 @@ module.exports = (ctx) => {
       });
 
       const now = Date.now();
-      // The admin's own numbers (D-0123), not ours: when a reply becomes owed, and when a silence becomes a quiet nudge.
+      // The admin's own numbers (D-0123), not ours: when a reply becomes owed (an ordinary one, and a positive one).
       const org = orgIdFor(req);
       const num = async (key) => Number(await settingsConfig.getSetting(supabase, key, org));
       const replyDueAfterDays = await num('needs_reply_after_days');
-      const nudgeQuietDays = await num('nudge_quiet_after_days');
       // R-297: the interview / submission steps, from the caller's OWN submissions, on the caller's own calendar day (?tz=).
       const tz = bdInsights.validZone(req.query.tz);
       const pipeline = (subs || []).filter(s => s.candidate && ownership.isMine({ owner_id: s.recruiter_id }, me)).map(s => ({
@@ -370,7 +369,6 @@ module.exports = (ctx) => {
         now,
         limit: Number(req.query.limit) || 50,
         replyDueAfterDays,
-        nudgeMaxAgeDays: nudgeQuietDays,
         positiveReplyDueAfterDays: await num('needs_reply_positive_after_days'),
         clientSilentAfterDays: await num('pipeline_client_silent_days'),
         interviewOutcomeAfterDays: await num('pipeline_interview_outcome_days'),
@@ -418,11 +416,9 @@ module.exports = (ctx) => {
         // Everything held back, and why. A queue that hides things without
         // saying how many is the disease, not the cure.
         snoozed: after.snoozed,
-        stale_nudges: built.stale_nudges || 0,
         reply_not_due_yet: built.reply_not_due_yet || 0,
         reply_due_after_days: replyDueAfterDays,
         overflow: built.overflow || 0,
-        nudge_max_age_days: nudgeQuietDays,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

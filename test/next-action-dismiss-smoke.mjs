@@ -9,7 +9,7 @@
 //   * a snooze EXPIRES;
 //   * a snooze is VOID as soon as the thread changes, however long it had left.
 import d from '../services/next-action-dismissals.js';
-import { buildNextActions as realBuild, NUDGE_MAX_AGE_DAYS } from '../next-action.js';
+import { buildNextActions as realBuild } from '../next-action.js';
 // About snoozing, not about when a reply becomes owed (R-290 — needs-you-rules-smoke): that rule is switched off here, explicitly.
 const buildNextActions = (o = {}) => realBuild(Object.assign({ replyDueAfterDays: 0 }, o));
 import fs from 'node:fs';
@@ -94,13 +94,8 @@ const thread = (daysSilent) => ({
   company: 'Phoenix Tailings', stage: 'Connected',
   messages: [{ direction: 'outbound', sent_at: new Date(NOW - daysSilent * DAY).toISOString(), body: 'Following up' }],
 });
-const fresh = buildNextActions({ threads: [thread(10)], now: NOW });
-const stale = buildNextActions({ threads: [thread(91)], now: NOW });
-ok('a 10-day silence still needs you today', fresh.some(i => i.kind === 'nudge'));
-// 20 Oct (R-290, owner): a silence past the limit is no longer hidden — it is shown, lowest, as "chase or drop".
-ok('the 91-day silence IS on the list now, marked as a quiet nudge', stale.some(i => i.kind === 'nudge' && i.stale === true));
-ok('and it is still counted', stale.stale_nudges === 1);
-ok('the age limit is a real number', NUDGE_MAX_AGE_DAYS > 0 && NUDGE_MAX_AGE_DAYS < 91);
+// D-0169 (owner, 20 Oct): silence after OUR email is not a tile at all — 10 days or 91. The card holds what is owed.
+ok('a 10-day or 91-day silence after our email makes no tile', buildNextActions({ threads: [thread(10), thread(91)], now: NOW }).length === 0);
 // Someone waiting on US never ages out — that debt does not expire.
 const owed = {
   entity_type: 'contact', entity_id: 'z2', name: 'Frank', stage: 'Connected',
@@ -112,14 +107,11 @@ const owed = {
 const owedItems = buildNextActions({ threads: [owed], now: NOW });
 ok('a reply we owe is never aged out, however old',
   owedItems.some(i => i.kind === 'reply_due'));
-// Turning the gate off must be possible and explicit.
-ok('a 0 age limit keeps every silence an ordinary chase (not marked quiet)',
-  buildNextActions({ threads: [thread(91)], now: NOW, nudgeMaxAgeDays: 0 }).some(i => i.kind === 'nudge' && !i.stale));
 
 // ── every item carries what a snooze fingerprints against ────────────────
-ok('items carry last_activity_at', fresh.every(i => 'last_activity_at' in i));
+ok('items carry last_activity_at', owedItems.every(i => 'last_activity_at' in i));
 ok('and it is the real message time',
-  fresh[0].last_activity_at === new Date(NOW - 10 * DAY).toISOString());
+  owedItems[0].last_activity_at === new Date(NOW - 190 * DAY).toISOString());
 
 // ── the UI must actually offer the exits ─────────────────────────────────
 const NA = fs.readFileSync(path.resolve(new URL('../public/js/44-next-actions.js', import.meta.url).pathname), 'utf8');
@@ -127,7 +119,7 @@ ok('every non-reminder row offers a snooze', /naSnooze\(this,\\?'today\\?'/.test
 ok('a week and a drop are offered too', /naSnooze\(this,\\?'week\\?'/.test(NA) && /naSnooze\(this,\\?'drop\\?'/.test(NA));
 ok('the reminder keeps its real Done', /naDone\(/.test(NA));
 ok('the row carries the item so the snooze can fingerprint it', /data-na-item="/.test(NA));
-ok('the card says what it is hiding', /naHiddenLine/.test(NA) && /gone quiet over/.test(NA));
+ok('the card says what it is hiding (what you hid, what did not fit)', /naHiddenLine/.test(NA) && /hidden by you/.test(NA) && /more'/.test(NA));
 // A failed dismissal must put the row back rather than eat it.
 ok('a failed snooze restores the row', /row\.style\.display='';/.test(NA));
 

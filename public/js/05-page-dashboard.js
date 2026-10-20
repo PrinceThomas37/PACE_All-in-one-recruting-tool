@@ -388,7 +388,8 @@ function todayKey(v){ try{ var d=new Date(v); return d.getFullYear()+'-'+String(
 function todayNeeds(){
   var s=STATE.nextActions||{}, items=(s.items||[]);
   var leadIds={}; items.forEach(function(it){ if(it.job_id) leadIds[it.job_id]=1; if(it.entity_type==='lead') leadIds[it.entity_id]=1; });
-  var conv=(typeof clientDigestMineRows==='function')?clientDigestMineRows(leadIds):[];
+  // Only conversations that are OWED a reply join this list (D-0169): "we replied, waiting on them" is not a tile.
+  var conv=((typeof clientDigestMineRows==='function')?clientDigestMineRows(leadIds):[]).filter(function(c){ return c.replies; });
   var replies=items.filter(function(it){ return it.kind==='reply_due'||it.kind==='commitment_due'; }).length+conv.filter(function(c){ return c.replies; }).length;
   return { items:items, conv:conv, replies:replies, loaded:s&&s.items!==undefined };
 }

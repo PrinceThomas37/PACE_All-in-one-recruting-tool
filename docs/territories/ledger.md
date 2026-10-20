@@ -178,3 +178,5 @@
 - **What a website request stores:** exactly the four fields the privacy page names (name, work email, agency, plan) plus the time. They go in `app_settings` `site_request:<email>`, and in a lead and contact in `WEBSITE_LEADS_ORG_ID`'s org when that is set. The user-agent is deliberately NOT kept.
 - **Privacy page:** it now says the request is saved in PACE rather than "sent to our inbox".
 - **Open:** the privacy page promises 12 months of retention for these requests, and nothing deletes them yet (the old mailto version had the same gap in the inbox). This is a ROADMAP row.
+
+- 2026-10-20 (Session 52, D-0169): `config/settings.js` — `nudge_quiet_after_days` removed (the "No reply yet" tiles it controlled are gone; a setting that does nothing is not kept). An org's stored value for that key is simply no longer read. `needs_reply_after_days` (4), `needs_reply_positive_after_days` (2), `pipeline_client_silent_days` (3), `pipeline_interview_outcome_days` (1) remain.

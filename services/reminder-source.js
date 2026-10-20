@@ -183,4 +183,10 @@ function dueHeadline(rows, today) {
   return `${total} reminder${total === 1 ? '' : 's'} waiting — ${parts.join(', ')}`;
 }
 
-module.exports = { SOURCES, describeReminder, dueState, dueLabel, dueHeadline, daysBetween };
+// Reminders a SEQUENCE created (a call / LinkedIn / task step) — not a person. "Needs you today" leaves these out (owner, 20 Oct, D-0169);
+// they stay on the Reminders page. Every other type is a person's (manual, meeting, back from leave, a manager's prompt, setup, a
+// website request, a stage-move note).
+const SEQUENCE_MADE = new Set(['bd_touch', 'reminder', 'recruiter_task']);
+function isSequenceMade(type) { return SEQUENCE_MADE.has(String(type || '')); }
+
+module.exports = { SOURCES, describeReminder, dueState, dueLabel, dueHeadline, daysBetween, isSequenceMade };
