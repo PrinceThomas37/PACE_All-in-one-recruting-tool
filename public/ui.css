@@ -647,6 +647,30 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   font-size:12px;color:var(--ink3);margin-top:2px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+/* R-271/R-272: a conversation row says how many messages it holds; "You:" marks our own newest reply; in All inboxes the
+   row says which email ID it arrived at. */
+.mb-count{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;color:var(--ink3)}
+.mb-you{color:var(--ink2);font-weight:600}
+.mb-draft-tag{display:inline-block;margin-top:4px;margin-right:6px;font-size:11px;font-weight:600;color:var(--red)}
+.mb-acct{display:inline-block;margin-top:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
+.mb-skipped{padding:8px 14px;font-size:12px;color:var(--ink2);background:var(--amber-l);border-bottom:1px solid var(--line)}
+.mb-view{display:inline-flex;gap:0}
+/* R-273: Schedule send — a panel at the foot of the window; the Scheduled and Draft tabs are two short sections each. */
+.mb-sched{display:flex;flex-direction:column;gap:8px;padding:12px 20px 14px;border-top:1px solid var(--border);background:var(--bg)}
+.mb-sched-quick{display:flex;flex-wrap:wrap;gap:6px}
+.mb-sched-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.mb-sched-row label{display:flex;flex-direction:column;gap:3px}
+.mb-sched-row input{width:auto}
+.mb-sched-btns{display:flex;justify-content:flex-end;gap:8px}
+.mb-sec-h{padding:12px 14px 6px;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--ink2);border-bottom:1px solid var(--line)}
+.mb-sec-foot{padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mb-sched-item{cursor:default}
+.mb-sched-item.is-failed{border-left-color:var(--red)}
+.mb-sched-err{margin-top:4px;font-size:12px;color:var(--red)}
+.mb-sched-acts{display:flex;gap:6px;margin-top:6px}
+.mb-view .seg-btn{border-radius:0}
+.mb-view .seg-btn:first-child{border-radius:var(--r) 0 0 var(--r)}
+.mb-view .seg-btn:last-child{border-radius:0 var(--r) var(--r) 0;margin-left:-1px}
 
 /* The conversation: one card per message, newest work at the bottom. */
 .mb-thread{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 22px}
@@ -668,6 +692,7 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 .mb-to{font-size:12px;color:var(--ink3);margin-top:2px}
 .mb-msg-when{font-size:12px;color:var(--ink3);white-space:nowrap;flex:none}
 .mb-msg-ico{display:flex;gap:1px;flex:none;margin-left:6px}
+.mb-msg-foot{display:flex;gap:8px;flex-wrap:wrap;padding:10px 15px;border-top:1px solid var(--line)}
 .mb-collapsed{
   font-size:13px;color:var(--ink3);margin-top:3px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -1058,7 +1083,17 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .mb-editor ul,.mb-editor ol{margin:4px 0 4px 1.25em;padding:0}
 .mb-editor a{color:var(--accent);text-decoration:underline}
 .mb-editor.is-empty:before{content:attr(data-placeholder);color:var(--text3);pointer-events:none}
-.mb-fmt{margin-bottom:0}
+.mb-fmt{margin-bottom:0;gap:4px}
+/* R-273: the full bar. Buttons stay compact so the whole bar fits one or two lines of the window. */
+.mb-fmt button{padding:4px 8px;min-width:30px;display:inline-flex;align-items:center;justify-content:center}
+.mb-fmt-sel{font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--border2);background:var(--card);color:var(--text);max-width:130px}
+.mb-fmt-col{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:28px;padding:0 6px;border:1px solid var(--border2);background:var(--card);color:var(--text);cursor:pointer}
+.mb-fmt-col input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+.mb-fmt-a{font-weight:700;text-decoration:underline;text-decoration-color:#c00000;text-decoration-thickness:3px}
+.mb-fmt-hl{font-weight:600;background:#fff59d;color:#222;padding:0 2px}
+.mb-fmt-tx{font-weight:600;font-style:italic}
+.mb-editor blockquote{margin:0 0 0 40px;border:none;padding:0}
+.mb-editor img{max-width:100%;height:auto}
 .mb-win-ft{padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .mb-win-btns{display:flex;gap:8px}
 

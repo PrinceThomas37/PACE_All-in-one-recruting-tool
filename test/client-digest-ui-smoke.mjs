@@ -1,5 +1,6 @@
-// D-0040/D-0043 — the client conversations card + the manager's facts-only
-// team roll-up on the dashboard, in a real browser against a stub API.
+// D-0040/D-0043 — your client conversations and the manager's facts-only team roll-up on the dashboard, in a real browser
+// against a stub API. Since the Today redesign (D-0160, R-278) a sales manager's conversations are rows of the ONE "Needs you"
+// list, and the team's are COUNTS in "Your team today" (who needs a nudge) — never rows that open a teammate's emails.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,6 +48,8 @@ async function api(route){
   const u=new URL(route.request().url()), p=decodeURIComponent(u.pathname), m=route.request().method();
   calls.push(m+' '+p);
   if (m==='GET' && p==='/client-intel/digest') return reply(route, mode==='off'?{enabled:false}:DIGEST);
+  if (m==='GET' && p==='/next-actions') return reply(route, { items:[], summary:{}, team:null, snoozed:0, overflow:0 });
+  if (m==='GET' && p==='/insights/bd-team') return reply(route, { people:[{ id:'u-raj', name:'Raj', emails_sent_today:4 }, { id:'u-amy', name:'Amy', emails_sent_today:9 }] });
   return reply(route, m==='GET'?[]:{});
 }
 let browser; const pageErrors=[];
@@ -60,21 +63,26 @@ try{
     await page.goto(BASE+'/',{waitUntil:'domcontentloaded'});
     await waitForLogin(page); await enterApp(page,'bd');
     mode='full';
-    await page.evaluate(()=>{ STATE.clientDigest=undefined; goPage('dashboard'); }); await page.waitForTimeout(700);
-    const card=()=>page.evaluate(()=>{ const el=document.querySelector('#content .cd-card'); return el?el.innerText:null; });
+    // a manager with a team: Raj and Amy report to them
+    await page.evaluate(()=>{ const me=STATE.user.id; STATE.users=(STATE.users||[]).filter(x=>x.id!=='u-raj'&&x.id!=='u-amy').concat([{id:'u-raj',name:'Raj',role:'bd',roles:['bd'],managerId:me},{id:'u-amy',name:'Amy',role:'bd',roles:['bd'],managerId:me}]);
+      STATE.clientDigest=undefined; STATE.nextActions=undefined; STATE.todayNums=null; goPage('dashboard'); });
+    await page.waitForFunction(()=>/Northwind/.test((document.querySelector('[data-today-needs]')||{}).innerText||'') && !!document.querySelector('[data-today-team]'),null,{timeout:8000});
+    const card=()=>page.evaluate(()=>{ const el=document.querySelector('#content [data-today-needs]'); return el&&/Northwind|Acme/.test(el.innerText)?el.innerText:null; });
     let t=await card();
-    step(width+'px: your conversations, with state and next step', t && /Your client conversations/.test(t) && /Northwind/.test(t) && /Reply to their last email/.test(t), (t||'').slice(0,80));
+    step(width+'px: your conversations are in "Needs you", with state and next step', t && /Northwind/.test(t) && /Reply to their last email/.test(t), (t||'').slice(0,80));
     step(width+'px: your saved summary line shows on your own row', /asked for two profiles/.test(t));
-    step(width+'px: the team section says whose and how many, facts only', /Your team.s conversations/.test(t) && /Raj/.test(t) && /1 waiting on Raj/.test(t) && /facts only/.test(t));
-    const over=await page.evaluate(()=>{ const c=document.querySelector('#content .cd-card'); return c ? c.getBoundingClientRect().right > document.documentElement.clientWidth + 1 : true; });
-    step(width+'px: the card fits the screen', !over);
-    if(SHOTS) { const el=await page.$('#content .cd-card'); if(el) await el.screenshot({ path:path.join(SHOTS,'42-client-digest-'+width+'.png') }); }
+    const team=await page.evaluate(()=>document.querySelector('[data-today-team]').innerText);
+    step(width+'px: the team\'s conversations are a COUNT per person, facts only (Raj: 1 reply waiting) — never their rows', /Raj/.test(team) && /1 reply waiting on them/.test(team) && !/Miller HVAC/.test(await page.evaluate(()=>document.getElementById('content').innerText)), team.slice(0,200));
+    step(width+'px: only people who need a nudge are listed (Amy has nothing waiting and has sent today)', !/Amy/.test(team));
+    const over=await page.evaluate(()=>['[data-today-needs]','[data-today-team]'].some(sel=>{ const c=document.querySelector('#content '+sel); return !c || c.getBoundingClientRect().right > document.documentElement.clientWidth + 1; }));
+    step(width+'px: it fits the screen', !over);
+    if(SHOTS) { const el=await page.$('#content [data-today-needs]'); if(el) await el.screenshot({ path:path.join(SHOTS,'42-client-digest-'+width+'.png') }); }
     if (width===1440) {
       await page.evaluate(()=>clientDigestOpen('Project Manager · Northwind Builders')); await page.waitForTimeout(500);
       const st=await page.evaluate(()=>({ page:STATE.page, q:STATE.jobsFilter&&STATE.jobsFilter.search }));
       step('clicking a row opens Leads searched to that company', st.page==='leads' && st.q==='Northwind Builders', JSON.stringify(st));
       mode='off'; await page.evaluate(()=>{ STATE.clientDigest=undefined; goPage('dashboard'); }); await page.waitForTimeout(600);
-      step('switched off → nothing drawn', (await card())===null);
+      step('switched off → no conversation rows', (await card())===null);
     }
     await ctx.close();
   }

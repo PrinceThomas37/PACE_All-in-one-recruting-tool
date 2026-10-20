@@ -368,57 +368,8 @@ function naOlderLine(n){
   '</div>';
 }
 
-function renderNextActionsCard(){
-  var s=STATE.nextActions;
-  // Per-user queue: never fetched while previewing someone else's dashboard
-  // ("view as"), so it can never resolve on its own here (C-0009). A loading
-  // state with nothing that can end it is the same defect C-0008 fixed for
-  // the briefing card — say plainly this queue is not shown, not "working
-  // out…" forever.
-  var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
-  if(isViewingOther&&s===undefined){
-    return '<div class="card cp mb4 c-text3 fs-13">'+
-      'This is a personal to-do queue — not shown while previewing someone else\'s dashboard.</div>';
-  }
-  if(s===undefined||s===null){
-    return '<div class="card cp mb4 c-text3 fs-13">Working out what needs you…</div>';
-  }
-  if(s._error){
-    // Honest, not silent — same rule as the briefing card (C-0009): a failed
-    // fetch must say so on screen, never vanish and leave a blank space.
-    return '<div class="briefing-card is-error mb4"><div class="briefing-ic">⚠️</div>'+
-      '<div class="briefing-body">'+
-        '<div class="briefing-text">Could not load what needs you today.</div>'+
-        '<div class="briefing-sub"><a href="#" onclick="refreshNextActions();return false;">try again</a></div>'+
-      '</div></div>';
-  }
-  var split=naSplitToday(s.items||[]);
-  var olderCount=split.older.length;
-  var items=STATE.naShowOlder?(s.items||[]):split.today;
-  if(!items.length){
-    // An EMPTY list still draws the two lines beneath it (C-0031, R-071).
-    // /next-actions is now each person's OWN work — admin included — and what
-    // sits beneath them arrives only as the `team` count behind "Review". This
-    // branch used to return before either line, so an admin who owns nothing on
-    // the list (the owner) saw "Nothing waiting on you." with no count and no
-    // way into the review: the BD Lead's open reminders vanished from their
-    // Dashboard. The same hole hid a manager's team count whenever their own
-    // list happened to be empty.
-    return '<div class="card mb4" style="padding:0;overflow:hidden">'+
-      '<div class="cp" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-        '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-        '<div class="fs-13_5" style="font-weight:600">'+(olderCount?'Nothing new for today.':'Nothing waiting on you.')+'</div>'+
-        '<div class="fs-12 c-text3">'+(olderCount?'Nothing arrived or came due today.':'No unanswered replies or due reminders.')+'</div>'+
-      '</div>'+
-      naOlderLine(olderCount)+
-      naTeamLine(s)+
-      naHiddenLine(s)+
-    '</div>';
-  }
-
-  var NA_TOP=3;   // the top three by priority, then "See all" (D-0066)
-  var show=STATE.naExpanded?items:items.slice(0,NA_TOP);
-  var rows=show.map(function(it){
+// One row of the to-do list — drawn the same wherever the list appears (Today's "Needs you", R-278).
+window.naRowHtml=function(it){
     var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
     // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
     // Only reminders used to have a Done button, so reply_due, commitment_due,
@@ -470,7 +421,59 @@ function renderNextActionsCard(){
       '<div class="na-acts">'+acts+'</div>'+
       '<div class="c-text3 fs-18">›</div>'+
     '</div>';
-  }).join('');
+};
+
+function renderNextActionsCard(){
+  var s=STATE.nextActions;
+  // Per-user queue: never fetched while previewing someone else's dashboard
+  // ("view as"), so it can never resolve on its own here (C-0009). A loading
+  // state with nothing that can end it is the same defect C-0008 fixed for
+  // the briefing card — say plainly this queue is not shown, not "working
+  // out…" forever.
+  var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
+  if(isViewingOther&&s===undefined){
+    return '<div class="card cp mb4 c-text3 fs-13">'+
+      'This is a personal to-do queue — not shown while previewing someone else\'s dashboard.</div>';
+  }
+  if(s===undefined||s===null){
+    return '<div class="card cp mb4 c-text3 fs-13">Working out what needs you…</div>';
+  }
+  if(s._error){
+    // Honest, not silent — same rule as the briefing card (C-0009): a failed
+    // fetch must say so on screen, never vanish and leave a blank space.
+    return '<div class="briefing-card is-error mb4"><div class="briefing-ic">⚠️</div>'+
+      '<div class="briefing-body">'+
+        '<div class="briefing-text">Could not load what needs you today.</div>'+
+        '<div class="briefing-sub"><a href="#" onclick="refreshNextActions();return false;">try again</a></div>'+
+      '</div></div>';
+  }
+  var split=naSplitToday(s.items||[]);
+  var olderCount=split.older.length;
+  var items=STATE.naShowOlder?(s.items||[]):split.today;
+  if(!items.length){
+    // An EMPTY list still draws the two lines beneath it (C-0031, R-071).
+    // /next-actions is now each person's OWN work — admin included — and what
+    // sits beneath them arrives only as the `team` count behind "Review". This
+    // branch used to return before either line, so an admin who owns nothing on
+    // the list (the owner) saw "Nothing waiting on you." with no count and no
+    // way into the review: the BD Lead's open reminders vanished from their
+    // Dashboard. The same hole hid a manager's team count whenever their own
+    // list happened to be empty.
+    return '<div class="card mb4" style="padding:0;overflow:hidden">'+
+      '<div class="cp" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
+        '<div class="fs-13_5" style="font-weight:600">'+(olderCount?'Nothing new for today.':'Nothing waiting on you.')+'</div>'+
+        '<div class="fs-12 c-text3">'+(olderCount?'Nothing arrived or came due today.':'No unanswered replies or due reminders.')+'</div>'+
+      '</div>'+
+      naOlderLine(olderCount)+
+      naTeamLine(s)+
+      naHiddenLine(s)+
+    '</div>';
+  }
+
+  var NA_TOP=3;   // the top three by priority, then "See all" (D-0066)
+  var show=STATE.naExpanded?items:items.slice(0,NA_TOP);
+  var rows=show.map(naRowHtml).join('');
 
   var bk={};
   items.forEach(function(i){bk[i.kind]=(bk[i.kind]||0)+1;});

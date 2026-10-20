@@ -1313,3 +1313,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - R-268 (Session 50): new `test/next-actions-answered-smoke.mjs` — first REAL drive of GET /next-actions (ownership-smoke only greps it). `trace-smoke` fixture fixed to the server's outbound shape (`person:null`, `to`) — the old fixture hid the bug. Lesson again: a fixture must be the route's real projection.
 - R-274: `test/mail-attachments-smoke.mjs` drives the real Gmail/Outlook adapters with fake providers (iPhone-shaped payload).
 - Batch 2 (Session 50): new `test/owner-19oct-screens-smoke.mjs` (Chromium, 18; SHOTS=dir). Updated `finder-routes-smoke` (people start explicitly OFF; default-ON step), `lead-finder-smoke` (R-276/R-283 rules), `finder-page-smoke` (dot-matrix, width < 120px). A generic API stub must answer GETs with `[]` — `{}` crashed `STATE.bd.jobOrders.find`.
+- Batch 3 (Session 50): `test/sequence-v2-smoke.mjs` (real fill/sender/check + the real candidate writer on a realistic job), `test/sequence-builder-v2-ui-smoke.mjs` (Chromium, SHOTS=dir).
+- Session 50: `test/outreach-insights-smoke.mjs` (15).

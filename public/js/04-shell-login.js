@@ -636,6 +636,8 @@ window.loadThemePreference=function(){
   apiGet('/me/preferences').then(function(p){
     // The same per-person row carries the Leads page size (R-280).
     if(p&&[10,20,50].indexOf(Number(p.leads_per_page))>=0){ STATE.leadsPageSize=Number(p.leads_per_page); if(STATE.page==='leads'&&typeof render==='function')render(); }
+    // …and how the inbox lists mail: conversations (the default) or single emails (R-271).
+    if(p&&(p.mail_view==='threads'||p.mail_view==='messages')&&STATE.mailView!==p.mail_view){ STATE.mailView=p.mail_view; if(STATE.page==='mailbox'&&typeof window.mbViewChanged==='function') window.mbViewChanged(); }
     if(!p||!p.theme)return;
     if(p.theme==='system'){ if(!isAutoTheme())applyAutoTheme(); return; }
     if(p.theme==='light'||p.theme==='dark'){

@@ -156,7 +156,7 @@ module.exports = (ctx) => {
   const seqKeys = (uid) => {
     const k = [`u_${uid}_fu_count`, aiFirst.personKey(uid), aiTeach.key(uid)];
     SLOTS.forEach((sl) => { k.push(`u_${uid}_tmpl_${sl}_subject`, `u_${uid}_tmpl_${sl}_body`); });
-    followupSteps.STEPS.forEach((t) => k.push(`u_${uid}_${t}_day`));
+    followupSteps.STEPS.forEach((t) => k.push(`u_${uid}_${t}_day`, `u_${uid}_${t}_thread`));
     return k.concat(versions.neededKeys([uid]));
   };
   async function followupMax(req) {
@@ -178,6 +178,9 @@ module.exports = (ctx) => {
         first: { subject: own('o1', 'subject'), body: own('o1', 'body'), versions: versions.extraVersions(m, uid, 'o1').map((v) => ({ subject: v.subject, body: v.body })) },
         followups: followupSteps.STEPS.slice(0, count).map((t, i) => ({
           day: followupSteps.dayFor(m, uid, i + 1), subject: own(t, 'subject'), body: own(t, 'body'),
+          // In the first email's thread (the default) or a new email with its own subject — the choice the old "My wording"
+          // tab offered, kept in the builder (R-286). Saved through POST /outreach-plan (fuN_thread), as before.
+          thread: String(m[`u_${uid}_${t}_thread`] || '') === 'new' ? 'new' : 'same',
           versions: versions.extraVersions(m, uid, t).map((v) => ({ subject: v.subject, body: v.body })),
         })),
         followup_max: max,
@@ -337,7 +340,8 @@ module.exports = (ctx) => {
     try {
       if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
       const b = req.body || {};
-      const mode = b.mode === 'variant' ? 'variant' : 'draft';
+      // 'rewrite' = "Rewrite with AI" on an email already written (the old My wording tab's button, kept in the builder — R-286).
+      const mode = b.mode === 'variant' || b.mode === 'rewrite' ? b.mode : 'draft';
       const result = await sequenceDraft.draft({
         prompt: String(b.prompt || '').trim().slice(0, 600),
         purpose: sequenceDraft.purposeOf(b.purpose), mode,

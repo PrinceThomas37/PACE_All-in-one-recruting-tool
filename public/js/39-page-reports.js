@@ -64,7 +64,8 @@
   window.goPage = function(p){
     // R-006: Reports now live ON the Dashboard. An old link to the standalone
     // page lands there instead — one place to read them, not two.
-    if (p === 'reports'){ STATE.modal=null; if(window.dashScrollToReports){ dashScrollToReports(); return; } STATE.page='reports'; render(); loadReport(); return; }
+    // A manager's Today has no report (D-0160): dashScrollToReports says so and the Reports page opens here instead.
+    if (p === 'reports'){ STATE.modal=null; if(window.dashScrollToReports&&dashScrollToReports()!==false) return; STATE.page='reports'; render(); loadReport(); return; }
     return _prevGoPage.apply(this, arguments);
   };
   function paint(){ if(STATE.page!=='reports') return; paintPageContent(); }

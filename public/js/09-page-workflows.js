@@ -70,7 +70,38 @@ function wfDefaultConfig(channel){
 }
 function wfDefaultStep(et){ return (et==='submission'||et==='candidate')?{name:'Email the candidate',channel:'candidate_email',delay_days:0,config:{subject:'',body:''}}:{name:'Initial outreach email',channel:'email',delay_days:0,config:{template_key:'initial',thread:false}}; }
 function wfBlankStep(){ var et=(STATE.wfBuilder&&STATE.wfBuilder.entity_type)||'contact'; var ch=wfChannelsForEntity(et)[0]||'email'; return {name:'',channel:ch,delay_days:2,config:wfDefaultConfig(ch)}; }
+// A sequence the new builder wrote: every step carries config.builder 'v2' (services/sequence-v2.js isV2 — same rule).
+function wfIsV2(d){ var st=(d&&d.steps)||[]; return st.length>0&&st.every(function(x){ return x&&x.config&&x.config.builder==='v2'; }); }
+// EVERY NEW SEQUENCE IS MADE IN THE NEW BUILDER (owner, 19 Oct, D-0158: "that new sequence builder should be the default one for
+// everyone when they click sequence or add sequence or +sequence or any new sequence decisions"). This function is the one door:
+// "+ New sequence", "Start sequence → build a new one" for ticked leads or candidates, and Edit. Only a sequence made in the old
+// window opens the old window — it may hold steps (a call task, a stage move) the new builder does not draw, and it keeps running.
 window.wfOpenBuilder=function(id,entityType,enrollAfter){
+  var back=(STATE.page&&STATE.page!=='seqsetup')?STATE.page:'email';
+  if(id){
+    var d0=(STATE.wf&&STATE.wf.defs||[]).find(function(x){return x.id===id;}); if(!d0)return;
+    if(wfIsV2(d0)){ closeModal(); return openSequenceBuilder({ id:id, entity_type:d0.entity_type||'contact', back:back }); }
+    return wfOpenLegacyBuilder(id);
+  }
+  if(!entityType){ return wfAskWho(enrollAfter); }
+  closeModal();
+  openSequenceBuilder({ entity_type:entityType, enrollAfter:enrollAfter||null, back:back });
+};
+// "+ New sequence" with no list behind it: leads or candidates? A person who works only one of them is not asked.
+function wfAskWho(enrollAfter){
+  var u=STATE.user, sales=userHasAnyRole(u,'admin','bd','bd_lead','ra_lead'), rec=userHasAnyRole(u,'admin','recruiter','bd','bd_lead');
+  if(sales&&!userHasAnyRole(u,'recruiter','admin','bd_lead')) return wfOpenBuilder(null,'contact',enrollAfter);
+  if(rec&&!sales) return wfOpenBuilder(null,'submission',enrollAfter);
+  STATE.modal='<div class="modal modal-w480" data-wf-who><div class="mh"><div class="mt">New sequence</div></div>'+
+    '<div class="mb_"><p class="fs-13 c-text3 mb3">Who is it for?</p>'+
+      '<div class="wf-who-row">'+
+        '<button class="btn btn-primary" onclick="wfOpenBuilder(null,\'contact\')">Leads</button>'+
+        '<button class="btn btn-outline" onclick="wfOpenBuilder(null,\'submission\')">Candidates on a job</button>'+
+      '</div></div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div></div>';
+  render();
+}
+window.wfOpenLegacyBuilder=function(id,entityType,enrollAfter){
   var b;
   if(id){ var d=(STATE.wf&&STATE.wf.defs||[]).find(function(x){return x.id===id;}); if(!d)return;
     b={id:d.id,name:d.name,description:d.description||'',domain:d.domain||'sales',entity_type:d.entity_type||'contact',steps:(d.steps||[]).map(function(s){return {name:s.name,channel:s.channel,delay_days:s.delay_days,config:Object.assign({},s.config||{})};})};
@@ -409,7 +440,8 @@ window.wfEditMyWording=function(i){
   var k=(s.config&&s.config.template_key)||'initial';
   STATE.activeTmpl=({initial:'outreach',o1:'outreach',fu1:'fu1',fu2:'fu2'})[k]||'outreach';
   STATE.wfBuilder=null; closeModal();
-  STATE.seqView='wording'; STATE.emailTab='sequence'; goPage('email');
+  // The person's own wording is edited in the sequence builder now (D-0161); the old Email → My wording tab is gone.
+  openSequenceSetup();
 };
 window.wfCopyTemplate=function(i){
   var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
@@ -550,7 +582,8 @@ function refreshWfBuilder(){
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button>'+
       (lockedN>0
-        ?'<button class="btn btn-outline" disabled title="Not while people are mid-sequence">Save</button><button class="btn btn-primary wf-save-new" onclick="wfSaveAsNew()">Save as a new sequence</button>'
+        // A new sequence is made in the new builder only (D-0158) — not as a copy saved from this old window.
+        ?'<button class="btn btn-outline" disabled title="Not while people are mid-sequence">Save</button><button class="btn btn-primary wf-save-new" onclick="STATE.wfBuilder=null;wfOpenBuilder(null,\''+(b.entity_type||'contact')+'\')">Make a new sequence instead</button>'
         :'<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>')+
     '</div>'+
   '</div>';
@@ -603,27 +636,34 @@ function renderSequenceBody(){
   if(!wf)return '<div class="c-text3" style="padding:14px">Loading sequence…</div>';
   var tick=STATE.wfTickLog;
   var tickHtml=tick?(tick==='running'?'<span class="fs-12 c-text3">Running…</span>':'<span class="fs-12 c-text2">Last run: checked '+(tick.checked||0)+' · done '+(tick.done||0)+' · deferred '+(tick.deferred||0)+' · completed '+(tick.completed||0)+' · exited '+(tick.exited||0)+(tick.off?' · <b class="c-red">engine off — migration 007 not applied</b>':'')+'</span>'):'';
+  // THE LIST (owner, 19 Oct, R-269: "when sequence is opened it does not show what we designed … that should be the default").
+  // Your outreach (the one from setup) first, then every named sequence. A new one is always made in the new builder.
+  var outreachCard=userHasAnyRole(u,'admin','bd','bd_lead')
+    ?'<div class="card wf-seq" data-wf-outreach><div class="wf-seq-top"><div><div class="wf-seq-name">Your outreach</div>'+
+        '<div class="fs-12 c-text3">Goes to every lead you are given, by itself. Written in My Setup.</div></div>'+
+        '<div class="wf-seq-acts"><button class="btn btn-sm btn-outline" onclick="openSequenceSetup()">Edit</button></div></div></div>'
+    :'';
   var defCards=(wf.defs||[]).map(function(d){
     var st=(wf.stats.by_workflow||{})[d.id]||{};
-    var stats='<span class="fs-11_5 c-text3">'+(st.active||0)+' active · '+(st.completed||0)+' completed · '+(st.exited||0)+' exited</span>';
-    var btns=(canDesign||(canDesignOwn&&d.created_by===u.id))?('<button onclick="wfOpenBuilder(\''+d.id+'\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--accent);padding:4px 10px;border-radius:6px;cursor:pointer">Edit</button>'+
-      (d.status==='draft'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:0;background:var(--green);color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer">Activate</button>':'')+
-      (d.status==='active'?'<button onclick="wfSetStatus(\''+d.id+'\',\'archived\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer">Archive</button>':'')+
-      (d.status==='archived'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--green);padding:4px 10px;border-radius:6px;cursor:pointer">Reactivate</button>':'')):'';
+    var mine=canDesign||(canDesignOwn&&d.created_by===u.id), v2=wfIsV2(d);
+    var who=(d.entity_type==='submission'||d.entity_type==='candidate')?'Candidates':'Leads';
+    var steps=(d.steps||[]).length, fu=Math.max(0,steps-1);
+    var acts=mine?('<button class="btn btn-sm btn-outline" onclick="wfOpenBuilder(\''+d.id+'\')">Edit</button>'+
+      (d.status==='draft'?'<button class="btn btn-sm btn-primary" onclick="wfSetStatus(\''+d.id+'\',\'active\')">Turn on</button>':'')+
+      (d.status==='active'?'<button class="btn btn-sm btn-outline" onclick="wfSetStatus(\''+d.id+'\',\'archived\')">Turn off</button>':'')+
+      (d.status==='archived'?'<button class="btn btn-sm btn-outline" onclick="wfSetStatus(\''+d.id+'\',\'active\')">Turn on</button>':'')):'';
     var isPrim=(STATE.wfPrimary||{})[d.entity_type||'contact']===d.id;
     var primSw=(d.status==='active')
       ?'<label class="wf-prim" title="'+(isPrim?'Your Primary — Start sequence has it ready':'Make this the one Start sequence has ready')+'"><span class="wf-prim-l">Primary</span>'+
         '<button type="button" class="wf-prim-sw'+(isPrim?' on':'')+'" role="switch" aria-checked="'+(isPrim?'true':'false')+'" data-wf="'+d.id+'" data-kind="'+htmlEsc(d.entity_type||'contact')+'" onclick="wfPrimaryToggle(\''+d.id+'\','+(isPrim?'false':'true')+',event)"><i></i></button></label>'
       :'';
-    return '<div data-wfcard="'+d.id+'" style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-        '<div style="display:flex;align-items:center;gap:8px"><span class="fs-14" style="font-weight:700">'+htmlEsc(d.name)+'</span>'+(isPrim?'<span class="wf-prim-badge">Primary</span>':'')+'<span class="fs-10 c-text2" style="padding:2px 7px;border-radius:6px;background:var(--bg3);font-weight:600">'+htmlEsc(d.domain||'sales')+'</span>'+wfStatusBadge(d.status)+'</div>'+
-        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+primSw+stats+btns+'</div>'+
-      '</div>'+
-      (d.description?'<div class="fs-12 c-text3" style="margin-top:5px">'+htmlEsc(d.description)+'</div>':'')+
-      '<div class="fs-12_5" style="margin-top:8px">'+wfChain(d.steps)+'</div>'+
-    '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">'+(canDesignOwn?'You have not made a sequence yet. Yours start blank — create your first with + New sequence, and decide the steps, wording and timing yourself.':('No sequences yet'+(canDesign?' — create one with + New sequence.':'.')))+'</div>';
+    var state=d.status==='active'?'On':d.status==='draft'?'Not on yet':'Off';
+    return '<div class="card wf-seq" data-wfcard="'+d.id+'"><div class="wf-seq-top"><div>'+
+        '<div class="wf-seq-name">'+htmlEsc(d.name)+(isPrim?' <span class="wf-prim-badge">Primary</span>':'')+'</div>'+
+        '<div class="fs-12 c-text3">'+who+' · first email'+(fu?' + '+fu+' follow-up'+(fu===1?'':'s'):'')+' · '+state+
+          ' · '+(st.active||0)+' in it now, '+(st.completed||0)+' finished'+(v2?'':' · made in the old window — it keeps running as it is')+'</div></div>'+
+        '<div class="wf-seq-acts">'+primSw+acts+'</div></div></div>';
+  }).join('')||'<div class="fs-13 c-text3 wf-seq-empty">No named sequences yet. "+ New sequence" makes one — for leads or for candidates on a job.</div>';
 
   var f=STATE.wfFilter||{};
   var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });
@@ -660,15 +700,12 @@ function renderSequenceBody(){
   }).join('')||'<div class="c-text3 fs-13" style="padding:14px">No enrollments'+((f.status||f.workflow)?' match the filter.':' yet — open a lead and enroll a contact.')+'</div>';
 
   return '<div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
-      '<div class="fs-12_5 c-text3" style="max-width:600px;line-height:1.5">This is your outreach sequence — the steps every enrolled lead moves through (initial email → follow-ups → LinkedIn touch). Edit the steps, timing and templates here; no code changes. Enroll a contact from a lead\'s detail view.</div>'+
-      '<div style="display:flex;gap:8px;align-items:center">'+tickHtml+
-        (canTick?'<button onclick="wfRunTick()" class="c-text2 fs-12" style="background:transparent;border:1px solid var(--border2);padding:7px 14px;border-radius:8px;cursor:pointer">▶ Run sequence now</button>':'')+
-        ((canDesign||canDesignOwn)?'<button onclick="wfOpenBuilder()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;cursor:pointer">+ New sequence</button>':'')+
-      '</div>'+
-    '</div>'+
-    '<div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sequences</div>'+
-    defCards+
+    '<div class="wf-seq-head"><div class="fs-13 c-text3">A sequence is a first email and follow-ups, sent by themselves; follow-ups stop when someone replies.</div>'+
+      '<div class="wf-seq-acts">'+tickHtml+
+        (canTick?'<button onclick="wfRunTick()" class="btn btn-sm btn-outline">▶ Run sequences now</button>':'')+
+        ((canDesign||canDesignOwn)?'<button onclick="wfOpenBuilder()" class="btn btn-primary" data-wf-new>+ New sequence</button>':'')+
+      '</div></div>'+
+    outreachCard+defCards+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 8px"><div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em">Enrolled leads ('+enr.length+')</div>'+
       '<div style="display:flex;gap:6px"><select onchange="wfSetFilter(\'status\',this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text)">'+stOpts+'</select>'+
       '<select onchange="wfSetFilter(\'workflow\',this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text)">'+wfOpts+'</select></div>'+

@@ -904,17 +904,10 @@ function renderEmail(){
   // ── SEQUENCE TAB (Sequences · My wording · AI style) ──
   var seqShell='';
   if(STATE.emailTab==='sequence'){
+    // One screen (owner, 19 Oct, D-0161): the "My wording" and "AI style" sub-tabs moved INTO the new builder (Your outreach →
+    // "A different one for each" email ID, and "How the AI writes for you"). What is left here is the list of sequences.
     var canSeeSeqs=userHasAnyRole(u,'admin','bd_lead','ra_lead','bd');
-    var seqPills=[];
-    if(canSeeSeqs) seqPills.push(['sequences','Sequences']);
-    seqPills.push(['wording','My wording']);
-    seqPills.push(['style','AI style']);
-    var seqView=STATE.seqView||(canSeeSeqs?'sequences':'wording');
-    if(!seqPills.some(function(p){return p[0]===seqView;})) seqView=seqPills[0][0];
-    seqShell='<div class="rep-fgroup" style="margin-bottom:14px">'+seqPills.map(function(p){
-      return '<button class="rep-pill'+(seqView===p[0]?' on':'')+'" onclick="seqView(\''+p[0]+'\')">'+p[1]+'</button>';
-    }).join('')+'</div>'+
-      (seqView==='wording'?tmplHtml:seqView==='style'?renderAiStyleCard():renderSequenceBody());
+    seqShell=canSeeSeqs?renderSequenceBody():'<div class="card cp fs-13 c-text3">Sequences are made by managers and BD. Your wording is in My Setup.</div>';
   }
 
   // ── COMPOSE TAB ──

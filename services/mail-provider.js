@@ -415,6 +415,60 @@ function approxBytes(b64) {
   return Math.floor(n * 3 / 4);
 }
 
+// ── A CONVERSATION AS ONE ROW (R-271, owner 19 Oct) ─────────────────────────
+// "Even if we reply back, that doesn't end up in the email thread … it gets shown in the sent. In Gmail or Outlook, with show
+// as thread, that email has all the thread, in and out, and gets updated." So a row is a CONVERSATION: its newest message
+// either way (ours included), how many messages it holds, and who wrote them ("me, Ray · 3").
+//
+//   msgs      every message of one conversation, normalised (any order)
+//   own       the mailbox's own address — a message from it is "me"
+//   hidden    folder ids that do not count (Trash, Junk): a deleted message is not part of the conversation on screen
+//   folderId  the folder being looked at — `in_folder` lists the messages that are in it (what Archive acts on)
+// Drafts are never the newest message and never counted; `has_draft` says one exists. Null when nothing is left.
+function firstName(a) {
+  const n = String((a && a.name) || '').trim();
+  if (n) return n.split(/\s+/)[0];
+  return String((a && a.email) || '').split('@')[0] || '?';
+}
+function summariseConversation(msgs, { own = '', hidden = [], folderId = null } = {}) {
+  const me = String(own || '').toLowerCase();
+  const all = (msgs || []).filter(Boolean);
+  const live = all.filter((m) => !m.is_draft && !hidden.includes(m.folder_id))
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  if (!live.length) return null;
+  const latest = live[live.length - 1];
+  const mine = (m) => !!me && String((m.from && m.from.email) || '').toLowerCase() === me;
+  // Who wrote it, in the order they first spoke; "me" for us. Gmail shows three names at most, then the count says the rest.
+  const names = [];
+  for (const m of live) {
+    const nm = mine(m) ? 'me' : firstName(m.from);
+    if (!names.includes(nm)) names.push(nm);
+  }
+  const first = live[0];
+  return {
+    ...latest,
+    // The conversation is named by how it began (no "Re:" stacking up as replies come in).
+    subject: first.subject || latest.subject || '',
+    latest_id: latest.id,
+    latest_mine: mine(latest),
+    // Who the row is about: the newest person who is not us; when only we have written, who we wrote to.
+    party: (() => {
+      for (let i = live.length - 1; i >= 0; i--) if (!mine(live[i]) && live[i].from) return live[i].from;
+      return (latest.to && latest.to[0]) || latest.from || null;
+    })(),
+    count: live.length,
+    participants: names.slice(0, 3),
+    more_participants: Math.max(0, names.length - 3),
+    unread: live.some((m) => m.unread),
+    has_attachments: live.some((m) => m.has_attachments),
+    has_draft: all.some((m) => m.is_draft),
+    label_ids: [...new Set(live.flatMap((m) => m.label_ids || []))],
+    message_ids: live.map((m) => m.id),
+    in_folder: folderId ? live.filter((m) => m.folder_id === folderId).map((m) => m.id) : live.map((m) => m.id),
+    unread_ids: live.filter((m) => m.unread).map((m) => m.id),
+  };
+}
+
 // ── The adapter ─────────────────────────────────────────────────────────────
 // createMailProvider(ctx).forMailbox(mailboxRow) hands back one object whose
 // methods are identical across platforms. `mailbox` is a user_emails row and
@@ -671,8 +725,37 @@ function createMailProvider(ctx) {
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     }
 
+    // CONVERSATIONS (R-271). Outlook has no "list conversations" call, so: the folder's page of messages, grouped by
+    // conversation, each conversation read whole (every folder — that is how our replies in Sent Items join it). On the
+    // first page the newest Sent mail is read too, so a conversation we answered a moment ago comes up to the top the
+    // way it does in Outlook — kept only when the conversation also has a message in the folder being looked at.
+    // A conversation that appears again on a later page is dropped by the screen (it keys rows by conversation).
+    async function listConversations({ folderId, q, cursor, limit = 25, hidden = [], sentId = null } = {}) {
+      const page = await listMessages({ folderId, q, cursor, limit });
+      const order = [], single = {};
+      const add = (m) => {
+        if (!m) return;
+        const k = m.thread_id || ('m:' + m.id);
+        if (!m.thread_id) single[k] = m;
+        if (!order.includes(k)) order.push(k);
+      };
+      page.messages.forEach(add);
+      if (!cursor && !q && sentId && sentId !== folderId) {
+        try { (await listMessages({ folderId: sentId, limit })).messages.forEach(add); } catch (_) { /* the folder's own list still stands */ }
+      }
+      const rows = await pool(order, 6, async (k) => {
+        const msgs = single[k] ? [single[k]] : await listThread(k);
+        const row = summariseConversation(msgs, { own: mailbox.email_address, hidden, folderId });
+        if (row && !single[k]) row.count_capped = msgs.length >= 50;
+        return row;
+      });
+      const keep = rows.filter(r => !folderId || q || r.in_folder.length)
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      return { conversations: keep, next_cursor: page.next_cursor };
+    }
+
     return {
-      platform: 'Microsoft', mailbox,
+      platform: 'Microsoft', mailbox, listConversations,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
       listLabels, createLabel, setLabels,
@@ -880,8 +963,20 @@ function createMailProvider(ctx) {
         .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     }
 
+    // CONVERSATIONS (R-271): Gmail lists them itself, ordered by each one's newest message (ours included); each is read
+    // whole, headers only, and summed up the same way as Outlook's.
+    async function listConversations({ folderId, q, cursor, limit = 25, hidden = [] } = {}) {
+      const page = await gmailProvider.listThreadPage(id, {
+        labelIds: folderId ? [folderId] : undefined, q: q || undefined, maxResults: limit, pageToken: cursor || undefined,
+      });
+      const rows = await pool(page.threads || [], 8, async (t) => summariseConversation(await listThread(t.id),
+        { own: mailbox.email_address, hidden, folderId }));
+      rows.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      return { conversations: rows, next_cursor: page.nextPageToken || null };
+    }
+
     return {
-      platform: 'Gmail', mailbox,
+      platform: 'Gmail', mailbox, listConversations,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
       listLabels, createLabel, setLabels,
@@ -910,5 +1005,5 @@ module.exports = {
   normalizeGraphMessage, normalizeGmailMessage,
   extractGmailBody, gmailAttachments, isInlinePart,
   replyRecipients, replySubject, forwardSubject, quoteBlock, forwardHeaderBlock,
-  approxBytes,
+  approxBytes, summariseConversation,
 };

@@ -139,6 +139,20 @@
     '</div>';
   }
 
+  // Today's ONE "Needs you" list (owner, 19 Oct, D-0160, R-278): your conversations are rows in it, drawn exactly as here, and a lead
+  // the to-do list already carries is left out (it is the same conversation). `replies` marks the ones waiting on you.
+  window.clientDigestMineRows=function(excludeLeadIds){
+    var s=STATE.clientDigest, ex=excludeLeadIds||{};
+    if(!s||s.enabled===false||s._error) return [];
+    return (s.mine||[]).map(function(it,i){ return { it:it, i:i }; }).filter(function(x){ return !ex[x.it.id]; })
+      .map(function(x){ return { id:x.it.id, html:row(x.it,true,x.i), replies:x.it.state==='needs_reply' }; });
+  };
+  // The team's conversations, as counts per person — for "Your team today".
+  window.clientDigestTeamWaiting=function(){
+    var s=STATE.clientDigest, out={};
+    ((s&&s.team)||[]).forEach(function(g){ if(g.owner_id||g.owner_name) out[g.owner_id||g.owner_name]={ name:g.owner_name||'', waiting:g.waiting||0 }; });
+    return out;
+  };
   window.renderClientDigest=function(){
     var s=STATE.clientDigest;
     var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;

@@ -23,18 +23,12 @@
 // Mounted via: app.use(require('./routes/mailbox')(ctx));
 // ============================================================================
 const express = require('express');
-const { createMailProvider, approxBytes } = require('../services/mail-provider');
+const { createMailProvider } = require('../services/mail-provider');
 const { mailboxConnections } = require('../mailbox-health');
-const { fillSignatureHtml } = require('../email-signature');
-const mailFormat = require('../services/mail-format');
+// The one send path (Send button and Schedule send): services/mailbox-send.js.
+const { createMailboxSender } = require('../services/mailbox-send');
 const recipientSuggest = require('../services/recipient-suggest');
 const { getSetting } = require('../config/settings');
-
-// express.json() is capped at 5mb for the whole app, and base64 inflates a file
-// by about a third — so this is the real ceiling, set below the body limit with
-// room for the rest of the payload. Enforced with a plain-English message,
-// because the alternative is an opaque 413 the user cannot act on.
-const MAX_ATTACH_BYTES = 3.5 * 1024 * 1024;
 
 // The nav badge asks for an unread count on every render. That is one provider
 // call per mailbox per render, which is both slow and rude to the API — so the
@@ -66,62 +60,10 @@ module.exports = (ctx) => {
 
   const mail = createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider });
 
-  // THE SIGNATURE, AND THE BUG THIS FIXES.
-  //
-  // Signature templates hold {{sender}} and {{senderemail}} placeholders that
-  // the outreach path fills via fillSignatureHtml (index.js). The first version
-  // of this router appended the RAW template, so real replies went out reading
-  // "{{sender}} / Recruitment Manager | Fute Global LLC". Filling it is not
-  // optional — an unfilled placeholder is visible to the recipient.
-  //
-  // And it is now OFF unless asked for. A signature belongs on outreach; on a
-  // reply to a conversation already in flight it is noise, and repeating a
-  // postal address in every message of a thread reads like a mail-merge.
-  async function signatureFor(mailbox, userId, include) {
-    if (!include) return '';
-    try {
-      const raw = await getMailboxSignature(mailbox.id, userId);
-      return fillSignatureHtml(raw, {
-        displayName: mailbox.display_name || mailbox.email_address || '',
-        emailAddress: mailbox.email_address || '',
-      });
-    } catch (_) { return ''; }
-  }
-
-  // Attachments arrive as [{ filename, content_type, base64 }]. Validated
-  // before anything is sent: a send that fails halfway through a 6MB upload has
-  // already cost the user their message.
-  function readAttachments(body) {
-    const list = Array.isArray(body.attachments) ? body.attachments : [];
-    if (!list.length) return { attachments: [] };
-    let total = 0;
-    const out = [];
-    for (const a of list.slice(0, 20)) {
-      const base64 = String(a.base64 || '').replace(/^data:[^;]*;base64,/, '');
-      if (!base64) continue;
-      total += approxBytes(base64);
-      out.push({
-        filename: String(a.filename || 'attachment').slice(0, 200),
-        contentType: a.content_type || a.contentType || 'application/octet-stream',
-        base64,
-      });
-    }
-    if (total > MAX_ATTACH_BYTES) {
-      return { error: {
-        status: 413,
-        body: {
-          error: `Attachments total ${(total / 1048576).toFixed(1)} MB — the limit is ${(MAX_ATTACH_BYTES / 1048576).toFixed(1)} MB per message. Send the larger files as a link instead.`,
-          code: 'attachments_too_large',
-        },
-      } };
-    }
-    return { attachments: out };
-  }
-
-  function parseAddressField(v) {
-    if (Array.isArray(v)) return v.map(x => ({ email: String(x.email || x).trim() })).filter(a => a.email);
-    return String(v || '').split(/[,;]/).map(x => ({ email: x.trim() })).filter(a => a.email);
-  }
+  // THE SIGNATURE (filled from the sending mailbox, off unless asked), the attachment cap, the address lists and the three
+  // sends live in services/mailbox-send.js — shared with Schedule send, so there is still only one sender.
+  const sender = createMailboxSender({ mail, gmailProvider, sendMicrosoftNewMessage, buildHtmlEmailBody, getMailboxSignature });
+  const signatureFor = sender.signatureFor;
 
   // ── The only door in ───────────────────────────────────────────────────────
   // Resolves a mailbox id to a row ONLY if it belongs to the caller, is active,
@@ -339,6 +281,98 @@ module.exports = (ctx) => {
     } catch (err) { providerError(res, err); }
   });
 
+  // ── CONVERSATIONS (R-271) and ALL INBOXES (R-272) ─────────────────────────
+  // The folder list (cached as above) tells a conversation which folders do not count (Trash, Junk — unless that is the
+  // folder being read) and where Sent is (Outlook reads it to bring a conversation we just answered to the top).
+  async function folderFacts(mailbox, prov, folderId) {
+    let folders = (folderCache.get(mailbox.id) || {}).value;
+    if (!folders) { folders = await prov.listFolders(); folderCache.set(mailbox.id, { at: Date.now(), value: folders }); }
+    const kindOf = (k) => (folders || []).filter(f => f.kind === k);
+    return {
+      hidden: kindOf('trash').concat(kindOf('junk')).map(f => f.id).filter(id => id !== folderId),
+      sentId: (kindOf('sent')[0] || {}).id || null,
+      inboxId: (kindOf('inbox')[0] || {}).id || null,
+    };
+  }
+  async function withCrm(req, rows) {
+    const addresses = [];
+    for (const r of rows) {
+      if (r.party && r.party.email) addresses.push(r.party.email);
+      if (r.from && r.from.email) addresses.push(r.from.email);
+    }
+    return crmLinksFor(req, addresses);
+  }
+
+  router.get('/mailbox/:mid/conversations', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try {
+      const limit = Math.min(50, Math.max(5, parseInt(req.query.limit, 10) || 25));
+      const prov = mail.forMailbox(mailbox);
+      const folderId = req.query.q ? null : (req.query.folder || null);
+      const facts = await folderFacts(mailbox, prov, folderId);
+      const page = await prov.listConversations({
+        folderId, q: req.query.q || null, cursor: req.query.cursor || null, limit,
+        hidden: facts.hidden, sentId: facts.sentId,
+      });
+      res.json({ ...page, crm: await withCrm(req, page.conversations) });
+    } catch (err) { providerError(res, err); }
+  });
+
+  // ALL INBOXES (R-272, the owner's teammate: "all inbox option like we have on Gmail … the system shows which email is for
+  // which email ID"). The inbox of every mailbox the caller can open — each through ownedMailbox(), the only door in, so
+  // nothing here reaches a mailbox the per-mailbox screen could not — merged newest first, every row carrying the
+  // address it belongs to. A mailbox that cannot be read just now is named in `skipped`, never silently missing.
+  // The cursor is each mailbox's own next page; a mailbox with nothing more drops out of the next page.
+  router.get('/mailbox-all/inbox', auth, async (req, res) => {
+    try {
+      const limit = Math.min(50, Math.max(5, parseInt(req.query.limit, 10) || 25));
+      const threads = req.query.view !== 'messages';
+      let cur = null;
+      if (req.query.cursor) {
+        try { cur = JSON.parse(Buffer.from(String(req.query.cursor), 'base64').toString('utf8')) || {}; }
+        catch (_) { return res.status(400).json({ error: 'That page could not be read — refresh the inbox' }); }
+      }
+      const { data: rows } = await supabase.from('user_emails')
+        .select('id,email_address').eq('user_id', req.user.id).eq('is_active', true)
+        .order('is_primary', { ascending: false });
+      const skipped = [];
+      const pages = await Promise.all((rows || []).map(async (row) => {
+        if (cur && !cur[row.id]) return null;                       // that mailbox had nothing more
+        const { mailbox, error } = await ownedMailbox(req, row.id);
+        if (error) { skipped.push({ id: row.id, email: row.email_address, reason: error.body.error }); return null; }
+        try {
+          const prov = mail.forMailbox(mailbox);
+          const pre = await folderFacts(mailbox, prov, null);
+          if (!pre.inboxId) return null;
+          const facts = await folderFacts(mailbox, prov, pre.inboxId);
+          const cursor = cur ? cur[row.id] : null;
+          // A search reaches every folder of every mailbox, as a search in one mailbox does (14 Oct).
+          const q = req.query.q ? String(req.query.q) : null;
+          const page = threads
+            ? await prov.listConversations({ folderId: q ? null : pre.inboxId, q, cursor, limit, hidden: q ? [] : facts.hidden, sentId: facts.sentId })
+            : await prov.listMessages({ folderId: q ? null : pre.inboxId, q, cursor, limit });
+          const items = (threads ? page.conversations : page.messages).map(x => ({
+            ...x, mailbox_id: mailbox.id, mailbox_email: mailbox.email_address, list_folder_id: pre.inboxId,
+          }));
+          return { id: mailbox.id, items, next: page.next_cursor || null };
+        } catch (err) {
+          skipped.push({ id: row.id, email: row.email_address, reason: 'could not be read just now — try Refresh' });
+          return null;
+        }
+      }));
+      const live = pages.filter(Boolean);
+      const items = live.flatMap(p => p.items).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      const next = {}; live.forEach(p => { if (p.next) next[p.id] = p.next; });
+      res.json({
+        [threads ? 'conversations' : 'messages']: items,
+        next_cursor: Object.keys(next).length ? Buffer.from(JSON.stringify(next), 'utf8').toString('base64') : null,
+        mailboxes: live.length, skipped,
+        crm: await withCrm(req, items),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   router.get('/mailbox/:mid/messages/:id', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
@@ -510,125 +544,120 @@ module.exports = (ctx) => {
   // an email_tracking row. Tracking belongs to outreach — measuring whether a
   // campaign landed. Pixel-tracking a personal reply to a colleague is a
   // different thing entirely, and not one this product should do silently.
-  // A formatted body (New message / Reply toolbar) is cleaned to the recruiting
-  // set — bold, italic, underline, lists, link — and is not escaped a second
-  // time. Anything that does not say it was formatted stays plain text.
-  function outboundHtml(body, signature, formatted) {
-    if (formatted) return mailFormat.formattedEmailHtml(body, signature);
-    return buildHtmlEmailBody(body, signature, false);
+  // ONE handler shape for all three: the same check the scheduler makes, then the same send.
+  function sendRoute(kind) {
+    return async (req, res) => {
+      const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+      if (error) return res.status(error.status).json(error.body);
+      const refused = sender.check(kind, req.body);
+      if (refused) return res.status(refused.status).json(refused.body);
+      try {
+        const r = await sender.send(mailbox, req.user.id, kind, req.params.id || null, req.body);
+        recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
+        res.json(r);
+      } catch (err) { providerError(res, err); }
+    };
   }
-  function bodyHasWords(body, formatted) {
-    if (formatted) return !!mailFormat.visibleText(body);
-    return !!String(body || '').trim();
+  // ── SCHEDULE SEND (R-273, D-0162/D-0163) ──────────────────────────────────
+  // The window's Schedule button: the same check as Send, NOW (so a mistake is fixed while the person is there), then stored
+  // for the engine (services/scheduled-sends.js) to send through the same path at the time chosen. The time is an instant;
+  // the person's time zone is kept so the screen shows it back the way they picked it.
+  const SCHEDULE_FIELDS = ['to', 'cc', 'subject', 'body', 'formatted', 'include_signature', 'reply_all', 'label_ids', 'attachments'];
+  function validZone(tz) {
+    if (!tz) return null;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: String(tz) }); return String(tz).slice(0, 64); } catch (_) { return null; }
   }
-
-  // Labels chosen in the window before Send (R-244): up to 10, trimmed, no repeats. Gmail takes label ids, Outlook takes the
-  // category name (its label id IS the name), so the browser sends whatever the label list gave it.
-  function readLabelIds(body) {
-    const raw = Array.isArray(body && body.label_ids) ? body.label_ids : [];
-    const out = [];
-    for (const x of raw) {
-      const s = String(x == null ? '' : x).trim().slice(0, 200);
-      if (s && !out.includes(s)) out.push(s);
-      if (out.length >= 10) break;
-    }
-    return out;
-  }
-
-  router.post('/mailbox/:mid/messages/:id/reply', auth, async (req, res) => {
+  router.post('/mailbox/:mid/schedule', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
-    const formatted = req.body.formatted === true;
-    const text = String(req.body.body || '');
-    if (!bodyHasWords(text, formatted)) return res.status(400).json({ error: 'Message body is empty' });
-    const att = readAttachments(req.body);
-    if (att.error) return res.status(att.error.status).json(att.error.body);
+    const kind = String(req.body.kind || '');
+    const refused = sender.check(kind, req.body);
+    if (refused) return res.status(refused.status).json(refused.body);
+    if ((kind === 'reply' || kind === 'forward') && !req.body.message_id) return res.status(400).json({ error: 'Which email is this answering?' });
+    const at = Date.parse(String(req.body.send_at || ''));
+    if (!Number.isFinite(at)) return res.status(400).json({ error: 'Pick a date and a time to send it' });
+    if (at <= Date.now() + 30 * 1000) return res.status(400).json({ error: 'That time has already passed — pick a later time, or press Send' });
+    const payload = {};
+    SCHEDULE_FIELDS.forEach((k) => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
     try {
-      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
-      const htmlBody = outboundHtml(text, signature, formatted);
-      const r = await mail.forMailbox(mailbox).reply(req.params.id, {
-        htmlBody,
-        replyAll: !!req.body.reply_all,
-        to: req.body.to ? parseAddressField(req.body.to) : null,
-        cc: req.body.cc ? parseAddressField(req.body.cc) : null,
-        subject: req.body.subject ? String(req.body.subject) : null,
-        attachments: att.attachments,
-        labels: readLabelIds(req.body),
-      });
-      recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
-      res.json({ success: true, ...r });
-    } catch (err) { providerError(res, err); }
-  });
-
-  // Forward. Graph's createForward carries the original's attachments across
-  // for us; the Gmail adapter re-downloads and re-attaches them, because a
-  // forward that silently drops the resume it was forwarding is worse than no
-  // forward at all.
-  router.post('/mailbox/:mid/messages/:id/forward', auth, async (req, res) => {
-    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
-    if (error) return res.status(error.status).json(error.body);
-    const to = parseAddressField(req.body.to);
-    if (!to.length) return res.status(400).json({ error: 'Who are you forwarding this to?' });
-    const att = readAttachments(req.body);
-    if (att.error) return res.status(att.error.status).json(att.error.body);
-    try {
-      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
-      // A forward with no note is normal — unlike a reply, the content is the
-      // forwarded message itself, so an empty body is not an empty email.
-      const htmlBody = outboundHtml(String(req.body.body || ''), signature, req.body.formatted === true);
-      const r = await mail.forMailbox(mailbox).forward(req.params.id, {
-        htmlBody, to,
-        cc: req.body.cc ? parseAddressField(req.body.cc) : null,
-        subject: req.body.subject ? String(req.body.subject) : null,
-        attachments: att.attachments,
-        maxAttachBytes: MAX_ATTACH_BYTES,
-        labels: readLabelIds(req.body),
-      });
-      recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
-      res.json({ success: true, ...r });
-    } catch (err) { providerError(res, err); }
-  });
-
-  router.post('/mailbox/:mid/send', auth, async (req, res) => {
-    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
-    if (error) return res.status(error.status).json(error.body);
-    const to = String(req.body.to || '').trim();
-    const formatted = req.body.formatted === true;
-    const text = String(req.body.body || '');
-    if (!to) return res.status(400).json({ error: 'A recipient is required' });
-    if (!bodyHasWords(text, formatted)) return res.status(400).json({ error: 'Message body is empty' });
-    const att = readAttachments(req.body);
-    if (att.error) return res.status(att.error.status).json(att.error.body);
-    try {
-      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
-      const htmlBody = outboundHtml(text, signature, formatted);
-      const subject = String(req.body.subject || '(no subject)');
-      const cc = String(req.body.cc || '').trim();
-      const labels = readLabelIds(req.body);
-      let label_error = null;
-      if (mailbox.platform === 'Gmail') {
-        const sent = await gmailProvider.sendNewMessage(mailbox.id, {
-          to, cc: cc || undefined, subject, htmlBody,
-          fromAddress: mailbox.email_address, attachments: att.attachments,
-        });
-        // Gmail can only label a message that exists: after the send. The mail has gone — a label that fails is reported,
-        // never a failed send, and the send is never repeated.
-        if (labels.length && sent && sent.messageId) {
-          try { await gmailProvider.modifyLabels(mailbox.id, sent.messageId, { add: labels }); }
-          catch (e) { label_error = (e && e.message) || 'the label could not be added'; }
-        }
-      } else {
-        await sendMicrosoftNewMessage(mailbox.id, {
-          to, subject, htmlBody,
-          cc: cc ? cc.split(/[,;]/).map(x => x.trim()).filter(Boolean) : undefined,
-          attachments: att.attachments,
-          categories: labels,
-        });
+      const { data, error: dbErr } = await db.forRequest(req).from('scheduled_sends').insert({
+        org_id: orgIdFor(req) || mailbox.org_id, user_id: req.user.id, mailbox_id: mailbox.id, kind,
+        message_id: req.body.message_id ? String(req.body.message_id).slice(0, 500) : null,
+        payload, send_at: new Date(at).toISOString(), timezone: validZone(req.body.timezone), status: 'scheduled',
+      }).select('id,send_at,timezone').single();
+      if (dbErr) {
+        // Before migration 067 is applied the table does not exist: said plainly, the email is NOT lost (the window stays open).
+        if (/scheduled_sends|relation|does not exist|schema cache/i.test(dbErr.message || '')) return res.status(503).json({ error: 'Scheduling is not switched on yet — press Send, or try again later', code: 'not_ready' });
+        return res.status(500).json({ error: dbErr.message });
       }
-      recipientCache.delete(mailbox.id);
-      res.json({ success: true, ...(label_error ? { label_error } : {}) });
-    } catch (err) { providerError(res, err); }
+      res.json({ success: true, scheduled: data });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
+
+  // The Scheduled tab: the person's own scheduled emails — waiting, being sent, and the ones that did not go (with why).
+  // Never another person's, never the attachments themselves (only their names).
+  router.get('/mailbox-scheduled', auth, async (req, res) => {
+    try {
+      const { data, error: dbErr } = await db.forRequest(req).from('scheduled_sends')
+        .select('id,mailbox_id,kind,message_id,payload,send_at,timezone,status,error,sent_at,created_at')
+        .eq('user_id', req.user.id).in('status', ['scheduled', 'sending', 'failed'])
+        .order('send_at', { ascending: true }).limit(200);
+      if (dbErr) {
+        if (/scheduled_sends|relation|does not exist|schema cache/i.test(dbErr.message || '')) return res.json({ items: [], ready: false });
+        return res.status(500).json({ error: dbErr.message });
+      }
+      const ids = [...new Set((data || []).map(r => r.mailbox_id))];
+      const emails = {};
+      if (ids.length) {
+        const { data: mbs } = await supabase.from('user_emails').select('id,email_address').in('id', ids).eq('user_id', req.user.id);
+        (mbs || []).forEach((m) => { emails[m.id] = m.email_address; });
+      }
+      res.json({ ready: true, items: (data || []).map((r) => {
+        const p = r.payload || {};
+        const words = String(p.body || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        return {
+          id: r.id, mailbox_id: r.mailbox_id, mailbox_email: emails[r.mailbox_id] || null, kind: r.kind, message_id: r.message_id,
+          to: p.to || '', cc: p.cc || '', subject: p.subject || '', preview: words.slice(0, 160),
+          attachments: (Array.isArray(p.attachments) ? p.attachments.map(a => a && a.filename) : (p.attachment_names || [])).filter(Boolean),
+          send_at: r.send_at, timezone: r.timezone, status: r.status, error: r.error,
+        };
+      }) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Cancel (a scheduled or a failed one). Its attachments go with it. Not yours / not there → 404, the same answer.
+  router.delete('/mailbox-scheduled/:id', auth, async (req, res) => {
+    try {
+      const { data: row } = await db.forRequest(req).from('scheduled_sends').select('id,payload,status')
+        .eq('id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      if (row.status !== 'scheduled' && row.status !== 'failed') return res.status(409).json({ error: row.status === 'sending' ? 'It is being sent right now' : 'It has already gone' });
+      const p = Object.assign({}, row.payload || {}); delete p.attachments;
+      const { data, error: dbErr } = await db.forRequest(req).from('scheduled_sends')
+        .update({ status: 'cancelled', payload: p, updated_at: new Date().toISOString() })
+        .eq('id', row.id).eq('user_id', req.user.id).in('status', ['scheduled', 'failed']).select('id');
+      if (dbErr) return res.status(500).json({ error: dbErr.message });
+      if (!data || !data.length) return res.status(409).json({ error: 'It is being sent right now' });
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Send now (a scheduled one) / Send again (one that did not go — the person has checked their Sent folder). The engine takes
+  // it at its next pass, which is within a couple of minutes while PACE is in use.
+  router.post('/mailbox-scheduled/:id/send-now', auth, async (req, res) => {
+    try {
+      const { data, error: dbErr } = await db.forRequest(req).from('scheduled_sends')
+        .update({ status: 'scheduled', send_at: new Date().toISOString(), error: null, updated_at: new Date().toISOString() })
+        .eq('id', req.params.id).eq('user_id', req.user.id).in('status', ['scheduled', 'failed']).select('id');
+      if (dbErr) return res.status(500).json({ error: dbErr.message });
+      if (!data || !data.length) return res.status(404).json({ error: 'Not found' });
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  router.post('/mailbox/:mid/messages/:id/reply', auth, sendRoute('reply'));
+  router.post('/mailbox/:mid/messages/:id/forward', auth, sendRoute('forward'));
+  router.post('/mailbox/:mid/send', auth, sendRoute('new'));
 
   return router;
 };

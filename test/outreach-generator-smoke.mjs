@@ -376,12 +376,15 @@ ok('the page is handed the filled signature so the preview is honest',
 // found in routes/mailbox.js once, then shipped again in the outreach generator
 // AND was sitting unnoticed in all four send paths of routes/recruiting/
 // outreach.js, where it had been reaching candidates and clients.
-const composers = ['routes/outreach-generator.js', 'routes/recruiting/outreach.js', 'routes/mailbox.js'];
+// The in-app mailbox's three sends moved into services/mailbox-send.js (shared with Schedule send, R-273): the route hands
+// getMailboxSignature to createMailboxSender, and the service is the one that must fill it.
+const composers = ['routes/outreach-generator.js', 'routes/recruiting/outreach.js', 'routes/mailbox.js', 'services/mailbox-send.js'];
 for (const f of composers) {
   const src = readFileSync(path.join(ROOT, f), 'utf8');
   if (!/getMailboxSignature/.test(src)) continue;
+  const delegates = /createMailboxSender\(\{[^}]*getMailboxSignature/.test(src);
   ok(`${f} fills the signature template before sending`,
-    /fillSignatureHtml/.test(src), 'composes mail but never calls fillSignatureHtml');
+    /fillSignatureHtml/.test(src) || delegates, 'composes mail but never calls fillSignatureHtml');
   ok(`${f} never passes a raw saved signature into the body`,
     !/=\s*await getMailboxSignature\([^)]*\)(\.catch\([^)]*\))?;/.test(
       src.replace(/const raw = await getMailboxSignature\([^)]*\);/g, '')),

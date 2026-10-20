@@ -6,6 +6,8 @@
 // both from services/bd-insights.js, and the screens only draw. Proven here by giving the BROWSER
 // NO LEADS AND NO EMAILS AT ALL (STATE.jobs = [], STATE.sentEmails = []) and checking that every
 // number on screen is still the server's — an old screen would show zeros.
+// Since 19 Oct (D-0160, R-278) the PERSONAL view is sequence analytics from `GET /insights/outreach` (services/outreach-insights.js):
+// five numbers said once, one chart, a row per sequence — the same rule holds: the browser draws the server's numbers only.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright-core';
 import { enterApp, waitForLogin } from './helpers/enter-app.mjs';
@@ -24,30 +26,34 @@ const summary = (o) => Object.assign({ total_all:110,total_today:0,total_week:85
   by_stage:{Assigned:100,Connected:6,'In Discussion':0,Positive:0}, by_industry:{Construction:30} }, o||{});
 const ME='u-lead', R1='u-bd2';
 const TEAM = { scope:'team', windows:{}, people:[Object.assign({id:R1,name:'BD Two',role:'bd'}, summary({bounce_rate:5.5,open_rate:41.2,open_tracked:50,opened:20,total_all:40,total_today:3,total_week:12,total_month:40,converted:8,conv_rate:20,replied:14,reply_rate:35,emails_sent:123,emails_pending:2,by_stage:{Assigned:30,Connected:8,Negative:2}}))] };
+const OUTREACH = { from:day(29), to:day(0), bucket:'day',
+  totals:{ people:115, emailed:311, opened_rate:null, replied:11, replied_rate:9.6, interested:6, bounced_rate:2.6 },
+  series:[6,5,4,3,2,1,0].map(n=>({ key:day(n), emailed:[0,40,41,42,43,40,16][6-n], opened:0, replied:[0,1,0,2,0,3,0][6-n] })),
+  sequences:[{ id:'outreach', name:'Your outreach', people:115, emailed:311, opened_rate:null, replied:11, replied_rate:9.6, interested:6, bounced_rate:2.6, candidates:false }],
+  choices:[{id:'all',name:'All sequences'},{id:'outreach',name:'Your outreach'}] };
 const calls=[]; const rep=(r,b)=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(b)});
 let browser; const errs=[]; const tzSeen=[];
 try{
   browser=await chromium.launch({executablePath:findChromium(),headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
   const ctx=await browser.newContext({viewport:{width:1300,height:1600}});
   await ctx.route('**',r=>{ const u=r.request().url(); if(u.startsWith(BASE)) return r.continue(); if(u.startsWith(API)){ const p=new URL(u).pathname; calls.push(p); if(p.indexOf('/insights/')===0) tzSeen.push(new URL(u).searchParams.get('tz'));
-    if(p==='/insights/bd/'+ME) return rep(r,summary()); if(p==='/insights/bd-team') return rep(r,TEAM); return rep(r,r.request().method()==='GET'?[]:{}); } return r.abort(); });
+    if(p==='/insights/bd/'+ME) return rep(r,summary()); if(p==='/insights/bd-team') return rep(r,TEAM); if(p==='/insights/outreach') return rep(r,OUTREACH); return rep(r,r.request().method()==='GET'?[]:{}); } return r.abort(); });
   const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
   await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,{id:ME,name:'BD Lead 1',role:'bd_lead',roles:['bd_lead']});
   const ev=(f,a)=>page.evaluate(f,a);
   // the browser knows NOTHING about leads or emails — only who reports to whom
   await ev((a)=>{ STATE.jobs=[]; STATE.sentEmails=[]; STATE.pendingEmails=[]; STATE.emails=[]; STATE.users=[{id:a.ME,name:'BD Lead 1',role:'bd_lead',roles:['bd_lead']},{id:a.R1,name:'BD Two',role:'bd',roles:['bd'],managerId:a.ME}]; STATE.page='bdinsights'; STATE.bdInsightsData=null; STATE.bdTeamInsights=null; render(); },{ME,R1});
-  await page.waitForFunction(()=>/Emails Sent/.test(document.getElementById('content').innerText),null,{timeout:8000}).catch(()=>{});
+  await page.waitForFunction(()=>/People emailed/.test(document.getElementById('content').innerText) && !/^—/.test(((document.querySelector('[data-oi-tiles] .oi-n')||{}).textContent)||'—'),null,{timeout:8000}).catch(()=>{});
   await page.waitForTimeout(300);
   const t1 = await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
   const nameNow = await ev(()=>({ title:(document.querySelector('#content .ptitle')||{}).textContent||'', rail:(document.getElementById('sidebar')||{}).innerText||'', bar:(document.getElementById('topbar')||{}).innerText||'' }));
   step('the page is called "Outreach Insights" (owner, 8 Oct) — heading, sidebar and top bar — and "Lead Insights" is gone', /Outreach Insights/.test(nameNow.title) && /Outreach Insights/.test(nameNow.rail) && !/Lead Insights/.test(nameNow.title+nameNow.rail+nameNow.bar), JSON.stringify(nameNow).slice(0,200));
-  step('personal: emails sent (30 days) is the server\'s 311 — with no emails in the browser at all', /311\s*Emails sent/i.test(t1), t1.slice(0,160));
-  step('personal: "Leads, last 7 days" is 85 and the 30-day tile 110, both the server\'s', /85\s*Last 7 days/.test(t1) && /110\s*Last 30 days/.test(t1));
-  step('personal: the tile says what the tiles mean ("last 30 days"), not "this month"', /30 days/i.test(t1) && !/Sent \(month\)/.test(t1) && !/this month/i.test(t1));
-  step('personal: response rate shows the REPLY rate (10%), not the conversion rate (5%)', /10%\s*Response rate/.test(t1) || /Response rate[^0-9]{0,20}10%/.test(t1), (t1.match(/.{30}Response rate.{20}/)||[''])[0]);
-  step('personal: the bounce rate is shown to one decimal (2.6%), and an open rate that could not be measured reads "—", never 0%', /2\.6%\s*Bounced/.test(t1) && /\u2014\s*Opened/.test(t1) && !/\b0%\s*Opened/.test(t1), (t1.match(/.{25}Bounced.{60}/)||[''])[0]);
-  const bars = await ev(()=>{ const c=document.getElementById('content'); return c.innerText; });
-  step('personal: the chart and the tile agree (15+22+48 = 85)', /15/.test(bars) && /22/.test(bars) && /48/.test(bars));
+  step('personal: people emailed is the server\'s 115 (311 emails) — with no emails in the browser at all', /115\s*People emailed\s*311 emails/i.test(t1), t1.slice(0,200));
+  step('personal: replied is the REPLY rate (9.6%, 11 people), bounced to one decimal (2.6%)', /9\.6%\s*Replied\s*11 people/.test(t1) && /2\.6%\s*Bounced/.test(t1), (t1.match(/.{20}Replied.{30}/)||[''])[0]);
+  step('personal: an open rate that could not be measured reads "—", never 0%', /\u2014\s*Opened/.test(t1) && !/\b0%\s*Opened/.test(t1));
+  step('personal: the old repeated tiles are gone (no "Last 7 days", no "Response rate")', !/Last 7 days/.test(t1) && !/Response rate/.test(t1));
+  step('personal: the chart and the table are the same answer (the 7 days drawn; Your outreach 311 emailed)', await ev(()=>document.querySelectorAll('svg.oi-chart .oi-hit').length===7) && /Your outreach\s*115\s*311/.test(t1));
+  step('personal: it asked the server once for the whole page', calls.filter(c=>c==='/insights/outreach').length===1, JSON.stringify(calls.filter(c=>/insights/.test(c))));
 
   // team overview
   await ev(()=>{ STATE.bdInsightsView='team'; render(); });

@@ -3,6 +3,8 @@
 //   * {{sender}} / {{senderemail}} / {{sendercompany}} in a sequence step's preview are filled from one of the person's OWN email IDs
 //   * with several, a "filled in as" picker chooses which; with none, the field is MARKED — the profile name is never used
 // Usage: node test/sequence-preview-sender-smoke.mjs
+// Since D-0158 (19 Oct) a NEW sequence opens the new builder (sequence-builder-v2-ui-smoke); this window is the one an OLD
+// sequence still opens in (wfOpenLegacyBuilder), so its behaviour is still pinned here.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,7 +52,7 @@ try {
       { id: 'm1', email_address: 'amy@alpha.test', display_name: 'Amy Alpha', is_active: true, is_primary: true, sends_as: { company: 'Alpha Staffing' } },
       { id: 'm2', email_address: 'amy@beta.test', display_name: 'Amy Beta', is_active: true, sends_as: {} } ];
     STATE.page = 'email'; STATE.emailTab = 'sequence';
-    wfOpenBuilder();
+    wfOpenLegacyBuilder();
   });
   await page.waitForSelector('.seq-modal');
   await page.evaluate(() => [...document.querySelectorAll('.seq-seg')].find(b => /Write it for this step/.test(b.textContent)).click());

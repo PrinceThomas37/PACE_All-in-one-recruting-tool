@@ -100,7 +100,7 @@ module.exports = (ctx) => {
 
       let queue;
       if (Array.isArray(b.allocation) && b.allocation.length) {
-        const a = dist.allocationQueue(b.allocation, mb.accounts, eligible.length);
+        const a = dist.allocationQueue(b.allocation, mb.accounts, eligible.length, Math.random, (acc) => dailyLimit.limitOf(acc, mb.dailyDefault));
         if (a.error) return res.status(400).json({ error: a.error + ' (Nothing was assigned.)' });
         queue = a.queue;
       } else {

@@ -71,7 +71,8 @@ function renderDashboard(){
   // who has been given reports also qualifies, not just the manager-ish roles.
   // Not for a "view as" preview — that endpoint answers for whoever is holding
   // the session, so it would show the viewer's numbers under someone else's name.
-  if(!isViewingOther&&(isManagerRole(u)||getTeam(u).length))return withDashReports(renderManagerDashboard(u),isViewingOther);
+  // Charts are in Reports (D-0160): a manager's Today is the desk only.
+  if(!isViewingOther&&(isManagerRole(u)||getTeam(u).length))return renderManagerDashboard(u);
 
   // Everyone else — and every "view as" preview — gets the individual
   // dashboard, which is built on STATE.jobs and filters by the user it is
@@ -140,9 +141,14 @@ function withDashReports(html,isViewingOther){
   // Inside the page's own wrapper, so it takes the page's width and padding.
   return html.replace(/<\/div>\s*$/, section+'</div>');
 }
+// Only the dashboards built with withDashReports carry the report. A manager's Today does not (D-0160: "the charts are in
+// Reports"), so for them this answers false and the caller opens the Reports page itself — never a link that lands back on Today.
 window.dashScrollToReports=function(){
+  var u=STATE.user;
+  if(u&&!isPureRecruiter(u)&&(isManagerRole(u)||getTeam(u).length)) return false;
   var go=function(){ var el=document.getElementById('dash-reports'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
   if(STATE.page!=='dashboard'){ goPage('dashboard'); setTimeout(go,150); } else go();
+  return true;
 };
 
 // ── NO REMINDERS BOX ON TODAY (R-122 step 3) ─────────────────────────────────
@@ -353,90 +359,134 @@ function renderRecruiterDashboard(u){
 // lead-gen dashboard for these roles, which read the dead STATE.leads seed
 // data. The team roster is NOT drawn here — it is the My Team page (R-072).
 var SCOPE_LABEL={own:'Your desk',team:"Your team's desk",org:'Org-wide · all desks'};
+// ── TODAY FOR A MANAGER (owner, 19 Oct, D-0160, R-278 — as drawn: https://claude.ai/artifact/DF9nDByMp9grLCrBT2ggCo) ──
+// "Are the information not kind of repeated just put in different graph and tables — one graph or table should only show one
+// information … the same report is shown on the dashboard also." So Today is the DESK, and each number lives in one place:
+//   four numbers that ask for action · ONE "Needs you" list (the to-do list and your client conversations, merged, filterable) ·
+//   today's schedule · your pipeline as counts that open their pages · "Your team today" (only who needs a nudge).
+// Charts are in Reports. The recruiting tiles, the second banner of stage counts and Upcoming interviews (now in the schedule) are
+// gone from here.
+var TODAY_TTL=5*60*1000;
+function loadTodayNumbers(force){
+  var me=STATE.user&&STATE.user.id; if(!me) return;
+  var t=STATE.todayNums;
+  if(!force&&t&&(t.loading||Date.now()-t.at<TODAY_TTL)) return;
+  STATE.todayNums={ loading:true, at:Date.now() };
+  var tz=(typeof insightsTzQ==='function')?insightsTzQ():'';
+  var hasTeam=userHasRole(STATE.user,'admin')||(typeof getTeam==='function'&&getTeam(STATE.user).length>0);
+  Promise.all([
+    apiGet('/insights/bd/'+me+tz).catch(function(){ return null; }),
+    userHasAnyRole(STATE.user,'admin','ra_lead','bd','bd_lead')?apiGet('/leads/assign/mailboxes?user_id='+encodeURIComponent(me)).catch(function(){ return null; }):Promise.resolve(null),
+    hasTeam?apiGet('/insights/bd-team'+tz).catch(function(){ return null; }):Promise.resolve(null)
+  ]).then(function(r){
+    STATE.todayNums={ at:Date.now(), bd:r[0], mbs:(r[1]&&r[1].mailboxes)||null, team:r[2] };
+    if(STATE.page==='dashboard') render();
+  });
+}
+function todayKey(v){ try{ var d=new Date(v); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }catch(e){ return ''; } }
+// The number of replies waiting on you: the to-do list's replies, plus conversations of yours waiting on you that it does not carry.
+function todayNeeds(){
+  var s=STATE.nextActions||{}, items=(s.items||[]);
+  var leadIds={}; items.forEach(function(it){ if(it.job_id) leadIds[it.job_id]=1; if(it.entity_type==='lead') leadIds[it.entity_id]=1; });
+  var conv=(typeof clientDigestMineRows==='function')?clientDigestMineRows(leadIds):[];
+  var replies=items.filter(function(it){ return it.kind==='reply_due'||it.kind==='commitment_due'; }).length+conv.filter(function(c){ return c.replies; }).length;
+  return { items:items, conv:conv, replies:replies, loaded:s&&s.items!==undefined };
+}
+var TODAY_FILTERS=[['all','All'],['replies','Replies'],['candidates','Candidates'],['reminders','Reminders'],['followups','Follow-ups']];
+function todayKindOf(it){
+  if(it.entity_type==='candidate') return 'candidates';
+  if(it.kind==='reply_due'||it.kind==='commitment_due') return 'replies';
+  if(it.kind==='reminder_due') return 'reminders';
+  return 'followups';
+}
+window.todayFilter=function(f){ STATE.todayFilter=f; render(); };
+function renderNeedsYou(){
+  var s=STATE.nextActions;
+  if(s===undefined||s===null) return '<div class="card td-needs" id="needs"><div class="td-h">NEEDS YOU</div><div class="fs-13 c-text3">Working out what needs you…</div></div>';
+  if(s._error) return renderNextActionsCard();   // its own honest error state, with "try again"
+  var n=todayNeeds(), f=STATE.todayFilter||'all';
+  var counts={ all:n.items.length+n.conv.length, replies:0, candidates:0, reminders:0, followups:0 };
+  n.items.forEach(function(it){ counts[todayKindOf(it)]++; });
+  n.conv.forEach(function(c){ counts[c.replies?'replies':'followups']++; });
+  var chips=TODAY_FILTERS.filter(function(x){ return x[0]==='all'||counts[x[0]]; }).map(function(x){
+    return '<button type="button" class="td-chip'+(f===x[0]?' on':'')+'" aria-pressed="'+(f===x[0])+'" onclick="todayFilter(\''+x[0]+'\')">'+x[1]+' '+counts[x[0]]+'</button>';
+  }).join('');
+  var rows=n.items.filter(function(it){ return f==='all'||todayKindOf(it)===f; }).map(naRowHtml).join('')+
+    n.conv.filter(function(c){ return f==='all'||(c.replies?'replies':'followups')===f; }).map(function(c){ return '<div class="td-conv">'+c.html+'</div>'; }).join('');
+  var empty=!counts.all?'<div class="fs-13 c-text3 td-empty">Nothing waiting on you. Answered conversations leave this list by themselves.</div>':'';
+  return '<div class="card td-needs" id="needs" data-today-needs><div class="td-needs-head"><div class="td-h">NEEDS YOU</div><div class="td-chips">'+chips+'</div></div>'+
+    empty+rows+(typeof naTeamLine==='function'?naTeamLine(s):'')+(typeof naHiddenLine==='function'?naHiddenLine(s):'')+'</div>';
+}
 function renderManagerDashboard(u){
-  recDashboardLoad();
-  var d=STATE._recDash||{};
-  var bs=d.by_stage||{};
+  recDashboardLoad(); loadTodayNumbers();
+  var d=STATE._recDash||{}, bs=d.by_stage||{}, t=STATE.todayNums||{}, bd=t.bd||null;
   var interviews=(bs['Interview Scheduled']||0)+(bs['Interview Completed']||0);
-  var loading=!d._at&&!d.empty;
-  var scope=d.scope||'team';
-
-  var hour=new Date().getHours();
-  var greet=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
-
-  // There used to be a "Your team" card here — the org-tree roster with "Open
-  // team view →", or "No one reports to you yet". The owner asked for it gone
-  // (R-072, D-0056/D-0059): the team view lives on the My Team page, which has
-  // its own nav item. Nothing else on this dashboard changed.
-
-  var upcomingRows=(d.upcoming_interviews||[]).map(function(iv){
-    var dt;try{var x=new Date(iv.interview_at);dt=x.toLocaleDateString("en-IN",{day:"numeric",month:"short"})+' · '+x.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});}catch(e){dt='';}
-    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
-      '<div style="width:7px;height:7px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>'+
-      '<div style="flex:1;min-width:0">'+
-        '<div class="fs-13_5" style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(iv.candidate||'Candidate')+'</div>'+
-        '<div class="f12 text3">'+htmlEsc(dt)+(iv.interview_location?' · '+htmlEsc(iv.interview_location):'')+'</div>'+
-      '</div>'+
-    '</div>';
-  }).join("");
-
-  function tile(label,value,color){
-    return '<div class="dash-tile">'+
-      '<div class="dash-tile-v" style="color:'+(color||'var(--text)')+'">'+value+'</div>'+
-      '<div class="dash-tile-l">'+label+'</div>'+
-    '</div>';
+  var hour=new Date().getHours(), greet=hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
+  var today=todayIST(), needs=todayNeeds();
+  var dash='—';
+  function num(v,cls){ return (v==null)?'<span class="td-n">'+dash+'</span>':'<span class="td-n'+(cls?' '+cls:'')+'">'+v+'</span>'; }
+  // four numbers that ask for action — each one opens where it is acted on
+  var limit=t.mbs?t.mbs.reduce(function(a,m){ return a+(Number(m.limit)||0); },0):null;
+  var sentToday=bd?bd.emails_sent_today:null, pending=bd?bd.emails_pending:null;
+  var ivToday=(d.upcoming_interviews||[]).filter(function(iv){ return todayKey(iv.interview_at)===today; });
+  var tiles=
+    '<a class="td-tile" href="#needs" onclick="event.preventDefault();todayFilter(\'replies\');var e=document.getElementById(\'needs\');if(e)e.scrollIntoView({behavior:\'smooth\'})">'+
+      num(needs.loaded?needs.replies:null, needs.replies?'is-hot':'')+'<span class="td-l">Replies waiting on you</span></a>'+
+    '<a class="td-tile" href="#" onclick="event.preventDefault();goPage(\'email\')">'+
+      '<span class="td-n">'+(sentToday==null?dash:sentToday)+(limit?' <span class="td-of">/ '+limit+'</span>':'')+'</span><span class="td-l">Emails out today</span>'+
+      (pending!=null?'<span class="td-s">'+pending+' still to send</span>':'')+'</a>'+
+    '<a class="td-tile" href="#" onclick="event.preventDefault();goPage(\'leads\')">'+num(bd?bd.total_today:null)+'<span class="td-l">New leads today</span></a>'+
+    '<a class="td-tile" href="#" onclick="event.preventDefault();goPage(\'bd_pipeline\')">'+num(d._at?ivToday.length:null, ivToday.length?'is-accent':'')+'<span class="td-l">Interview'+(ivToday.length===1?'':'s')+' today</span>'+
+      (ivToday[0]?'<span class="td-s">'+htmlEsc(new Date(ivToday[0].interview_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}))+' · '+htmlEsc(ivToday[0].candidate||'')+'</span>':'')+'</a>';
+  // today's schedule: interviews and reminders with a time, in order
+  var sched=ivToday.map(function(iv){ var x=new Date(iv.interview_at); return { at:x.getHours()*60+x.getMinutes(), label:x.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}), text:'Interview — '+(iv.candidate||'a candidate')+(iv.interview_location?' · '+iv.interview_location:'') }; });
+  (STATE.reminders||[]).filter(function(r){ return r.user_id===u.id&&r.status==='pending'&&r.return_date===today; }).forEach(function(r){
+    var hm=String(r.reminder_time||'09:00').slice(0,5).split(':'), h=Number(hm[0])||9, mi=Number(hm[1])||0;
+    sched.push({ at:h*60+mi, label:new Date(2000,0,1,h,mi).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}), text:'Reminder — '+(r.contact_name||'')+(r.company_name?' · '+r.company_name:'') });
+  });
+  sched.sort(function(a,b){ return a.at-b.at; });
+  var schedHtml=sched.length?sched.map(function(x){ return '<div class="td-sched"><span class="td-time">'+htmlEsc(x.label)+'</span><span>'+htmlEsc(x.text)+'</span></div>'; }).join('')
+    :'<div class="fs-13 c-text3">Nothing booked for today.</div>';
+  // your pipeline: counts that open their pages (the charts are in Reports)
+  var st=(bd&&bd.by_stage)||null;
+  function link(n,label,go){ return '<a href="#" class="td-plink" onclick="event.preventDefault();'+go+'">'+(n==null?dash:n)+' '+label+'</a>'; }
+  var arrow='<span aria-hidden="true" class="c-text3">→</span>';
+  var pipe='<div class="td-prow"><div class="td-plabel">LEADS</div><div class="td-pline">'+
+      link(st?st.Assigned||0:null,'assigned',"goPage('leads')")+arrow+link(st?st.Connected||0:null,'connected',"STATE.jobsFilter=Object.assign(STATE.jobsFilter||{},{stages:['Connected']});goPage('leads')")+arrow+
+      link(st?st['In Discussion']||0:null,'in discussion',"STATE.jobsFilter=Object.assign(STATE.jobsFilter||{},{stages:['In Discussion']});goPage('leads')")+'</div></div>'+
+    '<div class="td-prow"><div class="td-plabel">JOBS</div><div class="td-pline">'+
+      link(d._at?((d.jobs&&d.jobs.total)||0):null,'open',"goPage('bd_myjobs')")+arrow+link(d._at?(bs['Submitted to Client']||0):null,'at client',"goPage('bd_pipeline')")+arrow+
+      link(d._at?interviews:null,'interviewing',"goPage('bd_pipeline')")+arrow+link(d._at?(bs.Offer||0):null,'offers',"goPage('bd_pipeline')")+'</div></div>'+
+    '<div class="fs-12 c-text3">Counts only — the charts are in <a href="#" onclick="event.preventDefault();goPage(\'reports\')">Reports</a>.</div>';
+  // your team today: only the people who need a nudge
+  var teamHtml='';
+  var people=(t.team&&t.team.people)||null;
+  if(people&&people.length){
+    var waiting=(typeof clientDigestTeamWaiting==='function')?clientDigestTeamWaiting():{};
+    var rows=people.map(function(p){
+      var w=(waiting[p.id]&&waiting[p.id].waiting)||0, why=[];
+      if(w) why.push(w+' repl'+(w===1?'y':'ies')+' waiting on them');
+      if(!p.emails_sent_today) why.push('no emails out today');
+      return { p:p, w:w, why:why };
+    }).filter(function(x){ return x.why.length; });
+    teamHtml='<div class="card td-team" data-today-team><div class="td-needs-head"><div class="td-h">YOUR TEAM TODAY</div>'+
+      '<div class="fs-12 c-text3">Only people who need a nudge · <a href="#" onclick="event.preventDefault();goPage(\'myteam\')">Everyone in My Team</a></div></div>'+
+      (rows.length?'<div class="td-scroll"><table class="td-table"><thead><tr><th>Person</th><th>Replies waiting</th><th>Emails out today</th><th>Why they are here</th></tr></thead><tbody>'+
+        rows.map(function(x){ return '<tr><td class="fw6">'+htmlEsc(x.p.name||'')+'</td><td'+(x.w?' class="td-hot"':'')+'>'+x.w+'</td><td>'+(x.p.emails_sent_today||0)+'</td><td>'+htmlEsc(x.why.join('; '))+'</td></tr>'; }).join('')+
+        '</tbody></table></div>':'<div class="fs-13 c-text3">Nobody needs a nudge right now.</div>')+'</div>';
   }
-
-  var scopeBadge='<span class="banner-chip">'+(SCOPE_LABEL[scope]||'Your team')+(scope==='team'&&d.team_size?' · '+d.team_size+' people':'')+'</span>';
-
-  return '<div class="page">'+
-    '<div class="banner">'+
-      '<div class="banner-clock">'+
-        '<div id="dash-clock-time" class="bclock-time">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
-        '<div id="dash-clock-date" class="bclock-date">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
-      '</div>'+
-      '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
-      '<div class="banner-sub" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+roleLabel(u.role)+scopeBadge+'</div>'+
-      '<div class="banner-stats">'+
-        '<div><div class="bstat-val">'+(d.submissions_week||0)+'</div><div class="bstat-lbl">To BDM this week</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+(d.submissions_month||0)+'</div><div class="bstat-lbl">To BDM this month</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+interviews+'</div><div class="bstat-lbl">In interview</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+(bs['Placement']||0)+'</div><div class="bstat-lbl">Placements</div></div>'+
-      '</div>'+
-    '</div>'+
-
-    renderMorningBriefingCard()+
-
+  return '<div class="page td">'+
+    '<div class="banner td-banner"><div class="banner-name">'+greet+', '+htmlEsc(String(u.name||'').split(' ')[0])+' 👋</div>'+
+      '<div class="banner-sub">'+htmlEsc(roleLabel(u.role))+' · '+htmlEsc(new Date().toLocaleDateString('en-US',{weekday:'short',day:'numeric',month:'short'}))+'</div></div>'+
+    // The morning briefing (D-0021) stays: the drawing (D-0160) did not take it away, and building the layout must not either.
+    (typeof renderMorningBriefingCard==='function'?renderMorningBriefingCard():'')+
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
-    renderNextActionsCard()+
-    (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
-
-    (loading?'<div class="card cp mb4 c-text3 fs-13" style="text-align:center">Loading your team\'s desk…</div>':'')+
-
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
-      tile('Jobs',(d.jobs&&d.jobs.total)||0,'var(--accent)')+
-      tile('Awaiting approval',d.awaiting_approval||0,'var(--amber)')+
-      tile('At Client',bs['Submitted to Client']||0,'var(--accent)')+
-      tile('In Interview',interviews,'#2563eb')+
-      tile('Offers',bs['Offer']||0,'#7c3aed')+
-      tile('Placements',bs['Placement']||0,'var(--green)')+
-    '</div>'+
-
-    // No "team's pipeline" card (D-0077): it showed the same stage counts as the
-    // Reports funnel below (and counted Sourced/Screening, which is inventory, as
-    // if it were the team's output). One place says it: the funnel, in Reports.
-    '<div class="card cp mb4">'+
-      '<div class="flex jb aic mb3">'+
-        '<div><div class="fw6">Upcoming interviews</div><div class="f12 text3">'+((d.upcoming_interviews||[]).length||'No')+' scheduled</div></div>'+
-      '</div>'+
-      (upcomingRows||'<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">No interviews scheduled across your team yet.</div>')+
-    '</div>'+
-
-
+    '<div class="td-tiles" data-today-tiles>'+tiles+'</div>'+
+    '<div class="td-cols">'+renderNeedsYou()+
+      '<div class="td-side"><div class="card td-card"><div class="td-h">TODAY\'S SCHEDULE</div>'+schedHtml+'</div>'+
+        '<div class="card td-card" data-today-pipeline><div class="td-h">YOUR PIPELINE</div>'+pipe+'</div></div></div>'+
+    teamHtml+
   '</div>';
 }
 

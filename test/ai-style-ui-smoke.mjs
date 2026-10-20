@@ -1,7 +1,7 @@
-// THE MERGED SEQUENCE TAB AND "HOW THE AI WRITES FOR YOU" ON SCREEN (R-146, R-147; owner 7 Oct, D-0082)
-//   * the Email tab bar has NO "Outreach Plan" any more — one Sequence tab with three pills:
-//     Sequences · My wording (the old Outreach Plan editor and its live preview) · AI style
-//   * an old 'outreachplan' link still lands on My wording; someone with no sequence permission is not shown Sequences
+// "HOW THE AI WRITES FOR YOU" ON SCREEN (R-146, R-147; owner 7 Oct, D-0082) — since 19 Oct (D-0161, R-285) inside the sequence
+// builder, not a pill on Email → Sequence:
+//   * the Email tab bar has NO "Outreach Plan"; the Sequence tab is the list of sequences — no "My wording" / "AI style" pills —
+//     and an old 'outreachplan' link still lands on it; My Setup's "Open my writing style" opens the builder with the card open
 //   * the AI-style card: a box, the "never" list, AI on/off said plainly, Save, "Try it on a sample", and an admin's team default
 //   * typing in the box never repaints the page (so a half-written note is never lost)
 // Usage: node test/ai-style-ui-smoke.mjs
@@ -29,12 +29,15 @@ try{
       if(p==='/ai/style'&&m==='PUT'){ const b=JSON.parse(r.request().postData()||'{}'); style={...style,person:b.note,in_force:b.note||style.team,source:b.note?'person':(style.team?'team':null)}; return rep(r,style); }
       if(p==='/ai/style/team'&&m==='PUT'){ const b=JSON.parse(r.request().postData()||'{}'); style={...style,team:b.note}; return rep(r,style); }
       if(p==='/ai/style/sample'&&m==='POST') return rep(r,sampleReply);
+      if(p==='/my-setup/sequence'&&m==='GET') return rep(r,{ mode:'template', first:{subject:'Hi',body:'Hello',versions:[]}, followups:[], followup_max:5, teach:null, teach_options:{angles:[]}, sample:{ vars:{fn:'Dana'}, example:true, name:'Dana Lee', company:'Acme' } });
       return rep(r,m==='GET'?[]:{}); }
     return r.abort(); });
   const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
   await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,'bd');
   const ev=(f,a)=>page.evaluate(f,a);
-  const open=async(tab,view)=>{ await ev(([t,v])=>{ STATE.seqView=v||undefined; STATE.emailTab=t; STATE.page='email'; STATE.aiStyle=undefined; render(); },[tab,view]); await page.waitForTimeout(350); };
+  const open=async(tab,view)=>{
+    if(view==='style'){ await ev(()=>{ STATE.aiStyle=undefined; window.mySetupOpenStyle(); }); await page.waitForSelector('#ais-note',{timeout:6000}); await page.waitForTimeout(250); return; }
+    await ev(([t,v])=>{ STATE.seqView=v||undefined; STATE.emailTab=t; STATE.page='email'; STATE.aiStyle=undefined; render(); },[tab,view]); await page.waitForTimeout(350); };
   const tabs=()=>ev(()=>[...document.querySelectorAll('#content .pgtab')].map(b=>b.textContent.replace(/\s+/g,' ').trim()));
 
   // ── the merged tab ──
@@ -42,13 +45,10 @@ try{
   const t=await tabs();
   step('the Email tab bar has Pending, Compose, All email, Sequence — and NO "Outreach Plan"', /Sequence/.test(t.join('|')) && !/Outreach Plan/.test(t.join('|')), t.join('|'));
   await open('sequence');
-  const pills=await ev(()=>[...document.querySelectorAll('#content .rep-fgroup .rep-pill')].map(b=>b.textContent+(b.classList.contains('on')?'*':'')).join('|'));
-  step('the Sequence tab has three pills — Sequences (first) · My wording · AI style', pills==='Sequences*|My wording|AI style', pills);
-  await ev(()=>seqView('wording')); await page.waitForTimeout(300);
-  const w=await ev(()=>document.getElementById('content').innerText);
-  step('"My wording" is the old Outreach Plan editor: message styles, Outreach 1, the "how many follow-ups" choice (none until chosen, D-0114), and its live preview', /Message style/.test(w) && /Outreach 1/.test(w) && /How many follow-ups do you want/.test(w) && !!(await ev(()=>document.querySelector('#content .cmp-prev'))));
+  const seqTxt=await ev(()=>document.getElementById('content').innerText);
+  step('the Sequence tab is the list of sequences — no "My wording" / "AI style" pills (they live in the builder, D-0161)', !(await ev(()=>[...document.querySelectorAll('#content .rep-pill')].some(b=>/My wording|AI style/.test(b.textContent)))) && !/Message style/.test(seqTxt));
   await open('outreachplan');
-  step('an old "outreachplan" link still lands on My wording', await ev(()=>STATE.emailTab==='sequence' && STATE.seqView==='wording' && !!document.querySelector('#content .cmp-prev')));
+  step('an old "outreachplan" link still lands on the Sequence tab (never a blank page)', await ev(()=>STATE.emailTab==='sequence' && !!document.getElementById('content').innerText.trim()));
 
   // ── the AI-style card ──
   await open('sequence','style');

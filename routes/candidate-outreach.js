@@ -27,7 +27,8 @@
 const express = require('express');
 const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const aiProvider = require('../services/ai-provider');
-const gen = require('../services/candidate-outreach');
+const gen = require('../services/candidate-outreach')
+const candidateBrief = require('../services/candidate-brief');
 const matchEngine = require('../match-engine');
 const { emailSyntaxValid } = require('../email-validation');
 const contactPoints = require('../services/contact-points');
@@ -108,17 +109,9 @@ module.exports = (ctx) => {
   // said "2-3 years of field experience"; the rules brief did not).
   // One loader, called by both. Do not inline this again.
   function briefFor(job) {
-    if (!job) return null;
-    const raw = txt(job.outreach_brief);
-    if (raw) {
-      try {
-        const p = JSON.parse(raw);
-        if (p && txt(p.hook)) {
-          return { hook: p.hook, detail: p.detail, engine: job.outreach_brief_engine || 'rules' };
-        }
-      } catch (_) { /* fall through to the rules brief */ }
-    }
-    return gen.rulesJobBrief(job);
+    const b = candidateBrief.cachedBrief(job);
+    if (!b) return null;
+    return { hook: b.hook, detail: b.detail, engine: b.engine || 'rules' };
   }
 
   async function lastAiError(feature) {
@@ -631,52 +624,13 @@ module.exports = (ctx) => {
         .select('*').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
       if (!job) return res.status(404).json({ error: 'Job order not found' });
 
-      const rules = gen.rulesJobBrief(job);
-      const store = async (brief) => {
-        try {
-          await supabase.from('job_orders').update({
-            outreach_brief: JSON.stringify({ hook: brief.hook, detail: brief.detail }),
-            outreach_brief_at: new Date(),
-            outreach_brief_engine: brief.engine,
-          }).eq('id', job.id);
-        } catch (_) { /* caching is a saving, never the point of the request */ }
-      };
-
-      if (!(await aiProvider.isAvailable(supabase))) {
-        await store(rules);
-        return res.json({ ...rules, ai_available: false });
-      }
-
-      const system = gen.buildBriefSystemPrompt();
-      const ask = (prompt) => aiProvider.complete(supabase, {
-        maxTokens: 500, feature: 'candidate_brief', orgId: req.orgId, system, prompt,
-      });
-
-      // The job description is the one uncapped input here — a pasted or
-      // imported JD can be enormous. Trim the AI's copy; the rules writer still
-      // reads the fields, which is where the facts it uses actually live.
-      const payload = aiProvider.budget.trimToTokens(gen.buildBriefPayload(job), 2200);
-      const out = await ask(payload);
-      if (!out) {
-        await store(rules);
-        return res.json({ ...rules, ai_available: true, ai_error: 'ai_unavailable', ai_error_detail: await lastAiError('candidate_brief') });
-      }
-      const parsed = gen.parseBrief(out.text);
-      if (!parsed) {
-        await store(rules);
-        return res.json({ ...rules, ai_available: true, ai_error: 'ai_unparseable' });
-      }
-      // A brief is written once and then read by every candidate on this job, so
-      // it is checked once here rather than 25 times downstream. No repair turn:
-      // a second call per job is affordable, but the rules brief is a genuinely
-      // good answer and this is not prose a prospect judges us on.
-      const check = gen.checkBrief(parsed, job);
-      if (!check.ok) {
-        await store(rules);
-        return res.json({ ...rules, ai_available: true, ai_error: 'brief_rejected', violations: check.violations });
-      }
-      await store(parsed);
-      res.json({ ...parsed, ai_available: true, engine_model: out.model, engine_provider: out.provider });
+      // One home for writing and caching the brief (services/candidate-brief.js) — a candidate sequence uses it too (R-270).
+      const w = await candidateBrief.writeBrief({ supabase, aiProvider, job, orgId: req.orgId });
+      const out = { hook: w.brief.hook, detail: w.brief.detail, engine: w.brief.engine, ai_available: w.ai_available };
+      if (w.ai_error) { out.ai_error = w.ai_error; if (w.ai_error === 'ai_unavailable') out.ai_error_detail = await lastAiError('candidate_brief'); }
+      if (w.violations) out.violations = w.violations;
+      if (w.model) { out.engine_model = w.model; out.engine_provider = w.provider; }
+      res.json(Object.assign({}, w.brief, out));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

@@ -21,7 +21,11 @@
 
 const { EVENTS, on } = require('../../events');
 const dailyLimit = require('../../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
-const { fillTemplate } = require('../../email-vars');
+const { fillTemplate, renderStoredEmail, unresolvedVars } = require('../../email-vars');
+const sequenceV2 = require('../../services/sequence-v2');
+const candidateBrief = require('../../services/candidate-brief');
+const matchEngine = require('../../match-engine');
+const aiProvider = require('../../services/ai-provider');
 const { emailSyntaxValid } = require('../../email-validation');
 const contactPoints = require('../../services/contact-points');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
@@ -322,6 +326,17 @@ function defaultCandidateTemplate(job_order) {
 
 // candidate_email — sends to the candidate through the recruiter's connected
 // mailbox (same Graph path as sales outreach), respecting pause + a daily cap.
+// THE CANDIDATE WRITER FOR A SEQUENCE (R-270): one email for this person about this job, or null (then the written backup goes).
+// The brief is read from the job, or written by AI once and cached (services/candidate-brief.js — the screen uses the same).
+async function aiCandidateEmail({ candidate, job_order, orgId, signature }) {
+  try {
+    const brief = await candidateBrief.briefForSequence({ supabase, aiProvider, job: job_order, orgId });
+    let companyName = 'our team';
+    try { if (orgId) { const { data } = await supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(); if (data && data.name) companyName = data.name; } } catch (_) { /* the generic name */ }
+    return candidateBrief.candidateEmailFor({ candidate, job: job_order, brief, companyName, signature, rank: matchEngine.rankCandidates });
+  } catch (_) { return null; }
+}
+
 wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }) => {
   const { candidate, job_order, submission } = context;
   const cfg = step.config || {};
@@ -355,17 +370,26 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
 
   const tmpl = defaultCandidateTemplate(job_order);
   const vars = buildCandidateVars({ candidate, job_order });
-  const subject = fillTemplate(cfg.subject || tmpl.subject, vars);
-  const rendered = fillTemplate(cfg.body || tmpl.body, vars);
+  // Which email goes out — the step's words or a version, the AI's when switched on, the sender filled, holes refused (R-270).
+  // One callable rule: services/sequence-v2.js composeCandidateStep.
+  const signatureForAi = cfg.ai ? await filledSignature(mailbox, recruiterId) : null;
+  const composed = await sequenceV2.composeCandidateStep({ cfg, defaults: tmpl, vars, hasJob: !!job_order }, {
+    fill: fillTemplate,
+    render: (m) => renderStoredEmail({ subject: m.subject, body: m.body, from_email: mailbox.email_address }, mailbox),
+    unresolved: unresolvedVars,
+    aiWrite: () => aiCandidateEmail({ candidate, job_order, orgId: enrollment.org_id, signature: signatureForAi }),
+  });
+  if (!composed.ok) return { outcome: 'failed', detail: { error: composed.error } };
+  const subject = composed.subject, rendered = composed.body, jobPanel = composed.panelHtml, writtenBy = composed.writtenBy;
   try {
     // Tracked, exactly like the one-off POST /candidates/email path. Sequence
     // sends previously carried no pixel and wrote no email_tracking row, so they
     // were invisible: no opens, no replies, nothing on the candidate's profile —
     // and, because reply detection keys off email_tracking, no way for a reply
     // to stop the sequence.
-    const signature = await filledSignature(mailbox, recruiterId);
+    const signature = signatureForAi != null ? signatureForAi : await filledSignature(mailbox, recruiterId);
     const token = newTrackToken();
-    const htmlBody = injectTrackPixel(buildHtmlEmailBody(rendered, signature), token);
+    const htmlBody = injectTrackPixel(buildHtmlEmailBody(rendered, jobPanel + signature), token);
 
     const r = await sendMailboxNewMessage(mailbox, { to: candidate.email, subject, htmlBody });
 
@@ -389,7 +413,8 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
       submission_id: submission.id, job_order_id: job_order?.id || null, recruiter_id: recruiterId,
       action: 'sequence_email_sent', note: `${step.name}: emailed ${candidate.email}`
     });
-    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId, tracked: true } };
+    // the tracking token: Outreach Insights finds which sequence sent this email by it (R-278)
+    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId, tracked: true, written_by: writtenBy, token } };
   } catch (e) { return { outcome: 'failed', detail: { error: e.message } }; }
 }, { entity_types: ['submission', 'candidate'], label: 'Email the candidate', domains: ['recruiting'] });
 

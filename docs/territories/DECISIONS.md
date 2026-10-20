@@ -2186,3 +2186,23 @@ Owner, answering the ten questions on R-266…R-283:
 ### D-0159 — The new builder holds many named sequences (19 Oct 2026)
 
 Asked: the new builder stores ONE sequence per person; the old screen let a person keep many named ones. Owner chose **many named sequences**: the new builder gets a name and a list, "+ New sequence" adds another (for leads or for candidates), and the sending engine must know which sequence each lead is on. A structural change (R-269/R-270): existing sequences keep running untouched (D-0158).
+
+### D-0160 — Build the Today and Outreach Insights layouts as drawn (19 Oct 2026)
+
+Owner, on https://claude.ai/artifact/DF9nDByMp9grLCrBT2ggCo: "keep the layout as drawn". Today (BD Manager): four action numbers (replies waiting, emails out today / limit, new leads today, interviews today), ONE "Needs you" list (Needs you today + client conversations merged, filter chips), today's schedule, pipeline as linked counts, "Your team today" (only people who need a nudge). Charts move to Reports; the recruiting tiles and the second banner leave Today. Outreach Insights: sequence + date filters, five numbers once, one line chart (emailed / opened / replied, daily/weekly), a per-sequence table. Rule: each number lives in one place (R-278).
+
+### D-0161 — "My wording" and "AI style" move into the new builder (19 Oct 2026)
+
+Asked whether to remove the Email → Sequence sub-tabs "My wording" and "AI style" (the owner thought rewriting / teaching the AI covered them). Explained: "My wording" is the 8 Oct request (R-176, D-0111) for a DIFFERENT email per email ID of one person (two company identities) — AI rewriting cannot know which company an email ID speaks for. Owner chose: **remove both sub-tabs; the new builder gets "Same email for all my email IDs / A different one for each" (a tab per email ID), and AI style's writing instructions move into the builder's AI help. Nothing existing is lost** (R-285).
+
+### D-0162 — Batch 4 (email) defaults (19 Oct 2026)
+
+Offered three defaults; owner: "Okay work on batch 4 and ask me if any clarity is required" (no change asked). (1) Conversations show as THREADS by default (our replies inside, the latest message either way), with a switch back to single emails. (2) "All inboxes" lists only the email IDs a person can already open (their own + ones an admin gave them), each row labelled with its address — never a colleague's mailbox through it. (3) Schedule send: a date and time in the SCHEDULER's own time zone, shown with the zone name; scheduled emails and reminders share one "Scheduled" tab (D-0158 #2), each cancellable. Plus Unread and Draft tabs, the full formatting bar, reply-all on every message (D-0157 #1, pop-up windows kept).
+
+### D-0163 — Scheduled emails on the free server; the new table (19 Oct 2026)
+
+Told the owner a scheduled email cannot be on time on Render's free plan (the server sleeps; the GitHub wake-up arrives every 3–5 hours, so a 7:00 email can go at 10:30). Offered: build it and say so honestly / a free outside pinger every 10 min (risks the 750-hour budget) / a paid always-on instance. Owner: **"I will pay for server when I push it into production and live for other user."** So: build schedule send now; until the paid server, the schedule box says plainly that it goes on time while PACE is in use and otherwise when the server next wakes. No outside pinger. The new scheduled-sends table: **"Yes, add it at release"** — applied to the live database right before the release that uses it, after testing (this is that go-ahead; it covers this one table only).
+
+### D-0164 — Batches 3 and 4 approved for release; R-287 later (19 Oct 2026)
+
+Shown nine screenshots (Today, Outreach Insights, the job beside the candidate, the builder's follow-up choices, conversations, All inboxes, the full bar + Schedule, the Scheduled and Draft tabs). Owner: "Is anything off before it goes live? Nothing. Push it live." and "merge all the changes that's completed". Migration 067 applied before the merge (D-0163's go-ahead). R-287 (continue a Gmail / Outlook draft inside PACE): **"yes, build it later"** — PENDING, not now.

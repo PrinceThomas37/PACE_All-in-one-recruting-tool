@@ -8,6 +8,8 @@
 //     "Start from an example" works with no AI; an empty instruction is not sent;
 //   * "Edit a copy for this step" brings the saved template's words in;
 //   * the names the browser knows are exactly the names the server can fill.
+// Since D-0158 (19 Oct) a NEW sequence opens the new builder (sequence-builder-v2-ui-smoke); this window is the one an OLD
+// sequence still opens in (wfOpenLegacyBuilder), so its behaviour is still pinned here.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,7 +59,7 @@ try {
     STATE.emailSubj = 'Outreach one for {{pos}}'; STATE.emailBody = 'Hi {{fn}}, my own Outreach 1 words.';
     STATE.fu1Subj = 'Re: {{pos}}'; STATE.fu1Body = 'Hi {{fn}}, my follow-up words.';
     STATE.page = 'email'; STATE.emailTab = 'sequence';
-    wfOpenBuilder();
+    wfOpenLegacyBuilder();
   });
   await page.waitForSelector('.seq-modal');
   const sel = (q) => page.evaluate((s) => !!document.querySelector(s), q);
@@ -140,7 +142,7 @@ try {
   step('what is saved is the step\'s subject, body, template_key and thread — nothing screen-only leaks in', saved2 && cfgs.every(k => /^(body,subject,template_key,thread|body,subject,template_key)$/.test(k)) && !JSON.stringify(saved2[1]).includes('prompt') && !JSON.stringify(saved2[1]).includes('undo'), JSON.stringify(cfgs));
 
   // 8. switching back to a saved template drops the words — but undo keeps them
-  await page.evaluate(() => { wfOpenBuilder(); wfEmailMode(0, true); wfOwnText(0, 'subject', 'Kept {{pos}}'); wfOwnText(0, 'body', 'Hi {{fn}}, words I would not like to lose.'); wfEmailMode(0, false); });
+  await page.evaluate(() => { wfOpenLegacyBuilder(); wfEmailMode(0, true); wfOwnText(0, 'subject', 'Kept {{pos}}'); wfOwnText(0, 'body', 'Hi {{fn}}, words I would not like to lose.'); wfEmailMode(0, false); });
   step('switching back to a saved template removes the own words from the step…', await page.evaluate(() => !('subject' in STATE.wfBuilder.steps[0].config) && !('body' in STATE.wfBuilder.steps[0].config)));
   await page.evaluate(() => wfEmailMode(0, true));
   step('…and a blank own-text step saved untouched goes back to the saved template (never an empty email)', await page.evaluate(() => { const st = STATE.wfBuilder.steps[0]; st.config.subject = ''; st.config.body = ''; STATE.wfBuilder.name = 'x'; __posts.length = 0; wfSaveDefinition(); const sent = __posts[0]; return sent && !('subject' in sent[1].steps[0].config) && sent[1].steps[0].config.template_key; }));
@@ -166,10 +168,11 @@ try {
   await page.waitForSelector('.seq-modal');
   step('a sequence with nobody in it has no warning and a normal Save', await page.evaluate(() => !document.querySelector('.wf-lock') && !document.querySelector('.wf-save-new') && [...document.querySelectorAll('.seq-modal .mf button')].some(x => x.textContent.trim() === 'Save' && !x.disabled)));
   // last, because it closes the window: Edit my wording opens that wording, with its live preview (R-146)
-  step('"Edit my wording" closes the window and opens that wording with its live preview (R-146)', await page.evaluate(() => {
+  // Since D-0161 / R-286 the person's own wording is edited in the sequence builder (the old Email → My wording tab is gone).
+  step('"Edit my wording" closes the window and opens the person\'s wording in the sequence builder (R-146 → R-286)', await page.evaluate(() => {
     const b = [...document.querySelectorAll('.seq-body button')].find(x => /Edit my wording/.test(x.textContent)); if (!b) return false;
     b.click();
-    return !STATE.wfBuilder && STATE.emailTab === 'sequence' && STATE.seqView === 'wording' && !!STATE.activeTmpl;
+    return !STATE.wfBuilder && STATE.page === 'seqsetup';
   }));
   step('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();

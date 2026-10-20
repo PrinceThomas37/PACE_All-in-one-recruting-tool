@@ -18,14 +18,24 @@
     return { ids:getMyJobs(STATE.user).filter(open).map(function(j){return j.id;}), selected:false, ticked:0 };
   }
 
-  // The automatic split: each email ID in proportion to the room it has left today (every one equal when none has any).
+  // The starting split: EQUAL across every email ID (owner, 19 Oct, D-0158: "by default all are selected and leads are equally
+  // distributed"); what does not divide evenly goes one each to the first IDs. An email ID is never started above its daily limit
+  // ("the math should always be correct"): its share stops there and the rest goes to the others. If together they cannot take
+  // them all, the line says so ("Given out: 10 of 12") and Assign stays off. The person can change any number.
   function suggest(mbs,n){
-    var out={}, total=mbs.reduce(function(s,m){return s+Math.max(0,m.room);},0), given=0;
-    mbs.forEach(function(m){ out[m.id]=total>0?Math.round(Math.max(0,m.room)/total*n):Math.floor(n/mbs.length); given+=out[m.id]; });
-    var i=0; while(given<n){ out[mbs[i%mbs.length].id]++; given++; i++; }
-    i=0; while(given>n){ var m=mbs[i%mbs.length]; if(out[m.id]>0){ out[m.id]--; given--; } i++; }
+    var out={}, cap=function(m){ return m.limit==null?Infinity:Math.max(0,Number(m.limit)||0); };
+    mbs.forEach(function(m){ out[m.id]=0; });
+    var left=n, open=mbs.filter(function(m){ return cap(m)>0; });
+    while(left>0&&open.length){
+      var share=Math.floor(left/open.length)||1;
+      open.forEach(function(m){ if(left<=0) return; var give=Math.min(share,cap(m)-out[m.id],left); out[m.id]+=give; left-=give; });
+      open=open.filter(function(m){ return out[m.id]<cap(m); });
+    }
     return out;
   }
+  // The math must be right (D-0158): no email ID may be given more leads than it can send in a day (its limit, set by the admin).
+  // The server refuses the same split (services/lead-distribution.js allocationQueue).
+  function overLimit(a){ return (a.mbs||[]).filter(function(m){ return m.limit!=null && (Number(a.counts[m.id])||0) > m.limit; }); }
   function allocated(a){ return (a.mbs||[]).reduce(function(s,m){ return s+(Number(a.counts[m.id])||0); },0); }
   function personName(a){ var p=(a.people||[]).filter(function(x){return x.id===a.to;})[0]; return p?(p.is_me?'yourself':p.name):''; }
   function sentence(a){
@@ -56,8 +66,9 @@
   // Typing never repaints: it updates the totals line and the button in place.
   function liveRefresh(){
     var a=A(), sum=document.getElementById('as-sum'), btn=document.getElementById('as-go'), say=document.getElementById('as-say');
-    var ok=allocated(a)===a.n&&a.n>=1;
-    if(sum){ sum.textContent='Given out: '+allocated(a)+' of '+a.n; sum.className='fs-12_5 '+(ok?'c-text2':'c-red'); }
+    var over=overLimit(a), ok=allocated(a)===a.n&&a.n>=1&&!over.length;
+    if(sum){ sum.textContent='Given out: '+allocated(a)+' of '+a.n+(over.length?' — '+over.map(function(m){ return m.email+' can send '+m.limit+' a day'; }).join('; '):''); sum.className='fs-12_5 '+(ok?'c-text2':'c-red'); }
+    (a.mbs||[]).forEach(function(m){ var n=document.getElementById('as-over-'+m.id); if(n) n.hidden=!((Number(a.counts[m.id])||0)>m.limit); });
     if(btn) btn.disabled=!ok||a.busy;
     if(say) say.textContent=ok?sentence(a):'';
   }
@@ -70,7 +81,7 @@
   window.assignAuto=function(){ var a=A(); if(!a.mbs||!a.mbs.length) return; a.counts=suggest(a.mbs,a.n); STATE.modal=draw(); render(); };
   window.assignClose=function(){ STATE.assignWin=undefined; closeModal(); };
   window.assignGo=function(){
-    var a=A(); if(a.busy||allocated(a)!==a.n) return;
+    var a=A(); if(a.busy||allocated(a)!==a.n||overLimit(a).length) return;
     var alloc=(a.mbs||[]).map(function(m){ return { mailbox_id:m.id, count:Number(a.counts[m.id])||0 }; }).filter(function(x){return x.count>0;});
     a.busy=true; a.err=''; STATE.modal=draw(); render();
     apiPost('/leads/assign',{ job_ids:a.ids.slice(0,a.n), to_user_id:a.to, allocation:alloc }).then(function(r){
@@ -99,18 +110,18 @@
       if(a.mbs===null) mbPart='<div class="fs-12_5 c-text3">Loading their email IDs…</div>';
       else if(!a.mbs.length) mbPart='<div class="fs-12_5 c-red" role="alert">'+esc(a.mbErr||'They have no connected email ID.')+'</div>';
       else mbPart=a.mbs.map(function(m){
-        var c=Number(a.counts[m.id])||0, over=c>m.room;
-        return '<div class="as-row"><div class="as-who"><div class="fs-13">'+esc(m.email)+'</div><div class="fs-12 c-text3">can send '+m.room+' more today</div></div>'+
-          '<input id="as-n-'+escAttr(m.id)+'" class="inp as-n" type="number" min="0" max="'+a.n+'" value="'+c+'" oninput="assignCount(\''+escAttr(m.id)+'\',this)" aria-label="Leads from '+escAttr(m.email)+'">'+
-          (over?'<div class="fs-12 c-text3 as-note">the rest wait for a later day</div>':'')+'</div>';
-      }).join('')+'<div class="fs-12 c-text3">Giving more than a mailbox can send today is allowed — the extra emails simply go out on a later day.</div>';
+        var c=Number(a.counts[m.id])||0, over=m.limit!=null&&c>m.limit;
+        return '<div class="as-row"><div class="as-who"><div class="fs-13">'+esc(m.email)+'</div><div class="fs-12 c-text3">sends up to '+m.limit+' a day · '+m.room+' left today</div></div>'+
+          '<input id="as-n-'+escAttr(m.id)+'" class="inp as-n" type="number" min="0" max="'+(m.limit!=null?Math.min(a.n,m.limit):a.n)+'" value="'+c+'" oninput="assignCount(\''+escAttr(m.id)+'\',this)" aria-label="Leads from '+escAttr(m.email)+'">'+
+          '<div id="as-over-'+escAttr(m.id)+'" class="fs-12 c-red as-note" role="alert"'+(over?'':' hidden')+'>more than it can send in a day ('+m.limit+')</div></div>';
+      }).join('')+'<div class="fs-12 c-text3">The numbers must add up to the leads being handed out, and no email ID can be given more than it sends in a day.</div>';
       var many=a.ids.length>1?('<label class="fs-12_5 c-text2" for="as-many">How many of the '+a.ids.length+'?</label> <input id="as-many" class="inp as-n" type="number" min="1" max="'+a.ids.length+'" value="'+a.n+'" oninput="assignHowMany(this)">'):'';
-      var ok=a.mbs&&a.mbs.length&&allocated(a)===a.n&&a.n>=1;
+      var ok=a.mbs&&a.mbs.length&&allocated(a)===a.n&&a.n>=1&&!overLimit(a).length;
       body='<div class="fs-13 c-text2" style="margin-bottom:10px">'+(a.selected?'The leads you ticked that are still Unassigned':'Every Unassigned lead you can see')+': <b>'+a.ids.length+'</b>.</div>'+
         '<div class="fd-label">Give them to</div>'+peopleSel+
         (many?'<div style="margin:10px 0">'+many+'</div>':'')+
         '<div class="fd-label" style="margin-top:12px">Send from — how many go from each email ID</div>'+mbPart+
-        (a.mbs&&a.mbs.length?'<div class="as-sumline"><span id="as-sum" class="fs-12_5 '+(ok?'c-text2':'c-red')+'">Given out: '+allocated(a)+' of '+a.n+'</span> <button class="btn btn-xs btn-outline" onclick="assignAuto()">Spread automatically</button></div>':'')+
+        (a.mbs&&a.mbs.length?'<div class="as-sumline"><span id="as-sum" class="fs-12_5 '+(ok?'c-text2':'c-red')+'">Given out: '+allocated(a)+' of '+a.n+'</span> <button class="btn btn-xs btn-outline" onclick="assignAuto()">Split equally</button></div>':'')+
         '<div id="as-say" class="fs-13 as-say">'+(ok?esc(sentence(a)):'')+'</div>'+
         (a.err?'<div class="c-red fs-13" role="alert" style="margin-top:8px">'+esc(a.err)+'</div>':'')+
         '<div class="fs-12 c-text3" style="margin-top:8px">Handing leads out only makes them theirs. Nothing is sent. A lead that already has an owner is never moved from here.</div>';

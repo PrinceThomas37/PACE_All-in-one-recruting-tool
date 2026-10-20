@@ -6,6 +6,7 @@
 // ============================================================================
 const express = require('express');
 const own = require('../services/ownership');
+const sequenceV2 = require('../services/sequence-v2');
 const aiProvider = require('../services/ai-provider');
 const sequenceDraft = require('../services/sequence-draft');
 const aiStyle = require('../services/ai-style');
@@ -283,6 +284,9 @@ module.exports = (ctx) => {
       const b = req.body || {};
       if (!b.name) return res.status(400).json({ error: 'name required' });
       const steps = normalizeSteps(b.steps);
+      // A sequence written in the new builder is checked here, where a hole in an email can still be fixed (R-269).
+      const v2Problem = sequenceV2.problem(steps, b.entity_type || 'contact');
+      if (v2Problem) return res.status(400).json({ error: v2Problem });
       // C-0022: this used to look up the org by the hard-coded slug 'fute',
       // or trust a body-supplied `org_id` — either way every new sequence
       // filed under one customer's org (or whichever org a caller named),
@@ -321,6 +325,9 @@ module.exports = (ctx) => {
           .select('id', { count: 'exact', head: true }).eq('workflow_id', req.params.id).eq('status', 'active');
         if (count > 0) return res.status(409).json({ error: `Workflow has ${count} active enrollment(s) — exit or complete them before editing steps.` });
         const steps = normalizeSteps(b.steps);
+        const { data: kind } = await supabase.from('workflow_definitions').select('entity_type').eq('id', req.params.id).maybeSingle();
+        const v2Problem = sequenceV2.problem(steps, (kind && kind.entity_type) || 'contact');
+        if (v2Problem) return res.status(400).json({ error: v2Problem });
         await supabase.from('workflow_steps').delete().eq('workflow_id', req.params.id);
         const { error: stErr } = await supabase.from('workflow_steps')
           .insert(steps.map(s => ({ ...s, workflow_id: req.params.id, ...orgStamp(req) })));

@@ -63,6 +63,8 @@ const TENANT_TABLES = new Set([
   'recruiting_lookups',
   'reminders',
   'reports',
+  // Migration 067 — emails scheduled to send later from the in-app mailbox (R-273, D-0163).
+  'scheduled_sends',
   'reviews',
   'sourced_jobs_raw',
   'sourcing_candidates',

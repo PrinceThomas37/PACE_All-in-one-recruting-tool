@@ -862,6 +862,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   color:var(--text);
 }
 html :where(#content :where(
+  .td-tile,.oi-tile,
   .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,.fd-block-box,.ms-box,.ms-preview,.ms-tag,.ms-step,.ms-toolbar,.ms-tb,.ms-tb-sel,
   .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
   .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,
@@ -1162,6 +1163,10 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .sq-between{justify-content:space-between;margin-top:0}
 .sq-nav{display:flex;justify-content:space-between;gap:12px;margin-top:4px}
 .sq-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+/* R-286: a follow-up's "same thread / new email" choice and the Rewrite / spam-check row, kept from the old My wording tab. */
+.sq-thread{margin:4px 0 12px}
+.sq-thread .sq-choice{padding:10px 12px}
+.sq-tools{margin-top:6px}
 .sq-choice{display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;color:var(--text);background:var(--card);border:2px solid var(--ctl-brd);border-radius:0;padding:14px 16px;cursor:pointer}
 .sq-choice b{font-size:15px;font-weight:700}
 .sq-choice span{font-size:13px;color:var(--text2)}
@@ -1220,3 +1225,84 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .setup-steps{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:12px}
 .setup-step{display:flex;gap:12px;align-items:flex-start}
 .setup-step-n{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:2px solid var(--ctl-brd,var(--border2));font-weight:700}
+.wf-who-row{display:flex;gap:10px;flex-wrap:wrap}
+/* Email → Sequence: the list of sequences (R-269) */
+.wf-seq-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.wf-seq{padding:14px 16px;margin-bottom:10px}
+.wf-seq-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.wf-seq-name{font-weight:700;margin-bottom:2px}
+.wf-seq-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wf-seq-empty{padding:10px 2px 14px}
+/* Candidate drawer: the job it was opened from, beside the person (R-275); stage-change notes in Notes */
+.cp-job{margin:12px 16px 4px;padding:12px 14px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));display:flex;flex-direction:column;gap:6px}
+.cp-job-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.cp-job-title{font-weight:700;min-width:0}
+.cp-job-jd{white-space:pre-wrap;max-height:200px;overflow:auto;padding:8px 10px;margin-top:4px;background:var(--bg);border:1px solid var(--border);line-height:1.5}
+.cp-stagenote{padding:9px 4px;border-bottom:1px solid var(--border)}
+.cp-note-body{margin-top:3px;white-space:pre-wrap}
+/* Today for a manager (R-278, D-0160): four action numbers, one "Needs you" list, schedule, pipeline, team */
+.td-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.td-tile{display:flex;flex-direction:column;gap:4px;padding:14px 16px;background:var(--card-solid,var(--card));border:2px solid var(--ctl-brd,var(--border2));box-shadow:3px 3px 0 var(--ctl-brd,var(--border2));color:var(--text);text-decoration:none}
+.td-tile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.td-n{font-size:30px;font-weight:700;line-height:1.1}
+.td-n.is-hot{color:var(--red)}
+.td-n.is-accent{color:var(--accent)}
+.td-of{font-size:16px;font-weight:500;color:var(--text3)}
+.td-l{font-size:13px;font-weight:600}
+.td-s{font-size:12px;color:var(--text3)}
+.td-cols{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;margin-bottom:18px}
+.td-needs{flex:999 1 560px;min-width:0;padding:0;overflow:hidden}
+.td-side{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:18px}
+.td-card{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.td-h{font-family:var(--pixel,inherit);font-size:14px;letter-spacing:1px;font-weight:700}
+.td-needs-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px}
+.td-chips{display:flex;gap:6px;flex-wrap:wrap}
+.td-chip{font:inherit;font-size:12px;padding:6px 10px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
+.td-chip.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}
+.td-empty{padding:4px 16px 16px}
+.td-conv{border-top:1px solid var(--border);padding:0 14px}
+.td-sched{display:flex;gap:12px;font-size:13px}
+.td-time{flex:none;width:64px;font-weight:700}
+.td-prow{display:flex;flex-direction:column;gap:6px}
+.td-plabel{font-size:12px;font-weight:700;color:var(--text3)}
+.td-pline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.td-plink{font-weight:600}
+.td-team{padding:0 0 12px;margin-bottom:18px}
+.td-scroll{overflow-x:auto;padding:0 16px}
+.td-table{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+.td-table th{text-align:left;font-size:12px;color:var(--text3);padding:6px 8px}
+.td-table td{padding:8px;border-top:1px solid var(--border)}
+.td-hot{color:var(--red);font-weight:700}
+@media (max-width:860px){.td-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Outreach Insights — sequence analytics (R-278, D-0160) */
+.oi-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.oi-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.oi-f{display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:600;color:var(--text3)}
+.oi-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.oi-tile{display:flex;flex-direction:column;gap:2px;padding:12px 14px;background:var(--card-solid,var(--card));border:2px solid var(--ctl-brd,var(--border2));box-shadow:3px 3px 0 var(--ctl-brd,var(--border2))}
+.oi-n{font-size:26px;font-weight:700;line-height:1.1}
+.oi-l{font-size:13px;font-weight:600}
+.oi-s{font-size:12px;color:var(--text3)}
+.oi-card{padding:16px 18px;margin-bottom:18px;display:flex;flex-direction:column;gap:12px}
+.oi-chart-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.oi-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;font-weight:600}
+.oi-legend span{display:flex;align-items:center;gap:6px}
+.oi-key{display:inline-block;width:14px;height:4px}
+.oi-key.oi-emailed{background:var(--accent)}.oi-key.oi-opened{background:var(--amber)}.oi-key.oi-replied{background:var(--green)}
+.oi-seg{display:flex}
+.oi-segb{font:inherit;font-size:12px;padding:6px 12px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
+.oi-segb+.oi-segb{border-left:0}
+.oi-segb.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}
+.oi-chart{width:100%;height:auto;display:block}
+.oi-line{stroke-width:3}
+.oi-line.oi-emailed{stroke:var(--accent)}.oi-line.oi-opened{stroke:var(--amber)}.oi-line.oi-replied{stroke:var(--green)}
+.oi-grid{stroke:var(--border)}
+.oi-axis{stroke:var(--text);stroke-width:2}
+.oi-ax{fill:var(--text3);font-size:12px}
+.oi-hit{fill:transparent;cursor:default}
+.oi-hit:hover{fill:var(--accent)}
+@media (max-width:860px){.oi-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Builder: one email per email ID (R-285) */
+.sq-mbtabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.sq-mbtab{font:inherit;font-size:12.5px;padding:7px 10px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
+.sq-mbtab.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}

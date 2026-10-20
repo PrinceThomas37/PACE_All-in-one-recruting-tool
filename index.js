@@ -1,6 +1,7 @@
 require('dotenv').config();
 const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
 const sequenceTemplates = require('./services/sequence-templates');
+const sequenceV2 = require('./services/sequence-v2');
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
@@ -3951,6 +3952,8 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   // 'o1' — see services/sequence-templates.js (it used to look up 'initial_*',
   // which never existed, so a sequence's first email could not be written).
   let subjTmpl = cfg.subject, bodyTmpl = cfg.body;
+  // A step written in the new builder may carry versions: one is picked at random for each lead (R-269).
+  if (subjTmpl && bodyTmpl && Array.isArray(cfg.versions) && cfg.versions.length) { const v = sequenceV2.pickVersion(cfg); subjTmpl = v.subject; bodyTmpl = v.body; }
   if (!subjTmpl || !bodyTmpl) {
     const { data: settingsRows } = await supabase.from('app_settings').select('key,value')
       .in('key', sequenceTemplates.settingKeys(bdId, key, mailbox && mailbox.id));
@@ -3962,7 +3965,8 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   if (!subjTmpl || !bodyTmpl) return { outcome: 'failed', detail: { error: `No template for key "${key}"` } };
 
   // fu1/fu2 thread as replies in the send path; anything else goes out fresh.
-  const followupType = cfg.thread && (key === 'fu1' || key === 'fu2') ? key : (key === 'initial' ? null : 'reminder');
+  // Follow-ups 1–5 thread as replies (the leads engine threads all five since D-0113; this said only 1–2).
+  const followupType = cfg.thread && /^fu[1-5]$/.test(key) ? key : (key === 'initial' ? null : 'reminder');
   const row = {
     contact_id: contact.id, job_id: job.id, to_email: contact.email,
     from_email: mailbox.email_address || null,
@@ -4137,6 +4141,32 @@ engineRunner.register('storage_orphan_cleanup', {
     return r;
   }
 });
+
+// ── SCHEDULE SEND (R-273, D-0163) ─────────────────────────────────────────
+// Emails a person scheduled from the in-app mailbox go out through the SAME send path as its Send button
+// (services/mailbox-send.js), from the mailbox they chose, when their time comes — checked every pass of the engine. On the free
+// server that is whenever PACE is awake (in use, or the heartbeat); the screen says so. A row a dead process left at 'sending'
+// is told plainly at boot and never re-sent.
+const scheduledSends = require('./services/scheduled-sends').createScheduledSends({
+  table: () => db.crossOrg('scheduled_sends'),
+  mailboxes: () => db.crossOrg('user_emails'),
+  sender: require('./services/mailbox-send').createMailboxSender({
+    mail: require('./services/mail-provider').createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider }),
+    gmailProvider, sendMicrosoftNewMessage, buildHtmlEmailBody, getMailboxSignature,
+  }),
+});
+engineRunner.register('scheduled_sends', {
+  everyMs: 60 * 1000,
+  quiet: true,               // usually nothing is due
+  description: 'Send the emails people scheduled from the inbox, once their time has come',
+  run: () => scheduledSends.runDue()
+});
+setTimeout(() => {
+  scheduledSends.recoverStuck().catch((err) => {
+    // Before migration 067 the table does not exist — nothing to recover.
+    if (!/scheduled_sends|relation|schema cache/i.test(String(err && err.message))) console.error('[scheduled_sends] recover failed:', err.message);
+  });
+}, 30 * 1000);
 
 engineRunner.register('candidate_outreach_drip', {
   everyMs: 10 * 60 * 1000,

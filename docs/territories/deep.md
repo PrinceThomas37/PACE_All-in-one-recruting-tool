@@ -377,3 +377,7 @@ Read back from the live database: `contacts_email_status_check` = valid, invalid
 ## 2026-10-14 (Session 45) — migrations 065 and 066 WRITTEN, NOT APPLIED
 `065_job_pay_period.sql`: `job_orders.pay_period TEXT` (nullable). `066_lead_auto_replied.sql`: `jobs.auto_replied_at TIMESTAMPTZ` (nullable). Both are one `ADD COLUMN IF NOT EXISTS`, rewrite nothing. 065 is used by explicit select lists (job-orders browse) — apply it BEFORE merging; 066 is written to degrade (no tag until applied, lead still not moved). Next migration: 067.
 
+## 2026-10-19 (Session 50) — migration 067 WRITTEN, NOT APPLIED
+`067_scheduled_sends.sql`: new table `scheduled_sends` (org_id, user_id, mailbox_id → user_emails ON DELETE CASCADE, kind new/reply/forward, message_id, payload jsonb, send_at, timezone, status scheduled/sending/sent/failed/cancelled, error, sent_at), two indexes, RLS + service_role policy. Added to `models/tables.js` (TENANT_TABLES = 50; models-smoke pins it). Owner's go-ahead (D-0163): apply right before the release that uses it, after testing. Next migration: 068.
+## 2026-10-20 (Session 50) — migration 067 APPLIED
+The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was cancelled at the permission step three times). Read back: `scheduled_sends` with its 14 columns, row security on. Next migration: 068.
