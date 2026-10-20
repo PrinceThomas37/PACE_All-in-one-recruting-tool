@@ -2,7 +2,15 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-20 (Session 50 closing). **Highest ids:** decision **D-0164** · contract C-0038 · roadmap **R-287** (next `R-288`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
+**Updated**: 2026-10-20 (Session 51 closing). **Highest ids:** decision **D-0168** · contract C-0038 · roadmap **R-299** (next `R-300`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
+
+## START HERE (Session 51, 20 Oct) — what is live, what waits
+
+**LIVE (owner approved, merged, deployed):** #353 (keys per company R-067, PACE operator role R-049, per-company emergency stop, org bounces R-243) · #354 (server-waking message + retry, whole-percent Assign, Assign skips contact-less leads R-289, Needs-you rules R-290, speed/memory R-291 part 1 incl. the reply-sweep change) · #355 (continue AND save Gmail/Outlook drafts R-287, per-company AI diagnostics R-288a, Find leads list no longer times out + search + expiry note R-293, outside click minimises a message window R-294, Conversations switch, recruiter Sequence tab + optional My Setup step R-295, "Rejected lead" chip, client digest chunks parallel). Reply sweep: ~15 s (was 54–155 s), first runs error-free; **a real reply caught by the new code is not yet seen — check, revert the sweep change if one is missed.** Save/Continue draft are fakes-only tested: owner's first live try is the test.
+**DRAFT, NOT MERGED (owner rule D-0167: never merge unless the owner says so, every time):** PR #356 = database-move tooling (`scripts/db-move/`, `.github/workflows/db-move.yml`, runbook, `test/db-move-guards-smoke.mjs`). Its full Node 22 + 26 runs were killed twice by server restarts and are NOT complete — rerun before it is ever offered for merge.
+**THE PLAN (D-0168, pending the owner's word "Singapore"):** one move next month into the PACE accounts, Singapore for server + database; domain `paceconsultant.in` exists and `app.paceconsultant.in` serves the app. No Ohio stopgap.
+**Waiting on the owner:** (1) "Singapore" for both; (2) yes to set `PUBLIC_BASE_URL=https://app.paceconsultant.in` on Render (R-296); (3) reconnect `ash@futeglobal.com` and `ash@vhcstaffing.com` Gmail (R-298); (4) try Save draft / Continue writing and Find leads on the live app; (5) older items below (OPERATOR_EMAILS before a second company, Apollo questions to send, R-205 key, paid always-on server).
+**Ready when asked:** R-297 region setting in the copy tool; R-299 slim jobs list; R-288b `OPERATOR_EMAILS`.
 
 ## START HERE (Session 50, 19–20 Oct) — the owner's "Changes to be done next" doc
 
