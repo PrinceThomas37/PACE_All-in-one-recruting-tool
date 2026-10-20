@@ -57,11 +57,11 @@ await t('a limits record that cannot be written never throws', async () => {
 console.log('\nAI provider limits — wiring');
 const src = readFileSync(new URL('../services/ai-provider.js', import.meta.url), 'utf8');
 await t('both the feature path and the health test record limits BEFORE the ok check (a 429 carries them too)', () => {
-  const hits = src.match(/await recordLimits\(supabase, entry\.id, model, response\.headers\);\n\s*if \(!response\.ok\)/g) || [];
+  const hits = src.match(/await recordLimits\(supabase, entry\.id, model, response\.headers, Date\.now\(\), opts\.orgId\);\n\s*if \(!response\.ok\)/g) || [];
   assert.equal(hits.length, 2, 'found ' + hits.length);
 });
 await t('the AI budget endpoint returns provider_limits', () => {
-  assert.match(readFileSync(new URL('../routes/integrations.js', import.meta.url), 'utf8'), /provider_limits: await aiProvider\.getProviderLimits\(supabase\)/);
+  assert.match(readFileSync(new URL('../routes/integrations.js', import.meta.url), 'utf8'), /provider_limits: await aiProvider\.getProviderLimits\(supabase, req\.orgId\)/);
 });
 await t('the AI card draws the block', () => {
   const page = readFileSync(new URL('../public/js/08-page-admin.js', import.meta.url), 'utf8');
