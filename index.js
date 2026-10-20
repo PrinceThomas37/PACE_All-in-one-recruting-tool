@@ -3373,29 +3373,33 @@ async function sweepGmailReplies(tokenRow, ownAddresses) {
   const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
   const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 
-  // Gmail's search takes whole days, so this over-fetches slightly rather than
-  // risking a miss at the boundary; the `since` comparison below is exact and
-  // per-message dedup is handled by replied_at/last_reply_at already being set.
-  const afterDay = new Date(Math.max(0, Date.parse(since) - 24 * 3600 * 1000))
-    .toISOString().slice(0, 10).replace(/-/g, '/');
+  // THE SEARCH IS NOW EXACT (20 Oct). It used to ask Gmail for `after:<the day before since>` — whole days — and then download
+  // up to 50 FULL messages and throw away the ones older than `since`. With 14 mailboxes that was hundreds of full downloads every
+  // 30 minutes, ~60-100 s of the one server process and, with the bodies of a busy inbox held in memory together, the 400-500 MB
+  // spikes that hit Render's 512 MB limit and restart the server (the "<!DOCTYPE … is not valid JSON" errors). Gmail's `after:`
+  // takes a Unix time in seconds, so only mail that really is newer is listed and downloaded. The `since` comparison below stays
+  // (a message in the same second is offered again and ignored), and per-message dedup is still replied_at / last_reply_at.
+  const afterSec = Math.max(0, Math.floor(Date.parse(since) / 1000) || 0);
   let heads;
   try {
     heads = await gmailProvider.listMessages(tokenRow.user_email_id, {
-      labelIds: ['INBOX'], q: `after:${afterDay}`, maxResults: 50,
+      labelIds: ['INBOX'], q: `after:${afterSec}`, maxResults: 50,
     });
   } catch (e) { console.error(`[ReplySweep/gmail] list for ${tokenRow.email_address}: ${e.message}`); return 0; }
 
-  const messages = [];
+  // ONE MESSAGE AT A TIME: each is downloaded, handled and let go — never 50 bodies held together.
+  let detected = 0, newest = since;
   for (const h of (heads || [])) {
+    let norm = null;
     try {
       const raw = await gmailProvider.getMessage(tokenRow.user_email_id, h.id, { format: 'full' });
-      const norm = gmailProvider.normalizeMessage(raw);
-      // Re-apply the exact `since` bound the day-granular query could not.
-      if (norm && (!since || norm.receivedDateTime > since)) messages.push(norm);
-    } catch (_) { /* one unreadable message must not end the sweep */ }
+      norm = gmailProvider.normalizeMessage(raw);
+    } catch (_) { continue; /* one unreadable message must not end the sweep */ }
+    if (!norm || (since && !(norm.receivedDateTime > since))) continue;    // the exact bound
+    const r = await processInboundMessages([norm], ownAddresses, tokenRow, newest);
+    detected += r.detected;
+    if (r.newest > newest) newest = r.newest;
   }
-
-  const { detected, newest } = await processInboundMessages(messages, ownAddresses, tokenRow, since);
   await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
   return detected;
 }

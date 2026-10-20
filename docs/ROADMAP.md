@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-10-08 (Session 42) · **Next id**: `R-291` (R-060 is PR #254's, another chat) · **Artifact**:
+**Updated**: 2026-10-08 (Session 42) · **Next id**: `R-292` (R-060 is PR #254's, another chat) · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -377,3 +377,4 @@ Kept, never deleted (rule 4): who dropped it and when.
 
 | `R-289` | **Assign must not hand out leads nobody can write to** (owner 20 Oct, after 85 contact-less leads were assigned and no email could be written: "yes" to the warning). | DONE on the dev branch (PR #354, not merged): pool count `without_people`, Assign window/page/toast warn, server skips and says `skipped_no_people`. `assign-needs-people-smoke`. |
 | `R-290` | **"Needs you today" rule changes** (owner 20 Oct): a reply is owed only once their email is 4+ days old (admin setting, default 4); a silence older than 45 days shows as a lower-priority nudge instead of being hidden; promise-due and reminder-due unchanged; opt-outs/clear "no" stay hidden. Owner asked to be shown the rules again. | DONE on the dev branch 20 Oct (PR #354, not merged) — built on the owner's "do this change"; readings used: owed once their email is 4+ days old; 45+ day silence = quiet nudge. `needs-you-rules-smoke` 21. |
+| `R-291` | **The app is slow and the server keeps restarting** (owner 20 Oct: every mail list / email open / lead page 2-3 s; colleague complained too; "<!DOCTYPE" JSON errors). | **Part 1 DONE on the dev branch (PR #354, not merged):** Gmail token cache, mailbox gate in one round trip, reply sweep reads only new mail one at a time (`mail-speed-smoke`). **Part 2 PENDING, owner's call:** move the Supabase database from Seoul to US East (Ohio) — same region as the server, ~200 ms -> ~2 ms per query, free; a migration with a short downtime and a key swap on Render. **Part 3 PENDING:** audit the lead page and /jobs for sequential queries and memory; an always-on paid Render plan with MORE than 512 MB (the cheapest paid plan has the same 512 MB). |

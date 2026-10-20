@@ -75,9 +75,16 @@ module.exports = (ctx) => {
   //         is a fixable state and must not read as an error
   async function ownedMailbox(req, mailboxId) {
     if (!mailboxId) return { error: { status: 400, body: { error: 'mailbox id required' } } };
-    const { data: mb } = await supabase.from('user_emails')
-      .select('id,user_id,org_id,email_address,display_name,platform,is_active,is_primary')
-      .eq('id', mailboxId).maybeSingle();
+    // ONE round trip, not two (20 Oct): the database is in Seoul and the server in Ohio, so every sequential query costs ~200 ms.
+    // The mailbox row and "is it connected?" are asked together; which token table matters is only known from the row, so BOTH
+    // tables are asked and the right one is read afterwards.
+    const [{ data: mb }, gTok, mTok] = await Promise.all([
+      supabase.from('user_emails')
+        .select('id,user_id,org_id,email_address,display_name,platform,is_active,is_primary')
+        .eq('id', mailboxId).maybeSingle(),
+      supabase.from('gmail_tokens').select('user_email_id').eq('user_email_id', mailboxId).maybeSingle(),
+      supabase.from('microsoft_tokens').select('user_email_id').eq('user_email_id', mailboxId).maybeSingle(),
+    ]);
     if (!mb || mb.user_id !== req.user.id) {
       return { error: { status: 404, body: { error: 'Mailbox not found' } } };
     }
@@ -96,9 +103,7 @@ module.exports = (ctx) => {
     if (String(mb.platform || '').toLowerCase() === 'smtp') {
       return { error: { status: 409, body: { error: 'The in-app inbox is not available for app-password mailboxes yet. Read this mailbox in its own webmail — PACE still sends from it and notices replies.', code: 'not_supported' } } };
     }
-    const tokenTable = mb.platform === 'Gmail' ? 'gmail_tokens' : 'microsoft_tokens';
-    const { data: tok } = await supabase.from(tokenTable)
-      .select('user_email_id').eq('user_email_id', mb.id).maybeSingle();
+    const tok = (mb.platform === 'Gmail' ? gTok : mTok).data;
     if (!tok) {
       return { error: { status: 409, body: { error: 'This mailbox is not connected', code: 'not_connected' } } };
     }
