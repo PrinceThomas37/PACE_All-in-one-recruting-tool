@@ -277,6 +277,16 @@ step('Rhea\'s cards, best first, each with the add-rule answer', r.out.cards.len
 step('a card shows what Apollo said (website, phone, place) and the reasons it ranked, as plain chips', r.out.cards[0].phone === '+1 254-555-0188' && r.out.cards[0].city === 'Waco' && r.out.cards[0].chips.some((c) => /Headcount \+12% in a year/.test(c)));
 step('Rob\'s cards are not in Rhea\'s list, and Rhea\'s are not in Rob\'s', (await call('/finder/cards', 'get', 'ra2')).out.cards.every((c) => st.tables.finder_cards.find((x) => x.id === c.id).user_id === 'ra2'));
 step('each card says which of the person\'s searches found it (so the page can show them apart)', r.out.cards.every((c) => c.search_id === s1.id));
+{
+  // The page must not wait for each card's "has a colleague taken it?" check one after another (owner 20 Oct: found leads "gone" —
+  // with ~90 cards and a far-away database the list took minutes and came back empty). They run together, in the same order.
+  const real = leadCheck.checkCompany; let live = 0, peak = 0;
+  leadCheck.checkCompany = async (a) => { live++; peak = Math.max(peak, live); await new Promise((res) => setTimeout(res, 25)); live--; return real(a); };
+  const again = await call('/finder/cards', 'get', 'ra1');
+  leadCheck.checkCompany = real;
+  step('the add-rule checks for the cards run at the same time, not one by one', peak >= 3, 'peak ' + peak);
+  step('…and the cards come back in the same order, each with its answer', again.out.cards.map((c) => c.id).join() === r.out.cards.map((c) => c.id).join() && again.out.cards.every((c) => c.decision));
+}
 const brazos = r.out.cards[0].id, lone = r.out.cards[1].id, gulf = r.out.cards[2].id;
 r = await call('/finder/cards/:id/reject', 'post', 'ra2', {}, { id: brazos });
 step('Rob cannot reject Rhea\'s card (404)', r.code === 404);
