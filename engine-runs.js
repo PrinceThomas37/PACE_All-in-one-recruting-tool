@@ -207,7 +207,8 @@ function createEngineRunner({ supabase }) {
     } catch { return []; }
   }
 
-  return { register, runJob, runDue, isDue, status, recent, recordPing, lastPingAt, names: () => [...jobs.keys()] };
+  return { register, runJob, runDue, isDue, status, recent, recordPing, lastPingAt, names: () => [...jobs.keys()],
+    running: () => [...inFlight] };   // the memory watcher names what is running when memory climbs (R-291)
 }
 
 module.exports = { createEngineRunner };
