@@ -129,6 +129,9 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
       if (replyDueAfterDays > 0 && Number.isFinite(a.days_since_inbound) && a.days_since_inbound < replyDueAfterDays) { replyNotDueYet++; continue; }
       items.push({
         kind: KIND.REPLY_DUE,
+        // A reply from a lead already marked Rejected is still owed — it may be a second chance — but the row says so (owner, 20 Oct:
+        // "show them as 'rejected lead'"), so the person decides knowingly.
+        rejected_lead: t.entity_type === 'contact' && t.stage === 'Rejected',
         last_activity_at: lastAt,
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
