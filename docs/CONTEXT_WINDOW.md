@@ -41,6 +41,8 @@
 - **R-262 / R-263** marked DOING from Session 47 (new user's first sign-in; login glitch after sign-out) — **check whether they are actually finished** before anything else is said about them.
 - Tidy-up: the dead `tmplHtml` (old My wording editor) in `public/js/07-page-email.js` and its helpers are computed and unused since D-0161.
 
+- The shared to-do page (artifact `NQ4HUuMfAWJk34g9Vs5EdQ`, collection `items`) is BEHIND the ROADMAP: it stops at R-218, plus R-287/R-288 added 20 Oct. Rows R-219…R-286 still need mirroring (one batch of ≤50 per call).
+
 *Parked by the owner:* **R-253** real count of matching candidates in client emails.
 
 ## Process lessons from Session 50 (read before building)
