@@ -68,7 +68,7 @@ try {
       m = p.match(/^\/mailbox\/mb1\/messages\/([^/?]+)/); if (m) return Promise.resolve(Object.assign({ attachments: [], has_remote_images: false, crm: {} }, msgs[m[1]]));
       return Promise.resolve({});
     };
-    window.apiPost = function (p, b) { window.__calls.push(['POST', p, b]); return Promise.resolve({ success: true, ok: true }); };
+    window.apiPost = function (p, b) { window.__calls.push(['POST', p, b]); return Promise.resolve(/\/drafts$/.test(p) ? { success: true, ref: 'REF-' + (b.ref ? 'again' : 'first') } : { success: true, ok: true }); };
     window.apiPatch = function (p, b) { window.__calls.push(['PATCH', p, b]); return Promise.resolve({ success: true }); };
     window.apiDelete = function (p) { window.__calls.push(['DELETE', p]); return Promise.resolve({ success: true }); };
     window.apiFetch = function (m, p, b) { window.__calls.push([m, p, b]); return Promise.resolve({}); };
@@ -97,12 +97,12 @@ try {
   step('…with the draft\'s recipients and subject', c.to === 'rcredeur33@yahoo.com' && c.cc === 'lisa@client.com' && c.subject === 'Re: Interview', JSON.stringify(c));
   step('…with the draft\'s own words, not the quoted original', /Tuesday works/.test(c.body) && !/gmail_quote|wrote:|blockquote/.test(c.body), c.body);
   step('…and it knows which draft it came from', c.draft === 'd1');
-  step('nothing is deleted just by opening it', (await calls(/\/messages\/d1$/, 'DELETE')).length === 0);
+  step('nothing is deleted just by opening it', (await calls(/\/drafts\/d1$/, 'DELETE')).length === 0);
   await page.evaluate(() => window.mbSendComposer());
   await page.waitForFunction(() => window.__calls.some(x => x[0] === 'DELETE'), { timeout: 8000 });
   const sent = await calls(/\/messages\/r2\/reply$/, 'POST');
   step('Send goes through the normal reply (PACE\'s checks), to the right email', sent.length === 1 && /Tuesday works/.test(sent[0][2].body) && sent[0][2].to === 'rcredeur33@yahoo.com', JSON.stringify(sent));
-  step('…and only after it went, the old draft is moved to Trash', (await calls(/\/mailbox\/mb1\/messages\/d1$/, 'DELETE')).length === 1);
+  step('…and only after it went, the old draft is moved to Trash', (await calls(/\/mailbox\/mb1\/drafts\/d1$/, 'DELETE')).length === 1);
 
   // a stand-alone draft
   await page.evaluate(() => { STATE.mailbox.composer = null; window.mbOpen('d2'); });
@@ -114,6 +114,38 @@ try {
   await page.evaluate(() => window.mbSendCompose());
   await page.waitForFunction(() => window.__calls.some(x => x[0] === 'DELETE' && /d2$/.test(x[1])), { timeout: 8000 });
   step('sending it goes out as a new message and then retires the draft', (await calls(/\/mailbox\/mb1\/send$/, 'POST')).length === 1);
+
+  // ── Save draft into Gmail / Outlook (R-287) ──
+  await page.evaluate(() => { STATE.mailbox.compose = null; window.mbCompose('x@y.com'); });
+  await page.waitForFunction(() => !!document.querySelector('#layer [data-win="mailCompose"]'), { timeout: 8000 });
+  await page.evaluate(() => { document.getElementById('mb-c-subject').value = 'Hello there'; window.mbComposeField('subject', 'Hello there'); const ed = document.getElementById('mb-c-editor'); ed.innerHTML = 'draft words'; window.mbEditorInput('compose'); });
+  step('the New message window has a "Save draft" button', await page.evaluate(() => !!document.getElementById('mb-c-savedraft')));
+  await page.evaluate(() => window.__calls.length = 0);
+  await page.evaluate(() => window.mbSaveDraft('compose'));
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'POST' && /\/drafts$/.test(c[1])), { timeout: 8000 });
+  let sv = await calls(/\/mailbox\/mb1\/drafts$/, 'POST');
+  step('Save draft sends the words to the mailbox\'s Drafts (a new message)', sv.length === 1 && sv[0][2].kind === 'new' && sv[0][2].subject === 'Hello there' && /draft words/.test(sv[0][2].body) && !sv[0][2].ref, JSON.stringify(sv[0] && sv[0][2]));
+  await page.waitForFunction(() => STATE.mailbox.compose && STATE.mailbox.compose.providerDraftId === 'REF-first', { timeout: 8000 });
+  await page.evaluate(() => window.mbSaveDraft('compose'));
+  await page.waitForFunction(() => window.__calls.filter(c => c[0] === 'POST' && /\/drafts$/.test(c[1])).length === 2, { timeout: 8000 });
+  sv = await calls(/\/mailbox\/mb1\/drafts$/, 'POST');
+  step('saving again UPDATES the same draft (the window remembers which one)', sv[1][2].ref === 'REF-first', JSON.stringify(sv[1] && sv[1][2]));
+  await page.evaluate(() => window.mbSendCompose());
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'DELETE' && /\/drafts\/REF-again$/.test(c[1])), { timeout: 8000 });
+  step('sending it retires that draft', (await calls(/\/mailbox\/mb1\/drafts\/REF-again$/, 'DELETE')).length === 1);
+  // a reply window
+  await page.evaluate(() => { STATE.mailbox.composer = null; window.mbOpen('r2'); });
+  await page.waitForFunction(() => (STATE.mailbox.message || {}).id === 'r2', { timeout: 8000 });
+  await page.evaluate(() => window.mbReply(false));
+  await page.waitForFunction(() => STATE.mailbox.composer && STATE.mailbox.composer.msgId === 'r2', { timeout: 8000 });
+  await page.evaluate(() => { const ed = document.getElementById('mb-comp-editor'); ed.innerHTML = 'reply in progress'; window.mbEditorInput('reply'); window.__calls.length = 0; window.mbSaveDraft('reply'); });
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'POST' && /\/drafts$/.test(c[1])), { timeout: 8000 });
+  sv = await calls(/\/mailbox\/mb1\/drafts$/, 'POST');
+  step('a reply window saves a REPLY draft tied to the email it answers (so it threads)', sv[0][2].kind === 'reply' && sv[0][2].message_id === 'r2' && /reply in progress/.test(sv[0][2].body), JSON.stringify(sv[0] && sv[0][2]));
+  await page.evaluate(() => { STATE.mailbox.composer = null; closeModal(); window.mbForward(); });
+  await page.waitForFunction(() => STATE.mailbox.composer && STATE.mailbox.composer.mode === 'forward', { timeout: 8000 });
+  step('a forward window has no "Save draft" (a forward is not saved this way)', await page.evaluate(() => !document.getElementById('mb-comp-savedraft')));
+  await page.evaluate(() => { STATE.mailbox.composer = null; closeModal(); });
 
   // ── a click on the dimmed area must not make the window vanish (owner 20 Oct) ──
   await page.evaluate(() => { STATE.mailbox.compose = null; window.mbCompose('x@y.com'); });

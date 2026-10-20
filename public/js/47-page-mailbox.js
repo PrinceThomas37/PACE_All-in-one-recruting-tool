@@ -791,7 +791,7 @@
     var c={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], labels:[], sig:sigPrefGet(), showCc:!!cc, sending:false,
             acct:m.activeId, msgId:x.id, from:(x.from&&(x.from.name||x.from.email))||'', savedAt:null };
     var d=draftGet(c);
-    if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
+    if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; if(d.ref) c.providerDraftId=d.ref; }
     if(m._pendingDraft&&mode==='reply'){
       // A draft continued from the Drafts folder: its words, recipients and subject, and a note of which draft to retire.
       var pd=m._pendingDraft; m._pendingDraft=null;
@@ -860,7 +860,7 @@
     ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value; });
     try{
       if(String(c.body||'').trim()){
-        localStorage.setItem(draftKey(c),JSON.stringify({to:c.to,cc:c.cc,subject:c.subject,body:c.body,at:Date.now()}));
+        localStorage.setItem(draftKey(c),JSON.stringify({to:c.to,cc:c.cc,subject:c.subject,body:c.body,ref:c.providerDraftId||null,at:Date.now()}));
         c.savedAt=Date.now();
         var el=document.getElementById('mb-comp-saved'); if(el) el.textContent='Draft saved on this device';
       } else draftClear(c);
@@ -1295,6 +1295,7 @@
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="mbCancelCompose()">Cancel</button>'+
+          '<button class="btn btn-outline" id="mb-c-savedraft" onclick="mbSaveDraft(\'compose\')"'+(c.sending?' disabled':'')+' title="Keep it in your mailbox\'s own Drafts folder, so you can carry on from your phone or from Gmail / Outlook">Save draft</button>'+
           '<button class="btn btn-outline" onclick="mbSchedOpen(\'compose\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
           '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
@@ -1924,9 +1925,42 @@
   }
   function finishProviderDraft(c){
     if(!c||!c.providerDraftId) return;
-    apiDelete('/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.providerDraftId))
+    apiDelete('/mailbox/'+encodeURIComponent(c.acct)+'/drafts/'+encodeURIComponent(c.providerDraftId))
       .catch(function(){ showToast('Sent. The old draft is still in your Drafts folder — you can delete it there.','info'); });
   }
+  // ── SAVE A DRAFT INTO GMAIL / OUTLOOK (R-287, owner 20 Oct: "yes") ──
+  // "Save draft" puts the words in the mailbox's own Drafts folder, so they are there on the phone and in Gmail/Outlook. The next
+  // save updates THAT draft (the window remembers which one); sending retires it. A forward is not saved this way.
+  window.mbSaveDraft=function(which){
+    var m=M(); var c=which==='compose'?m.compose:m.composer; if(!c||c.sending||c.savingDraft) return;
+    if(c.mode==='forward'){ showToast('A forward cannot be saved as a draft here — send it, or keep the window open','info'); return; }
+    mbChipFlush();
+    var pre=which==='compose'?'mb-c-':'mb-comp-';
+    ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById(pre+k); if(el) c[k]=el.value; });
+    if(mbBodyBlank(c.body)&&!String(c.to||'').trim()&&!String(c.subject||'').trim()){ showToast('Write something first — there is nothing to save yet','warning'); return; }
+    var acct=c.acct||m.activeId;
+    var payload={ kind:which==='compose'?'new':'reply', message_id:which==='compose'?undefined:c.msgId, ref:c.providerDraftId||undefined,
+      to:c.to, cc:c.cc, subject:c.subject, body:c.body,
+      attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};}) };
+    if(mbIsFormatted(c)) payload.formatted=true;
+    c.savingDraft=true;
+    var btn=document.getElementById(which==='compose'?'mb-c-savedraft':'mb-comp-savedraft'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+    var plat=((m.accounts||[]).filter(function(a){return a.id===acct;})[0]||{}).platform==='Gmail'?'Gmail':'Outlook';
+    apiPost('/mailbox/'+encodeURIComponent(acct)+'/drafts',payload)
+      .then(function(r){
+        c.savingDraft=false; c.providerDraftId=(r&&r.ref)||c.providerDraftId;
+        if(btn){ btn.disabled=false; btn.textContent='Save draft'; }
+        showToast('Saved in your '+plat+' Drafts','success');
+        if(which!=='compose'&&c.mode!=='forward'){ try{ draftSave(); }catch(e){} }   // the on-device copy now knows which draft it belongs to
+        var f=(m.folders||[]).filter(function(x){return x.id===m.folderId;})[0];
+        if(f&&f.kind==='drafts'&&window.mbRefresh) mbRefresh();
+      })
+      .catch(function(e){
+        c.savingDraft=false;
+        if(btn){ btn.disabled=false; btn.textContent='Save draft'; }
+        showToast('Could not save the draft: '+((e&&e.message)||e)+'. Your words are still here.','error');
+      });
+  };
   window.mbContinueDraft=function(id){
     var m=M(), acct=m.activeId; if(!acct||!id) return;
     apiGet('/mailbox/'+encodeURIComponent(acct)+'/messages/'+encodeURIComponent(id)).then(function(d){
@@ -2420,6 +2454,7 @@
           '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+
           '<span class="mb-win-btns">'+
             '<button class="btn btn-outline" onclick="mbCancelComposer()">Discard</button>'+
+            (fwd?'':'<button class="btn btn-outline" id="mb-comp-savedraft" onclick="mbSaveDraft(\'reply\')"'+(c.sending?' disabled':'')+' title="Keep it in your mailbox\'s own Drafts folder, so you can carry on from your phone or from Gmail / Outlook">Save draft</button>')+
             '<button class="btn btn-outline" onclick="mbSchedOpen(\'reply\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
             '<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
           '</span>'+
