@@ -2,13 +2,13 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-20 (Session 50 closing). **Highest ids:** decision **D-0164** · contract C-0038 · roadmap **R-287** (next `R-288`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
+**Updated**: 2026-10-20 (Session 50 closed; #351 merged). **Highest ids:** decision **D-0164** · contract C-0038 · roadmap **R-288** (next `R-289`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
 
 ## START HERE (Session 50, 19–20 Oct) — the owner's "Changes to be done next" doc
 
 **Releases.**
 - **#348 MERGED and LIVE** (`e7c2979`, Render live 21:14 UTC 19 Oct): Batches 1–2 — settings crash (R-284), NUL in resumes (R-267), our replies seen by the digest / Needs you (R-268), inline images (R-274), Leads strip follows filters + per-person page size (R-279/R-280), dismissed reminders 7 days (R-281), Finder for everyone (R-276/R-283 card text), fresh manager sees only "Finish your setup" (R-283).
-- **#351 = Batches 3 + 4, owner approved (D-0164: "Nothing [is off]. Push it live", "Merge it after the check").** Set to merge once the Node 22 and Node 26 full runs pass on the final head. **First thing next window: check `main` contains #351's merge commit and Render (`list_deploys`, service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) deployed it; if not, finish it (merge if green; `trigger_deploy` if Render got no event).** The work lives on branch `claude/busy-darwin-fbkb3b` (built in worktree branch `batch3-wip`).
+- **#351 MERGED** (`bd71a25`, 03:04 UTC 20 Oct) after Node 22 and Node 26 full runs were both 283/283 on head `0d91ca4`; **LIVE 03:05 UTC 20 Oct** (Render log: "Your service is live", deploy `dep-dbbdkh59fdbs73e256p0`). Batches 3 + 4, owner approved (D-0164). The pre-merge run found and fixed: dark-mode Today tiles unreadable, a manager's Reports link looping to Today, the builder preview signing with the profile name instead of the sending email ID (archive, 20 Oct).
 
 **What #351 holds (all on screen and tested; screenshots were shown to the owner):**
 - **Batch 3:** the new sequence builder is the one door for every sequence (named sequences for leads and candidates, AI on/off for candidates — R-269/R-270, D-0158/D-0159); candidate drawer opened from a job shows that job + stage-move notes under Notes (R-275); lead split equal by default and never above an email ID's daily limit (R-277); manager Today and Outreach Insights as drawn (R-278, D-0160 — morning briefing kept, it was never removed); "My wording" / "AI style" moved into the builder (R-285, D-0161) with nothing lost: per follow-up same thread / new email, Rewrite with AI, spam check (R-286).
@@ -34,11 +34,14 @@
 - **R-252** "why they are hiring / how long open" as a usable detail.
 
 *Fixes and safety (not started, no go given):*
+- **R-288** the live server reports 13 known security holes in outdated add-on code (1 critical) — check which are reachable, update, full runs, release.
 - **R-241** a "blocked" bounce must not mark a good contact Invalid · **R-242** bounce auto-pause misses small senders · **R-243** the bounce lookup has no org filter.
 - **R-204** numbers still typed into code (7-day reply look-back, the generator's draft counter default).
 - **R-206** a window that closes and reopens still blinks.
 - **R-262 / R-263** marked DOING from Session 47 (new user's first sign-in; login glitch after sign-out) — **check whether they are actually finished** before anything else is said about them.
 - Tidy-up: the dead `tmplHtml` (old My wording editor) in `public/js/07-page-email.js` and its helpers are computed and unused since D-0161.
+
+- The shared to-do page (artifact `NQ4HUuMfAWJk34g9Vs5EdQ`, collection `items`) is BEHIND the ROADMAP: it stops at R-218, plus R-287/R-288 added 20 Oct. Rows R-219…R-286 still need mirroring (one batch of ≤50 per call).
 
 *Parked by the owner:* **R-253** real count of matching candidates in client emails.
 

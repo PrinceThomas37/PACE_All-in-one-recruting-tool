@@ -7016,3 +7016,7 @@ The owner said "okay merge it", "change the data base too", answered the four of
 - RETIRED: plan-preview-smoke and signature-editor-smoke — both drove the Outreach Plan tab that D-0161 removed. Their rules live on:
   sender-from-mailbox preview → sequence-builder-wording-ui; signature editing → mysetup-page-smoke; a saved signature can never carry a
   script/handler/javascript: link → self-serve-mailbox-smoke (server-side cleanSignatureForSave).
+
+### 2026-10-20 03:04 UTC — #351 merged (owner: "Merge it after the check")
+- Gate met: Node 22 and Node 26 full runs both 283/283 on head 0d91ca4 (exit 0), GitHub checks green. Merge commit bd71a25; Render deploy
+  dep-dbbdkh59fdbs73e256p0 started on it by itself (new_commit). CONTEXT_WINDOW.md updated for the next window (owner resumes elsewhere).
