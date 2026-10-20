@@ -174,7 +174,10 @@ function createMailboxSender(ctx) {
     return { success: true, ...(label_error ? { label_error } : {}) };
   }
 
-  return { check, send, signatureFor };
+  // The body of a DRAFT: the same cleaning as a sent email, and no signature (a signature is added when it is sent).
+  function draftHtml(body, formatted) { return outboundHtml(String(body || ''), '', formatted === true); }
+
+  return { check, send, signatureFor, draftHtml };
 }
 
 module.exports = { createMailboxSender, check, readAttachments, parseAddressField, readLabelIds, MAX_ATTACH_BYTES, KINDS };

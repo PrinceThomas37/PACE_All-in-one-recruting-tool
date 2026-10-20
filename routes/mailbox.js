@@ -26,7 +26,7 @@ const express = require('express');
 const { createMailProvider } = require('../services/mail-provider');
 const { mailboxConnections } = require('../mailbox-health');
 // The one send path (Send button and Schedule send): services/mailbox-send.js.
-const { createMailboxSender } = require('../services/mailbox-send');
+const { createMailboxSender, readAttachments, parseAddressField } = require('../services/mailbox-send');
 const recipientSuggest = require('../services/recipient-suggest');
 const { getSetting } = require('../config/settings');
 
@@ -563,6 +563,41 @@ module.exports = (ctx) => {
       } catch (err) { providerError(res, err); }
     };
   }
+  // ── DRAFTS SAVED IN GMAIL / OUTLOOK (R-287, owner 20 Oct) ───────────────────────────────────
+  // "Save draft" in the New message and Reply windows puts the words in the mailbox's own Drafts folder (so they follow the person
+  // to their phone and to Gmail/Outlook itself). `ref` identifies the draft on the next save. Your own mailboxes only (ownedMailbox).
+  // A forward is not saved this way. Nothing here sends anything.
+  router.post('/mailbox/:mid/drafts', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    const b = req.body || {};
+    const kind = b.kind === 'reply' ? 'reply' : 'new';
+    if (kind === 'reply' && !b.message_id) return res.status(400).json({ error: 'Which email is this answering?' });
+    if (!String(b.body || '').replace(/<[^>]*>/g, '').trim() && !String(b.to || '').trim() && !String(b.subject || '').trim()) {
+      return res.status(400).json({ error: 'There is nothing to save yet' });
+    }
+    const att = readAttachments(b);
+    if (att.error) return res.status(att.error.status).json(att.error.body);
+    try {
+      const r = await mail.forMailbox(mailbox).saveDraft({
+        ref: b.ref ? String(b.ref).slice(0, 300) : null, kind, messageId: b.message_id ? String(b.message_id) : null,
+        htmlBody: sender.draftHtml(b.body, b.formatted === true),
+        to: b.to ? parseAddressField(b.to) : [], cc: b.cc ? parseAddressField(b.cc) : [],
+        subject: b.subject ? String(b.subject) : '', attachments: att.attachments,
+      });
+      res.json({ success: true, ref: r.ref, saved_at: new Date().toISOString() });
+    } catch (err) {
+      if (err && err.status === 409) return res.status(409).json({ error: err.message });
+      providerError(res, err);
+    }
+  });
+  // The draft is moved to the mailbox's Trash (never destroyed) once its email has been sent from PACE.
+  router.delete('/mailbox/:mid/drafts/:ref', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try { res.json(await mail.forMailbox(mailbox).deleteDraft(req.params.ref)); } catch (err) { providerError(res, err); }
+  });
+
   // ── SCHEDULE SEND (R-273, D-0162/D-0163) ──────────────────────────────────
   // The window's Schedule button: the same check as Send, NOW (so a mistake is fixed while the person is there), then stored
   // for the engine (services/scheduled-sends.js) to send through the same path at the time chosen. The time is an instant;

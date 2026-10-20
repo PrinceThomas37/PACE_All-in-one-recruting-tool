@@ -408,6 +408,14 @@ function quoteBlock(msg, bodyHtml) {
     + `</div>`;
 }
 
+// Where the QUOTED original starts in a draft's body: a draft started as a reply carries the quote under the person's own words, and
+// PACE's own words are what the window edits. Same markers the screen uses when it opens a draft.
+function splitQuote(html) {
+  const s = String(html || '');
+  const cut = s.search(/<div[^>]*class=["'][^"']*gmail_quote|<blockquote|<div[^>]*style=["'][^"']*border-left:2px solid #ccc|<div[^>]*id=["']?(?:divRplyFwdMsg|appendonsend)|<hr\b/i);
+  return cut > 0 ? { own: s.slice(0, cut), quote: s.slice(cut) } : { own: s, quote: '' };
+}
+
 // A base64 string's decoded size, without decoding it. Used for budgeting
 // attachment bytes before anything is sent.
 function approxBytes(b64) {
@@ -712,6 +720,42 @@ function createMailProvider(ctx) {
       return composeFromDraft(id, 'createForward', { htmlBody, to, cc, subject, attachments, labels });
     }
 
+    // SAVE A DRAFT in Outlook's own Drafts folder (R-287). `ref` is the draft's message id (it stays the same across edits). A reply
+    // draft is made by Graph's createReply so it threads; its quote is kept under the person's words on every save.
+    const recips = (list) => (list || []).map(a => ({ emailAddress: { address: a.email || a } }));
+    async function saveDraft({ ref, kind, messageId, htmlBody, to, cc, subject, attachments }) {
+      const t = await token();
+      let id = ref, quote = '';
+      if (id) {
+        const cur = await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}?$select=body,isDraft`);
+        if (cur.isDraft === false) { const e = new Error('That draft has already been sent or moved'); e.status = 409; throw e; }
+        quote = splitQuote(cur.body && cur.body.content).quote;
+      } else if (kind === 'reply' && messageId) {
+        const d = await graphMailRequest(t, `/me/messages/${encodeURIComponent(messageId)}/createReply`, { method: 'POST', body: JSON.stringify({}) });
+        id = d.id;
+        const full = await graphMailRequest(t, `/me/messages/${id}?$select=body`);
+        quote = (full.body && full.body.content) || '';
+      } else {
+        const d = await graphMailRequest(t, '/me/messages', { method: 'POST', body: JSON.stringify({ subject: subject || '', body: { contentType: 'HTML', content: '' }, toRecipients: [] }) });
+        id = d.id;
+        for (const a of (attachments || [])) {
+          await graphMailRequest(t, `/me/messages/${id}/attachments`, { method: 'POST', body: JSON.stringify({
+            '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename || 'attachment',
+            contentType: a.contentType || 'application/octet-stream', contentBytes: a.base64 || '' }) });
+        }
+      }
+      const patch = { body: { contentType: 'HTML', content: quote ? `${htmlBody || ''}<br><br>${quote}` : (htmlBody || '') },
+        toRecipients: recips(to), ccRecipients: recips(cc) };
+      if (subject) patch.subject = subject;
+      await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      return { ref: id };
+    }
+    // The draft goes to Deleted Items once the email has been sent — never destroyed outright. Already gone is fine.
+    async function deleteDraft(ref) {
+      try { await trash(ref); } catch (e) { if (!e || (e.status !== 404 && !/not found|ErrorItemNotFound/i.test(String(e.message || '')))) throw e; }
+      return { ok: true };
+    }
+
     // Every message in one conversation, oldest first — the thread view.
     async function listThread(threadId) {
       const t = await token();
@@ -755,7 +799,7 @@ function createMailProvider(ctx) {
     }
 
     return {
-      platform: 'Microsoft', mailbox, listConversations,
+      platform: 'Microsoft', mailbox, listConversations, saveDraft, deleteDraft,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
       listLabels, createLabel, setLabels,
@@ -956,6 +1000,43 @@ function createMailProvider(ctx) {
       return { ok: true, thread_id: r.threadId || null, ...(await labelSent(r.messageId, labels)) };
     }
 
+    // SAVE A DRAFT in Gmail's own Drafts (R-287). Gmail replaces the whole message on every save, so the draft is rebuilt each time: a
+    // reply keeps its thread and its quote. A draft that carries attachments PACE did not load cannot be rebuilt without losing
+    // them — that save is refused (409) rather than silently dropping a file.
+    async function saveDraft({ ref, kind, messageId, htmlBody, to, cc, subject, attachments }) {
+      let found = null;
+      if (ref) {
+        found = await gmailProvider.findDraft(id, ref);
+        if (!found) { const e = new Error('That draft has already been sent or deleted'); e.status = 409; throw e; }
+        if (!(attachments || []).length && found.messageId) {
+          let had = false;
+          try { had = !!(await getMessage(found.messageId, { blockRemoteImages: true })).has_attachments; } catch (_) { had = false; }
+          if (had) { const e = new Error('This draft has attachments PACE cannot keep when it saves — finish it in Gmail, or send it from here'); e.status = 409; throw e; }
+        }
+      }
+      const addrs = (l) => (l || []).map(a => a.email || a).join(', ');
+      let body = htmlBody || '', thread = {}, subj = subject || '', toList = to, ccList = cc;
+      if (kind === 'reply' && messageId) {
+        const original = await getMessage(messageId, { blockRemoteImages: false });
+        body = (htmlBody || '') + quoteBlock(original, original.body_html);
+        subj = subject || replySubject(original.subject);
+        if (!(to && to.length) && !(cc && cc.length)) { const rec = replyRecipients(original, { replyAll: false, ownAddress: mailbox.email_address }); toList = rec.to; ccList = rec.cc; }
+        thread = { threadId: original.thread_id, inReplyTo: original.message_id_header || undefined,
+          references: [original.references_header, original.message_id_header].filter(Boolean).join(' ') || undefined };
+      }
+      const r = await gmailProvider.saveDraft(id, {
+        draftId: found && found.draftId, to: addrs(toList), cc: addrs(ccList) || undefined, subject: subj, htmlBody: body,
+        fromAddress: mailbox.email_address, attachments, ...thread,
+      });
+      return { ref: r.draftId };
+    }
+    // The draft's message goes to Trash (recoverable) once the email has been sent. Already gone is fine.
+    async function deleteDraft(ref) {
+      const found = await gmailProvider.findDraft(id, ref);
+      if (found && found.messageId) await gmailProvider.trashMessage(id, found.messageId);
+      return { ok: true };
+    }
+
     async function listThread(threadId) {
       const t = await gmailProvider.getThread(id, threadId);
       return (t.messages || [])
@@ -976,7 +1057,7 @@ function createMailProvider(ctx) {
     }
 
     return {
-      platform: 'Gmail', mailbox, listConversations,
+      platform: 'Gmail', mailbox, listConversations, saveDraft, deleteDraft,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
       listLabels, createLabel, setLabels,
@@ -1000,7 +1081,7 @@ module.exports = {
   // wherever else mail has to be normalised.
   FOLDER_ORDER, GMAIL_HIDDEN_LABELS,
   folderKindFromGraph, folderKindFromGmailLabel, sortFolders,
-  parseAddress, parseAddressList,
+  parseAddress, parseAddressList, splitQuote,
   sanitizeEmailHtml, hasRemoteImages, textToHtml,
   normalizeGraphMessage, normalizeGmailMessage,
   extractGmailBody, gmailAttachments, isInlinePart,
