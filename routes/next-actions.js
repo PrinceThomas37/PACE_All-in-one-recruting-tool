@@ -48,6 +48,7 @@ const ownership = require('../services/ownership');
 const { decodeEntities } = require('../services/html-entities');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
 const settingsConfig = require('../config/settings');
+const bdInsights = require('../services/bd-insights');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -230,7 +231,7 @@ module.exports = (ctx) => {
       // and next-action.js were always entity-type-agnostic.
       let subQ = withOrg(
         supabase.from('submissions')
-          .select('id,candidate_id,job_order_id,recruiter_id,stage,candidate:candidates(id,full_name,email,last_reply_at),job_order:job_orders(job_title,client)')
+          .select('id,candidate_id,job_order_id,recruiter_id,stage,interview_at,stage_updated_at,submitted_at,candidate:candidates(id,full_name,email,last_reply_at),job_order:job_orders(job_title,client)')
           .is('deleted_at', null),
         req
       );
@@ -352,15 +353,29 @@ module.exports = (ctx) => {
       const now = Date.now();
       // The admin's own numbers (D-0123), not ours: when a reply becomes owed, and when a silence becomes a quiet nudge.
       const org = orgIdFor(req);
-      const replyDueAfterDays = Number(await settingsConfig.getSetting(supabase, 'needs_reply_after_days', org));
-      const nudgeQuietDays = Number(await settingsConfig.getSetting(supabase, 'nudge_quiet_after_days', org));
+      const num = async (key) => Number(await settingsConfig.getSetting(supabase, key, org));
+      const replyDueAfterDays = await num('needs_reply_after_days');
+      const nudgeQuietDays = await num('nudge_quiet_after_days');
+      // R-297: the interview / submission steps, from the caller's OWN submissions, on the caller's own calendar day (?tz=).
+      const tz = bdInsights.validZone(req.query.tz);
+      const pipeline = (subs || []).filter(s => s.candidate && ownership.isMine({ owner_id: s.recruiter_id }, me)).map(s => ({
+        submission_id: s.id, candidate_id: s.candidate_id, name: s.candidate.full_name, email: s.candidate.email,
+        company: s.job_order && s.job_order.client, job_title: s.job_order && s.job_order.job_title, job_order_id: s.job_order_id,
+        owner_id: s.recruiter_id, stage: s.stage, interview_at: s.interview_at, stage_updated_at: s.stage_updated_at, submitted_at: s.submitted_at,
+      }));
       const built = buildNextActions({
         threads: ownThreads,
         reminders: reminders || [],
+        pipeline,
         now,
         limit: Number(req.query.limit) || 50,
         replyDueAfterDays,
         nudgeMaxAgeDays: nudgeQuietDays,
+        positiveReplyDueAfterDays: await num('needs_reply_positive_after_days'),
+        clientSilentAfterDays: await num('pipeline_client_silent_days'),
+        interviewOutcomeAfterDays: await num('pipeline_interview_outcome_days'),
+        todayKey: bdInsights.dayKey(now, 0, tz), tomorrowKey: bdInsights.dayKey(now, -1, tz),
+        dayKeyOf: (ms) => bdInsights.localDay(ms, tz),
       });
 
       // What this user has snoozed. Best-effort: a dismissal store that cannot

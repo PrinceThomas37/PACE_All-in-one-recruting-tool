@@ -19,6 +19,11 @@ const FIRST_LOOKBACK_DAYS = 30;   // a mailbox's first visit reaches back this f
 const MAX_IDS = 500;              // sent ids looked at per visit (ids are cheap: one listing call returns them)
 const MAX_FETCH = 200;            // headers read per visit, one at a time — each is one small provider call
 const BODY_CHARS = 500;           // the short copy kept (the provider's own preview is shorter still)
+// OLDER MAIL, A SLICE AT A TIME (R-297, owner 20 Oct: 90 days "if it won't burden the server when 100+ users are added"). After the
+// forward pass, each visit reads a little further back until BACKFILL_DAYS are covered — at most BACKFILL_FETCH headers per visit,
+// one at a time, so memory stays flat however many people are added and the extra time is a few seconds per mailbox, once.
+const BACKFILL_DAYS = 90;
+const BACKFILL_FETCH = 40;
 
 const norm = (s) => String(s || '').trim().toLowerCase();
 const ADDR_RE = /[^\s<>,;:"'()\[\]]+@[^\s<>,;:"'()\[\]]+\.[^\s<>,;:"'()\[\]]+/g;
@@ -70,14 +75,38 @@ function rowFor(msg, known, mailbox) {
 async function sweepSent({ mailbox, since, listIds, paceIds, readHeaders, knownPeople, store, own = new Set(), now = Date.now() }) {
   const from = sinceFor(since, now);
   const { ids, more } = await listIds(from, MAX_IDS);
+  const { msgs, stored, todo } = await keep(ids, MAX_FETCH, { mailbox, paceIds, readHeaders, knownPeople, store, own });
+  let newest = from;
+  for (const m of msgs) if (m.date > newest) newest = m.date;
+  // `oldest` = how far back this visit really reached: the bound the backfill continues from.
+  const oldest = (!!more || todo.length > MAX_FETCH) && msgs.length ? msgs.reduce((o, m) => (m.date < o ? m.date : o), msgs[0].date) : from;
+  return { stored, read: msgs.length, newest, oldest, capped: !!more || todo.length > MAX_FETCH };
+}
+
+/**
+ * One slice of OLDER sent mail: [floor, back) newest first, at most BACKFILL_FETCH headers. `listIds(fromIso, max, toIso)`.
+ * Returns the new `back` (how far back is now covered) and `done` once the floor is reached.
+ */
+async function sweepSentBack({ mailbox, back, listIds, paceIds, readHeaders, knownPeople, store, own = new Set(), now = Date.now() }) {
+  const floor = new Date(now - BACKFILL_DAYS * 864e5).toISOString();
+  const upto = back || sinceFor(null, now);
+  if (upto <= floor) return { stored: 0, read: 0, back: floor, done: true };
+  const { ids, more } = await listIds(floor, MAX_IDS, upto);
+  const { msgs, stored, todo } = await keep(ids, BACKFILL_FETCH, { mailbox, paceIds, readHeaders, knownPeople, store, own });
+  const partial = !!more || todo.length > BACKFILL_FETCH;
+  // Not finished: continue next visit from the oldest email read (a message in that same second is offered again and ignored).
+  const nextBack = partial && msgs.length ? msgs.reduce((o, m) => (m.date < o ? m.date : o), msgs[0].date) : floor;
+  return { stored, read: msgs.length, back: nextBack, done: nextBack <= floor };
+}
+
+// The shared middle: drop PACE's own sends by id, read headers ONE at a time (never a body), keep what went to a known person.
+async function keep(ids, max, { mailbox, paceIds, readHeaders, knownPeople, store, own }) {
   const engine = ids.length ? await paceIds(ids) : new Set();
   const todo = ids.filter(id => !engine.has(String(id)));
   const msgs = [];
-  for (const id of todo.slice(0, MAX_FETCH)) {           // ONE AT A TIME: headers only, never a body
+  for (const id of todo.slice(0, max)) {
     try { const m = await readHeaders(id); if (m && m.date) msgs.push(m); } catch (_) { /* one unreadable message never ends the visit */ }
   }
-  let newest = from;
-  for (const m of msgs) if (m.date > newest) newest = m.date;
   const outside = (a) => a && !own.has(a);
   const addrs = [...new Set([].concat(...msgs.map(m => [...(m.to || []), ...(m.cc || [])].map(norm))).filter(outside))];
   const known = addrs.length ? await knownPeople(addrs) : new Map();
@@ -87,7 +116,7 @@ async function sweepSent({ mailbox, since, listIds, paceIds, readHeaders, knownP
     if (!row) continue;
     try { await store(row); stored++; } catch (_) { /* best-effort, like the replies we keep */ }
   }
-  return { stored, read: msgs.length, newest, capped: !!more || todo.length > MAX_FETCH };
+  return { msgs, stored, todo };
 }
 
 // Who has written to us before, among these addresses — newest record wins. Three sources, in order: a stored reply
@@ -139,4 +168,4 @@ async function lookupKnownPeople(supabase, orgId, addresses) {
   return known;
 }
 
-module.exports = { sweepSent, rowFor, addressesIn, sinceFor, lookupKnownPeople, FIRST_LOOKBACK_DAYS, MAX_IDS, MAX_FETCH, BODY_CHARS };
+module.exports = { sweepSent, sweepSentBack, BACKFILL_DAYS, BACKFILL_FETCH, rowFor, addressesIn, sinceFor, lookupKnownPeople, FIRST_LOOKBACK_DAYS, MAX_IDS, MAX_FETCH, BODY_CHARS };

@@ -50,6 +50,8 @@ function settingsKey(userId) {
 function itemKey(item) {
   if (!item) return null;
   if (item.reminder_id) return `reminder:${item.reminder_id}`;
+  // An interview / submission step is about ONE submission (a candidate can be on several jobs) and one step (R-297).
+  if (item.kind === 'pipeline_step' && item.submission_id) return `pipeline_step:${item.submission_id}:${item.step || ''}`;
   const kind = item.kind || 'item';
   const type = item.entity_type || 'unknown';
   const id = item.entity_id || item.job_id || 'none';

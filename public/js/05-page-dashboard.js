@@ -411,8 +411,15 @@ function renderNeedsYou(){
   var chips=TODAY_FILTERS.filter(function(x){ return x[0]==='all'||counts[x[0]]; }).map(function(x){
     return '<button type="button" class="td-chip'+(f===x[0]?' on':'')+'" aria-pressed="'+(f===x[0])+'" onclick="todayFilter(\''+x[0]+'\')">'+x[1]+' '+counts[x[0]]+'</button>';
   }).join('');
-  var rows=n.items.filter(function(it){ return f==='all'||todayKindOf(it)===f; }).map(naRowHtml).join('')+
-    n.conv.filter(function(c){ return f==='all'||(c.replies?'replies':'followups')===f; }).map(function(c){ return '<div class="td-conv">'+c.html+'</div>'; }).join('');
+  // THE OWNER'S ORDER (R-297): the server sorts the list by group (1 hot client reply · 2 hot candidate reply · 3 other client reply ·
+  // 4 other candidate reply · 5 interview / submission · 6 reminder or promise · 7 quiet lead). A client conversation waiting on a reply
+  // is a client reply, so it goes in after group 3 — not at the bottom; the others stay last.
+  var itemOk=function(it){ return f==='all'||todayKindOf(it)===f; }, convOk=function(c){ return f==='all'||(c.replies?'replies':'followups')===f; };
+  var convHtml=function(c){ return '<div class="td-conv">'+c.html+'</div>'; };
+  var shown=n.items.filter(itemOk);
+  var head=shown.filter(function(it){ return (it.tier||7)<=3; }), tail=shown.filter(function(it){ return (it.tier||7)>3; });
+  var rows=head.map(naRowHtml).join('')+n.conv.filter(function(c){ return c.replies&&convOk(c); }).map(convHtml).join('')+
+    tail.map(naRowHtml).join('')+n.conv.filter(function(c){ return !c.replies&&convOk(c); }).map(convHtml).join('');
   var empty=!counts.all?'<div class="fs-13 c-text3 td-empty">Nothing waiting on you. Answered conversations leave this list by themselves.</div>':'';
   return '<div class="card td-needs" id="needs" data-today-needs><div class="td-needs-head"><div class="td-h">NEEDS YOU</div><div class="td-chips">'+chips+'</div></div>'+
     empty+rows+(typeof naTeamLine==='function'?naTeamLine(s):'')+(typeof naHiddenLine==='function'?naHiddenLine(s):'')+'</div>';
