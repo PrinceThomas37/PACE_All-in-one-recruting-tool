@@ -26,10 +26,12 @@ module.exports = (ctx) => {
   const canDesign = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead', 'recruiter');
   // A BD (not a lead) writes sequences of their OWN (owner, 8 Oct: "no new sequence creation option in the sequence section"): they may create
   // one, and edit / switch on or off only the ones they made. Everything else about sequences stays with the roles above.
-  const canDesignOwn = (req) => hasRole(req, 'bd');
+  const canDesignOwn = (req) => hasRole(req, 'bd', 'recruiter');
+  // Managers change any sequence; a recruiter (who may design — canDesign) changes only the ones they made, like a BD (owner, 20 Oct).
+  const managesAll = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead');
   const mayChange = async (req, id) => {
-    if (canDesign(req)) return true;
-    if (!canDesignOwn(req)) return false;
+    if (managesAll(req)) return true;
+    if (!canDesign(req) && !canDesignOwn(req)) return false;
     const { data } = await withOrg(supabase.from('workflow_definitions').select('created_by').eq('id', id), req).maybeSingle();
     return !!data && data.created_by === req.user.id;
   };

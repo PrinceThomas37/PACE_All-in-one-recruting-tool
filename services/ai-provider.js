@@ -493,7 +493,7 @@ async function complete(supabase, opts = {}) {
       try {
         const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
         // Kept on success AND on refusal — a 429 is exactly when the numbers matter.
-        await recordLimits(supabase, entry.id, model, response.headers);
+        await recordLimits(supabase, entry.id, model, response.headers, Date.now(), opts.orgId);
         if (!response.ok) throw new Error(await describeHttpError(response));
         const payload = await response.json();
         const parsed = parseResponse(entry.id, payload);
@@ -514,7 +514,7 @@ async function complete(supabase, opts = {}) {
       }
     }
   }
-  if (failures.length) await recordFailure(supabase, opts.feature, failures);
+  if (failures.length) await recordFailure(supabase, opts.feature, failures, opts.orgId);
   return null;
 }
 
@@ -569,10 +569,13 @@ async function listModels(providerId, key, baseUrl) {
 // The last failure, kept where an admin can see it. One row, overwritten: this
 // answers "why is it not working right now", not "what has ever gone wrong".
 const LAST_ERROR_KEY = 'ai_last_error';
-async function recordFailure(supabase, feature, failures) {
+// One set of these records PER COMPANY (R-288a): an error sentence, a test result and a provider's reported limits describe one
+// company's key, so another company's admin must not read them. No company named = the old shared row (nothing reads it any more).
+function orgKey(base, orgId) { return orgId ? `${base}__org_${orgId}` : base; }
+async function recordFailure(supabase, feature, failures, orgId) {
   try {
     await supabase.from('app_settings').upsert({
-      key: LAST_ERROR_KEY,
+      key: orgKey(LAST_ERROR_KEY, orgId),
       value: JSON.stringify({ at: new Date().toISOString(), feature: feature || 'other', failures }),
       updated_at: new Date(),
     }, { onConflict: 'key' });
@@ -580,10 +583,10 @@ async function recordFailure(supabase, feature, failures) {
 }
 
 const LAST_TEST_KEY = 'ai_last_test';
-async function recordTest(supabase, result) {
+async function recordTest(supabase, result, orgId) {
   try {
     await supabase.from('app_settings').upsert({
-      key: LAST_TEST_KEY,
+      key: orgKey(LAST_TEST_KEY, orgId),
       value: JSON.stringify({ at: new Date().toISOString(), ...result }),
       updated_at: new Date(),
     }, { onConflict: 'key' });
@@ -626,11 +629,11 @@ const LIMIT_WINDOWS = { groq: { requests: 'day', tokens: 'minute' } };
 
 // Best-effort, like the meter: a limits record that cannot be written must
 // never be the reason an AI call fails.
-async function recordLimits(supabase, providerId, model, headers, now = Date.now()) {
+async function recordLimits(supabase, providerId, model, headers, now = Date.now(), orgId) {
   try {
     const limits = readRateLimits(headers);
     if (!limits || !supabase) return;
-    const { data } = await supabase.from('app_settings').select('value').eq('key', LIMITS_KEY).maybeSingle();
+    const { data } = await supabase.from('app_settings').select('value').eq('key', orgKey(LIMITS_KEY, orgId)).maybeSingle();
     let all = {};
     try { all = data && data.value ? JSON.parse(data.value) : {}; } catch (_) { all = {}; }
     all[providerId + '/' + model] = {
@@ -638,28 +641,28 @@ async function recordLimits(supabase, providerId, model, headers, now = Date.now
       windows: LIMIT_WINDOWS[providerId] || null, ...limits,
     };
     await supabase.from('app_settings').upsert(
-      { key: LIMITS_KEY, value: JSON.stringify(all), updated_at: new Date(now) }, { onConflict: 'key' });
+      { key: orgKey(LIMITS_KEY, orgId), value: JSON.stringify(all), updated_at: new Date(now) }, { onConflict: 'key' });
   } catch (_) {}
 }
 
-async function getProviderLimits(supabase) {
+async function getProviderLimits(supabase, orgId) {
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', LIMITS_KEY).maybeSingle();
+    const { data } = await supabase.from('app_settings').select('value').eq('key', orgKey(LIMITS_KEY, orgId)).maybeSingle();
     const all = data && data.value ? JSON.parse(data.value) : {};
     return Object.values(all).sort((a, b) => String(a.provider + a.model).localeCompare(String(b.provider + b.model)));
   } catch (_) { return []; }
 }
 
-async function getLastTest(supabase) {
+async function getLastTest(supabase, orgId) {
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_TEST_KEY).maybeSingle();
+    const { data } = await supabase.from('app_settings').select('value').eq('key', orgKey(LAST_TEST_KEY, orgId)).maybeSingle();
     return data && data.value ? JSON.parse(data.value) : null;
   } catch (_) { return null; }
 }
 
-async function getLastError(supabase) {
+async function getLastError(supabase, orgId) {
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_ERROR_KEY).maybeSingle();
+    const { data } = await supabase.from('app_settings').select('value').eq('key', orgKey(LAST_ERROR_KEY, orgId)).maybeSingle();
     return data && data.value ? JSON.parse(data.value) : null;
   } catch (_) { return null; }
 }
@@ -699,7 +702,7 @@ async function diagnose(supabase, opts = {}) {
   const chain = await resolveChain(supabase, opts.orgId);
   if (!chain.length) {
     const result = { configured: false, providers: seen, attempts: [] };
-    await recordTest(supabase, result);
+    await recordTest(supabase, result, opts.orgId);
     return result;
   }
   // EVERY MODEL THE FEATURES WILL ACTUALLY ASK FOR, not just one of them.
@@ -745,7 +748,7 @@ async function diagnose(supabase, opts = {}) {
     if (!req) return { provider: entry.id, model, tier, ok: false, error: 'could not build a request for this provider' };
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 12000 });
-      await recordLimits(supabase, entry.id, model, response.headers);
+      await recordLimits(supabase, entry.id, model, response.headers, Date.now(), opts.orgId);
       if (!response.ok) throw new Error(await describeHttpError(response));
       const payload = await response.json();
       const parsed = parseResponse(entry.id, payload);
@@ -767,7 +770,7 @@ async function diagnose(supabase, opts = {}) {
     partial: attempts.some(a => a.ok) && !tiers.every(t => attempts.some(a => a.ok && a.tier === t)),
     tiers,
   };
-  await recordTest(supabase, result);
+  await recordTest(supabase, result, opts.orgId);
   return result;
 }
 
@@ -779,6 +782,6 @@ module.exports = {
   readRateLimits, recordLimits, getProviderLimits, LIMIT_WINDOWS, LIMITS_KEY,
   rankFreeModels, freeModelsFor, candidateModels, FREE_CACHE_KEY, FREE_CACHE_VERSION, defaultModelHint,
   describeHttpError, getLastError, LAST_ERROR_KEY,
-  recordTest, getLastTest, LAST_TEST_KEY, listModels,
+  recordTest, getLastTest, LAST_TEST_KEY, orgKey, listModels,
   budget,
 };

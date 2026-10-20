@@ -222,14 +222,14 @@ module.exports = (ctx) => {
         caps, spent, day: aiBudget.dayKey(),
         // The last thing that went wrong, so a silent fallback has a reason
         // attached to it instead of being indistinguishable from "switched off".
-        last_error: await aiProvider.getLastError(supabase),
+        last_error: await aiProvider.getLastError(supabase, req.orgId),
         // The last test's OWN result, so the answer survives anything that
         // happens between the server and the browser: reopening this screen
         // shows it again instead of losing it.
-        last_test: await aiProvider.getLastTest(supabase),
+        last_test: await aiProvider.getLastTest(supabase, req.orgId),
         defaults: { tokens: aiBudget.DEFAULT_DAILY_TOKENS, calls: aiBudget.DEFAULT_DAILY_CALLS },
         // R-040: the limits each provider REPORTED on its last answer, per model.
-        provider_limits: await aiProvider.getProviderLimits(supabase),
+        provider_limits: await aiProvider.getProviderLimits(supabase, req.orgId),
         features: Object.entries(aiBudget.FEATURES).map(([id, f]) => ({
           id, label: f.label, max_input_tokens: f.in, max_output_tokens: f.out, tier: f.tier,
           spent_today: spent.by_feature[id] || 0,

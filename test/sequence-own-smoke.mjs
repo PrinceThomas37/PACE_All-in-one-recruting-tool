@@ -71,5 +71,18 @@ step('an admin too', (r.out || []).length === T.workflow_definitions.length);
 r = await call('/wf/definitions/:id', 'put', 'boss', { name: 'Lead edit' }, { id: 'theirs' });
 step('a lead can still edit any sequence, as before', r.code === 200 && T.workflow_definitions.find(d => d.id === 'theirs').name === 'Lead edit');
 
+// ── a RECRUITER writes candidate sequences of their own (owner, 20 Oct) ──
+r = await call('/wf/definitions', 'post', 'rec', { name: 'Candidates — Houston', entity_type: 'submission', domain: 'recruiting', steps });
+step('a recruiter can create a sequence — it starts as a draft, made by them', r.code === 200 && T.workflow_definitions.some(d => d.name === 'Candidates — Houston' && d.created_by === 'rec'), JSON.stringify(r.out).slice(0, 160));
+const recId = (T.workflow_definitions.find(d => d.name === 'Candidates — Houston') || {}).id;
+r = await call('/wf/definitions/:id/status', 'post', 'rec', { status: 'active' }, { id: recId });
+step('…and switch their OWN on', r.code === 200 && T.workflow_definitions.find(d => d.id === recId).status === 'active');
+r = await call('/wf/definitions/:id', 'put', 'rec', { name: 'Hijack' }, { id: 'std' });
+step('a recruiter cannot change the company\'s standard sequence', r.code === 403 && T.workflow_definitions.find(d => d.id === 'std').name === 'Standard Sales Outreach');
+r = await call('/wf/definitions/:id', 'put', 'rec', { name: 'Hijack' }, { id: 'lead1' });
+step('…nor a lead\'s', r.code === 403 && T.workflow_definitions.find(d => d.id === 'lead1').name === 'Boss sequence');
+r = await call('/wf/definitions/:id/status', 'post', 'bd1', { status: 'archived' }, { id: recId });
+step('…and a BD cannot touch the recruiter\'s', r.code === 403 && T.workflow_definitions.find(d => d.id === recId).status === 'active');
+
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);
 process.exit(results.every(Boolean) ? 0 : 1);

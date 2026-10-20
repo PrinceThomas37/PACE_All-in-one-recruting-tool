@@ -44,8 +44,16 @@
       steps.push({ id:'sequence', done:have, title:'Write your first sequence',
         text: have ? 'Your own wording is saved.' : 'Not yet — PACE will not start outreach for your leads, or write the Lead Finder\'s first email, until you have one. Individual emails are not affected.' });
     }
-    var done=steps.filter(function(s){ return s.done; }).length;
-    return { steps:steps, done:done, total:steps.length, all:done===steps.length, boxes:boxes };
+    // A recruiter writes sequences for CANDIDATES (owner, 20 Oct). It is a step they can take, never one they are held to: it is shown
+    // but not counted, so "N of M done" and the first-tasks list stay about the mailbox.
+    if (!hasSequenceRole() && userHasAnyRole(STATE.user,'recruiter')){
+      var mine=(STATE.wfDefs||[]).some(function(d){ return d.created_by===(STATE.user&&STATE.user.id) && (d.entity_type==='submission'||d.entity_type==='candidate'); });
+      steps.push({ id:'candseq', optional:true, done:mine, title:'Write a candidate sequence (optional)',
+        text: mine ? 'You have a sequence for candidates.' : 'A first email and follow-ups for candidates on a job, sent by themselves; follow-ups stop when they reply. Individual emails never need one.' });
+    }
+    var counted=steps.filter(function(s){ return !s.optional; });
+    var done=counted.filter(function(s){ return s.done; }).length;
+    return { steps:steps, done:done, total:counted.length, all:done===counted.length, boxes:boxes };
   }
 
   // (There is no card on Today any more: the first tasks sit on the person's Reminders list and in "Needs you today" — one prompt, not two.)
@@ -86,6 +94,7 @@
         apiGet('/smtp/enabled').then(function(r){ M.smtpOn=!!(r&&r.enabled); scheduleRender(); }).catch(function(){ M.smtpOn=false; });
         apiGet('/my-setup/send-window').then(function(r){ M.win=r; M.winForm=null; scheduleRender(); }).catch(function(){});
         if (hasSequenceRole()) apiGet('/outreach-plan').then(function(p2){ loadPlan(p2); }).catch(function(){});
+        else if (userHasAnyRole(STATE.user,'recruiter') && STATE.wf===undefined && !STATE._wfLoading && typeof loadWorkflows==='function') loadWorkflows();   // so the optional candidate-sequence step knows whether they have one
       }
       return;
     }
@@ -130,11 +139,14 @@
         '<button class="btn btn-sm btn-outline" onclick="mySetupRemove(\''+m.id+'\')">Remove</button>'+
       '</div></div>';
   }
+  // Straight to the Sequence tab of the Email page, where "+ New sequence" opens the candidates builder.
+  window.mySetupOpenCandSeq = function(){ STATE.emailTab='sequence'; goPage('email'); };
   function stepActions(x){
     // R-258 (D-0148): the starter (another company's voice) is gone from here; a person writes their own, with AI help if stuck.
     if (x.id==='sequence') return x.done
       ? '<button class="btn btn-sm btn-outline" onclick="openSequenceSetup()">Open it</button>'
       : '<button class="btn btn-sm btn-primary" onclick="openSequenceSetup()">Write my sequence</button>';
+    if (x.id==='candseq') return '<button class="btn btn-sm '+(x.done?'btn-outline':'btn-primary')+'" onclick="mySetupOpenCandSeq()">'+(x.done?'Open my sequences':'Write a sequence')+'</button>';
     if (x.id==='mailbox' && !x.done) return '<button class="btn btn-sm btn-primary" onclick="mySetupAdd(\'Microsoft\')">Add a mailbox</button>';
     return '';
   }

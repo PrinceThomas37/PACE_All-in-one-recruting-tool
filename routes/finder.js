@@ -627,16 +627,23 @@ module.exports = (ctx) => {
       const runOf = (c) => String(c.created_at || '').slice(0, 16);
       const rows = (data || []).slice().sort((a, b) => (runOf(a) === runOf(b) ? Number(b.score) - Number(a.score) : (runOf(a) < runOf(b) ? 1 : -1)));
       const newestRun = rows.length ? runOf(rows[0]) : '';
-      const out = [];
-      for (const c of rows) {
-        const co = (c.payload && c.payload.company) || {};
-        // Asked again as the card is shown: a colleague may have taken this company since last night.
-        let d = null;
-        try { d = await leadCheck.checkCompany({ db, supabase, req, candidate: { name: c.company_name, website: co.domain || co.website, linkedin: co.linkedin_url }, now }); } catch (_) { d = null; }
-        out.push(Object.assign(present(c, d), { found_at: c.created_at || null, is_new: runOf(c) === newestRun }));
-      }
+      // Every card asks "has a colleague taken this company since last night?" — a handful of database trips each. Asked one after
+      // another that is minutes for 90 cards (the database is far from the server), and the page came back empty or with an
+      // error (owner, 20 Oct: "the found leads are gone"). Eight at a time keeps the order and the answers and costs a fraction.
+      const out = new Array(rows.length);
+      let next = 0;
+      const worker = async () => {
+        while (next < rows.length) {
+          const i = next++, c = rows[i];
+          const co = (c.payload && c.payload.company) || {};
+          let d = null;
+          try { d = await leadCheck.checkCompany({ db, supabase, req, candidate: { name: c.company_name, website: co.domain || co.website, linkedin: co.linkedin_url }, now }); } catch (_) { d = null; }
+          out[i] = Object.assign(present(c, d), { found_at: c.created_at || null, is_new: runOf(c) === newestRun });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(8, rows.length) }, worker));
       const made = await scoped.from('finder_cards').select('id,search_id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
-      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).filter((c) => c.search_id).length });
+      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, card_days: await num('finder_card_days'), today: (made.data || []).filter((c) => c.search_id).length });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

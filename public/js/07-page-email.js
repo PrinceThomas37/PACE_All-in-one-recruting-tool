@@ -342,7 +342,9 @@ function renderEmail(){
   // R-146 (owner, D-0082): Outreach Plan is part of Sequence now — "the outreach plan will come up when the user edits the
   // sequence". One tab, three pills: Sequences · My wording (the old Outreach Plan) · AI style. A person with no
   // sequence permission still edits their OWN wording there. 'outreachplan' stays a valid alias (old links, saved state).
-  var tabs=isBD?['pending','compose','allmail','sequence']:['compose','pending','allmail'];
+  // A recruiter writes sequences for CANDIDATES (owner, 20 Oct: "I don't see any sequence builder for recruiter profiles") — the builder, the list and the
+  // server already allowed it; only the tab was missing.
+  var tabs=isBD?['pending','compose','allmail','sequence']:(userHasAnyRole(u,'recruiter')?['compose','pending','allmail','sequence']:['compose','pending','allmail']);
   if(STATE.emailTab==='sent')STATE.emailTab='allmail';
   if(STATE.emailTab==='outreachplan'){ STATE.emailTab='sequence'; STATE.seqView='wording'; }
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
@@ -906,8 +908,8 @@ function renderEmail(){
   if(STATE.emailTab==='sequence'){
     // One screen (owner, 19 Oct, D-0161): the "My wording" and "AI style" sub-tabs moved INTO the new builder (Your outreach →
     // "A different one for each" email ID, and "How the AI writes for you"). What is left here is the list of sequences.
-    var canSeeSeqs=userHasAnyRole(u,'admin','bd_lead','ra_lead','bd');
-    seqShell=canSeeSeqs?renderSequenceBody():'<div class="card cp fs-13 c-text3">Sequences are made by managers and BD. Your wording is in My Setup.</div>';
+    var canSeeSeqs=userHasAnyRole(u,'admin','bd_lead','ra_lead','bd','recruiter');
+    seqShell=canSeeSeqs?renderSequenceBody():'<div class="card cp fs-13 c-text3">Sequences are made by managers, BD and recruiters. Your wording is in My Setup.</div>';
   }
 
   // ── COMPOSE TAB ──

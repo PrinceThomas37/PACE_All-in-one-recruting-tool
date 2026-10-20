@@ -1427,7 +1427,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
         provider: out.provider, model: out.model,
         error: 'answered, but not with usable JSON — likely cut off at the token ceiling: '
              + String(out.text || '').slice(-120),
-      }]);
+      }], req.orgId);
       return res.json({ ...buildAutoRatio(pool_stats, capacity), ai_unusable: true, engine_model: out.model });
     }
     res.json({ ...ratio, engine: 'ai', engine_model: out.model });

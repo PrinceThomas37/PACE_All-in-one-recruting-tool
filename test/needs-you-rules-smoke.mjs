@@ -97,5 +97,14 @@ const silent = (id, days, extra) => lead(id, [msg('outbound', days, 'Following u
 }
 
 const failed = results.filter((r) => !r).length;
+// ── A reply from a lead already marked Rejected is still owed, but labelled (owner, 20 Oct) ──
+{
+  const items = run([lead('rj', [msg('outbound', 14, 'Hello'), msg('inbound', 6, 'Actually, can we talk?')], { stage: 'Rejected' }), replyThread('ok', 6)]);
+  const rj = items.find((i) => i.entity_id === 'rj'), ok2 = items.find((i) => i.entity_id === 'ok');
+  ok('a reply from a Rejected lead is still listed (it may be a second chance)', !!rj && rj.kind === KIND.REPLY_DUE);
+  ok('…and the row says "rejected lead"', rj && rj.rejected_lead === true);
+  ok('an ordinary lead\'s reply carries no such label', ok2 && ok2.rejected_lead === false);
+}
+
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

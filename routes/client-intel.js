@@ -511,22 +511,30 @@ module.exports = (ctx) => {
       if (!leadIds.length) return res.json(empty);
 
       // Which of those leads have a live conversation: the other side wrote.
+      // The chunks are asked SIX AT A TIME, not one after another (20 Oct, R-291 part 3): with ~1,500 leads and ~3,000 contacts that is
+      // about 25 trips, and the database is far from the server (~200 ms each) — the list took seconds to appear. Same rows, same order.
+      const chunked = async (ids, fn) => {
+        const parts = [];
+        for (let i = 0; i < ids.length; i += 200) parts.push(ids.slice(i, i + 200));
+        const out = new Array(parts.length);
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(6, parts.length) }, async () => {
+          while (next < parts.length) { const k = next++; out[k] = await fn(parts[k]); }
+        }));
+        return out;
+      };
       const contactLead = {};
-      for (let i = 0; i < leadIds.length; i += 200) {
-        const { data } = await withOrg(supabase.from('contacts').select('id,job_id').in('job_id', leadIds.slice(i, i + 200)), req);
-        (data || []).forEach(c => { contactLead[c.id] = c.job_id; });
-      }
+      (await chunked(leadIds, (part) => withOrg(supabase.from('contacts').select('id,job_id').in('job_id', part), req)))
+        .forEach(r => ((r && r.data) || []).forEach(c => { contactLead[c.id] = c.job_id; }));
       const contactIds = Object.keys(contactLead);
       const since = new Date(Date.now() - DIGEST_DAYS * 864e5).toISOString();
       const lastIn = {};
-      for (let i = 0; i < contactIds.length; i += 200) {
-        const { data } = await withOrg(supabase.from('conversation_messages').select('contact_id,sent_at')
-          .eq('direction', 'inbound').gte('sent_at', since).in('contact_id', contactIds.slice(i, i + 200)), req);
-        (data || []).forEach(m => {
+      (await chunked(contactIds, (part) => withOrg(supabase.from('conversation_messages').select('contact_id,sent_at')
+        .eq('direction', 'inbound').gte('sent_at', since).in('contact_id', part), req)))
+        .forEach(r => ((r && r.data) || []).forEach(m => {
           const lid = contactLead[m.contact_id];
           if (lid && (!lastIn[lid] || m.sent_at > lastIn[lid])) lastIn[lid] = m.sent_at;
-        });
-      }
+        }));
       const active = Object.keys(lastIn).sort((a, b) => (lastIn[b] > lastIn[a] ? 1 : -1));
       const mineIds = active.filter(id => leadById[id].assigned_to_bd === req.user.id).slice(0, DIGEST_MINE);
       const teamIds = active.filter(id => leadById[id].assigned_to_bd !== req.user.id).slice(0, DIGEST_TEAM);

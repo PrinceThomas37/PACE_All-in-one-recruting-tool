@@ -149,6 +149,19 @@ try {
   let h = await html();
   step('the page opens on Today\'s cards, best first, with the company facts', /Brazos Valley Machining/.test(h) && /Waco, TX/.test(h) && /85 employees/.test(h) && /Headcount \+12%/.test(h) && h.indexOf('Brazos') < h.indexOf('Lone Star'));
   step('a card says which search found it', /Found for: CNC Machinist in Texas/.test(h));
+  // ── SEARCH THE CARDS BY COMPANY (owner, 20 Oct) ──────────────────────────────
+  await page.evaluate(() => { window.STATE.finder.cardDays = 5; window.render(); });
+  step('the cards have a search box, and say how long an undecided card stays', await page.evaluate(() => !!document.getElementById('fd-cq') && /goes after 5 days/.test(document.getElementById('content').innerText)));
+  await page.evaluate(() => { const i = document.getElementById('fd-cq'); i.value = 'lone star'; window.fdCardQ(i.value); });
+  let ct = await page.evaluate(() => document.getElementById('content').innerText);
+  step('typing a company name narrows the cards to it', /Lone Star Dental/.test(ct) && !/Brazos Valley/.test(ct));
+  await page.evaluate(() => window.fdCardQ('nothing like this'));
+  ct = await page.evaluate(() => document.getElementById('content').innerText.replace(/\s+/g, ' '));
+  step('a name that matches nothing says where it may have gone (History / removed after days)', /No card here matches/.test(ct) && /History/.test(ct) && /5 days/.test(ct));
+  await page.evaluate(() => window.fdCardQ(''));
+  ct = await page.evaluate(() => document.getElementById('content').innerText);
+  step('clearing the search brings every card back', /Brazos Valley/.test(ct) && /Lone Star Dental/.test(ct));
+  step('the Accept window is not closed by a click on the dimmed area (it holds revealed people)', await page.evaluate(() => { window.fdAccept('c1'); const ok = typeof STATE.modal === 'string' && STATE.modal.indexOf('data-keep-open') >= 0; document.querySelector('#layer .overlay').click(); const still = !!STATE.modal; window.fdCloseAccept(); return ok && still; }));
   // ── NEW CARDS FIRST (owner, 8 Oct) ───────────────────────────────────────
   const savedCards = await page.evaluate(() => JSON.stringify(window.STATE.finder.cards));
   const groupText = async (list) => {

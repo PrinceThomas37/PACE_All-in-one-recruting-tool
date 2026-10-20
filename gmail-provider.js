@@ -247,6 +247,35 @@ function createGmailProvider(ctx) {
     return { messageId: r.id, threadId: r.threadId };
   }
 
+  // ── Drafts (R-287, owner 20 Oct: "saving a draft you start in PACE into Gmail Drafts — yes") ──────
+  // gmail.modify already covers drafts. A Gmail draft has its OWN id, separate from its message's, and updating one replaces the
+  // message (a NEW message id). The caller therefore keeps the DRAFT id; a message id (what the Drafts folder lists) is turned
+  // into one by findDraft().
+  async function saveDraft(userEmailId, { draftId, to, cc, subject, htmlBody, fromAddress, threadId, inReplyTo, references, attachments }) {
+    const token = await getToken(userEmailId);
+    const raw = buildRaw({ from: fromAddress, to: to || '', cc, subject, htmlBody, inReplyTo, references, attachments });
+    const message = { raw }; if (threadId) message.threadId = threadId;
+    const path = draftId ? `/drafts/${encodeURIComponent(draftId)}` : '/drafts';
+    const r = await api(token, path, { method: draftId ? 'PUT' : 'POST', body: JSON.stringify({ message }) });
+    return { draftId: r.id, messageId: r.message && r.message.id, threadId: r.message && r.message.threadId };
+  }
+  // `ref` is a draft id or the id of a message in the Drafts folder. null when there is no such draft (already sent or deleted).
+  async function findDraft(userEmailId, ref) {
+    const token = await getToken(userEmailId);
+    try {
+      const r = await api(token, `/drafts/${encodeURIComponent(ref)}?format=minimal`);
+      return { draftId: r.id, messageId: r.message && r.message.id };
+    } catch (e) { if (!e || e.status !== 404) throw e; }
+    let pageToken = '';
+    for (let page = 0; page < 5; page++) {
+      const r = await api(token, `/drafts?maxResults=100${pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''}`);
+      const hit = (r.drafts || []).find((d) => d.message && d.message.id === ref);
+      if (hit) return { draftId: hit.id, messageId: hit.message.id };
+      pageToken = r.nextPageToken || ''; if (!pageToken) break;
+    }
+    return null;
+  }
+
   // ── Read ─────────────────────────────────────────────────────────────────────
   async function listMessages(userEmailId, { labelIds, q, maxResults } = {}) {
     const token = await getToken(userEmailId);
@@ -401,7 +430,7 @@ function createGmailProvider(ctx) {
 
   return {
     isConfigured, authorizeUrl, exchangeCode, getToken, forgetToken, getProfileEmail,
-    sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
+    sendNewMessage, sendThreadReply, saveDraft, findDraft, listMessages, getMessage, modifyLabels,
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
     // In-app mailbox reads (services/mail-provider.js)
     listMessagePage, listThreadPage, listLabels, getLabel, createLabel, getThread, getAttachment, trashMessage,

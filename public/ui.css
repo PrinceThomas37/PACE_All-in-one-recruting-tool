@@ -671,6 +671,13 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 .mb-view .seg-btn{border-radius:0}
 .mb-view .seg-btn:first-child{border-radius:var(--r) 0 0 var(--r)}
 .mb-view .seg-btn:last-child{border-radius:0 var(--r) var(--r) 0;margin-left:-1px}
+.mb-switch{display:inline-flex;align-items:center;gap:6px;padding:2px 4px;border:0;background:transparent;color:var(--text2);font:inherit;font-size:12px;cursor:pointer}
+.mb-switch-track{position:relative;width:26px;height:14px;border-radius:7px;background:var(--border);flex:none;transition:background-color .15s}
+.mb-switch-knob{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--card-solid);transition:transform .15s}
+.mb-switch.is-on{color:var(--text)}
+.mb-switch.is-on .mb-switch-track{background:var(--accent)}
+.mb-switch.is-on .mb-switch-knob{transform:translateX(12px)}
+.mb-switch:focus-visible .mb-switch-track{outline:2px solid var(--accent);outline-offset:2px}
 
 /* The conversation: one card per message, newest work at the bottom. */
 .mb-thread{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 22px}

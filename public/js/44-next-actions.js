@@ -405,7 +405,7 @@ window.naRowHtml=function(it){
       job_id:it.job_id||null, reminder_id:it.reminder_id||null,
       last_activity_at:it.last_activity_at||null,
       overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
-      state:it.state||null, title:it.title||'', reason:it.reason||'',
+      state:it.state||null, rejected_lead:!!it.rejected_lead, title:it.title||'', reason:it.reason||'',
       email:it.email||null, subtitle:it.subtitle||null, stage:it.stage||null
     }));
     return '<div data-na-item="'+payload+'" '+
@@ -413,6 +413,7 @@ window.naRowHtml=function(it){
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
       '<label class="cd-tick" onclick="event.stopPropagation()" title="Completed'+(it.reminder_id?'':' — hides this until they reply')+'"><input type="checkbox" onclick="naComplete(this,event)" aria-label="Mark completed"></label>'+
       '<span class="fs-10_5" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'"'+(k.why?' title="'+escAttr(k.why)+'"':'')+'>'+k.lbl+'</span>'+
+      (it.rejected_lead?'<span class="fs-10_5 na-rejected" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:#f1f5f9;color:#475569" title="You marked this lead Rejected, and they have written to you since. Reply, or leave it — your call.">Rejected lead</span>':'')+
       '<div style="flex:1;min-width:0">'+
         '<div class="fs-13_5" style="font-weight:600">'+htmlEsc(it.title||'')+
           (it.subtitle?' <span class="c-text3" style="font-weight:400">· '+htmlEsc(it.subtitle)+'</span>':'')+'</div>'+

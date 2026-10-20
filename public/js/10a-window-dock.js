@@ -192,6 +192,16 @@
     },
     onDiscard: function(kind, fn){ hooks.discard[kind] = fn; },
     onPark: function(kind, h){ hooks.park[kind] = h; },
+    // A click on the dimmed area round a window. A window that carries what the person is WRITING (a message, a reply) goes to
+    // the tray as it is — a stray click must never make words disappear (owner, 20 Oct). Anything else closes as it always did.
+    // If the tray is full the window stays where it is (minimise says so).
+    outsideClick: function(){
+      var h = typeof STATE.modal === 'string' && hooks.park[kindOf(STATE.modal)];
+      if (h && parkable(STATE.modal)) { Dock.minimise(); return; }
+      // A window that holds paid-for or hand-picked work (the Lead Finder's Accept window) is only closed by its own buttons.
+      if (typeof STATE.modal === 'string' && STATE.modal.indexOf('data-keep-open') >= 0) return;
+      closeModal();
+    },
     // The parked windows of one kind, each with the draft it holds.
     parked: function(kind){ return D.items.filter(function(x){ return x.kind === kind; }).map(function(x){ return { id: x.id, ctx: x.ctx, title: x.title }; }); },
     // A window finished (its send went through) while it sat on the tray: take that chip away, whichever it is.
