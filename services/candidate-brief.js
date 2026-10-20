@@ -41,7 +41,7 @@ async function writeBrief({ supabase, aiProvider, job, orgId }) {
       }).eq('id', job.id);
     } catch (_) { /* caching is a saving, never the point of the request */ }
   };
-  if (!(await aiProvider.isAvailable(supabase))) { await store(rules); return { brief: rules, ai_available: false }; }
+  if (!(await aiProvider.isAvailable(supabase, orgId))) { await store(rules); return { brief: rules, ai_available: false }; }
   // The job description is the one uncapped input — trim the AI's copy; the rules writer still reads the fields.
   const payload = aiProvider.budget.trimToTokens(gen.buildBriefPayload(job), 2200);
   const out = await aiProvider.complete(supabase, { maxTokens: 500, feature: 'candidate_brief', orgId, system: gen.buildBriefSystemPrompt(), prompt: payload });

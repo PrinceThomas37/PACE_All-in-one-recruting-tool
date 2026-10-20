@@ -755,3 +755,6 @@ person who has not written their own (R-169).
 
 ## The builder keeps everything the old "My wording" tab did (Session 50, R-286 — on the branch)
 - Per follow-up: **in the same email thread or as a new email** (a new email gets its own subject line, details from the menu included); **Rewrite with AI** on any written email (with Undo); **Check for spam triggers**. My Setup's "Open it" / "Open my writing style" and a step's "Edit my wording" open the builder.
+
+## Each company has its own keys, and its own emergency stop (Session 51)
+A company's AI, Apollo and email-checker keys belong to that company alone; one with no key of its own simply writes with the rules / says Apollo is not connected. A company's admin can stop all sending for THEIR company with the Emergency stop; only the PACE operator can stop every company, run the shared background engines, or change the deployment-wide send times.

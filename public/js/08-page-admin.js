@@ -613,6 +613,9 @@ window.runEmailVerifyTest=function(){
 function loadSendingStatus(){
   apiGet('/admin/sending/status').then(function(s){
     STATE.sendingPaused=!!(s&&s.paused);
+    STATE.platformPaused=!!(s&&s.platform);
+    STATE.isOperator=s&&s.operator!==undefined?!!s.operator:undefined;   // false hides what only the PACE operator may do (R-049)
+    STATE.multiOrg=!!(s&&s.multi_org);
     STATE.pausedManagers=(s&&s.pausedManagers)||[];
     scheduleRender();
   }).catch(function(){
@@ -646,11 +649,21 @@ window.toggleManagerRaMode=function(ev,bdId){
   });
 };
 window.toggleSending=function(pause){
-  if(pause&&!confirm('EMERGENCY STOP\n\nPause ALL outbound email sending right now?\n\nAny run in progress stops before the next email (already-sent mail cannot be recalled). Queued emails stay pending until you resume.'))return;
+  if(pause&&!confirm('EMERGENCY STOP\n\nPause ALL outbound email for your company right now?\n\nAny run in progress stops before the next email (already-sent mail cannot be recalled). Queued emails stay pending until you resume.'))return;
   apiPost(pause?'/admin/sending/pause':'/admin/sending/resume',{}).then(function(r){
     STATE.sendingPaused=!!(r&&r.paused);
-    showToast(STATE.sendingPaused?'Sending PAUSED — all outbound email stopped':'Sending resumed','success');
+    showToast(STATE.sendingPaused?(r&&r.held_by_operator?'Your company is resumed, but PACE has stopped sending for every company':'Sending PAUSED — all outbound email stopped for your company'):'Sending resumed','success');
     render();
+  }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');});
+};
+// The PACE operator's stop for EVERY company (R-049) — only offered to the operator, and only once there is more than one company.
+window.togglePlatformSending=function(pause){
+  if(pause&&!confirm('STOP EVERY COMPANY\n\nThis halts outbound email for ALL companies on PACE, not only yours. Use it for a platform emergency. Each company can still resume itself, but nobody sends until you lift this.'))return;
+  apiPost(pause?'/admin/sending/pause':'/admin/sending/resume',{scope:'platform'}).then(function(r){
+    STATE.platformPaused=!!pause;
+    if(pause)STATE.sendingPaused=true;
+    showToast(pause?'Sending stopped for every company':'The all-companies stop is lifted','success');
+    loadSendingStatus();render();
   }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');});
 };
 window.toggleManagerSending=function(managerId,pause){
@@ -786,7 +799,7 @@ function renderDeliverability(){
       badge+actions+
     '</div>';
   }).join('')||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes.</div>';
-  var warmExtra=(isAdmin?'<button onclick="runWarmupTick()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">'+(wtick==='running'?'Running…':'▶ Run warm-up now')+'</button>':'')+
+  var warmExtra=(isAdmin&&STATE.isOperator!==false?'<button onclick="runWarmupTick()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">'+(wtick==='running'?'Running…':'▶ Run warm-up now')+'</button>':'')+
     (wtick&&wtick!=='running'?'<span class="fs-11 c-text3" style="margin-left:8px">'+(wtick.off?'engine off — apply migration 009':'sent '+(wtick.sent||0)+' · replies '+(wtick.replied||0)+' · rescued '+(wtick.rescued||0)+' · pool '+(wtick.pool||0))+'</span>':'');
   var readyColors={none:'var(--red)',minimal:'var(--amber)',ok:'var(--accent)',good:'var(--green)'};
   var rd=w&&w.readiness;
@@ -958,7 +971,7 @@ function renderEngineCard(isAdmin){
         '<div class="fs-11_5 c-text3">'+htmlEsc(j.job)+' · '+engineEvery(j.every_ms)+'</div>'+
       '</div>'+
       '<div class="fs-12" style="color:'+lateTone+';font-weight:'+(j.overdue?'600':'400')+';white-space:nowrap">'+lateLbl+'</div>'+
-      (isAdmin?'<button onclick="runEngineJob(\''+htmlEsc(j.job)+'\')" style="padding:4px 10px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Run now</button>':'')+
+      (isAdmin&&STATE.isOperator!==false?'<button onclick="runEngineJob(\''+htmlEsc(j.job)+'\')" style="padding:4px 10px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Run now</button>':'')+
     '</div>';
   }).join('');
 

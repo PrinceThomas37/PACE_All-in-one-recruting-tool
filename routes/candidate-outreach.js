@@ -509,7 +509,7 @@ module.exports = (ctx) => {
       const win = await candidateWindow();
       res.json({
         company_name: companyName,
-        ai: await aiProvider.isAvailable(supabase),
+        ai: await aiProvider.isAvailable(supabase, req.orgId),
         mailbox: mailbox ? {
           id: mailbox.id, email: mailbox.email_address,
           display_name: mailbox.display_name || null, platform: mailbox.platform || 'Microsoft',

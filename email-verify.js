@@ -55,9 +55,9 @@ async function hunter(key, email) {
 
 const ADAPTERS = { zerobounce: zeroBounce, neverbounce: neverBounce, hunter };
 
-async function verifyEmailAddress(supabase, address) {
+async function verifyEmailAddress(supabase, address, orgId = null) {
   if (!emailSyntaxValid(address)) return { result: 'invalid', provider: null, reason: 'syntax' };
-  const active = await getActiveVerifier(supabase);
+  const active = await getActiveVerifier(supabase, orgId);
   if (!active) return { result: 'unknown', provider: null, reason: 'not_configured' };
   const adapter = ADAPTERS[active.id];
   if (!adapter) return { result: 'unknown', provider: active.id, reason: 'no_adapter' };

@@ -810,11 +810,12 @@ function renderAdmin(){
       '<div class="fs-14" style="font-weight:700;color:'+(paused?'#b91c1c':'var(--text)')+';display:flex;align-items:center;gap:8px">'+
         '<span style="width:9px;height:9px;border-radius:50%;background:'+(paused?'#dc2626':'var(--green)')+';display:inline-block"></span>'+
         'Email sending: '+(paused?'PAUSED':'Active')+'</div>'+
-      '<div class="fs-12 c-text3" style="margin-top:3px">'+(paused?'All outbound email is stopped. Queued emails stay pending until you resume.':'Emergency stop halts all outbound email immediately. Already-sent emails cannot be recalled.')+'</div>'+
+      '<div class="fs-12 c-text3" style="margin-top:3px">'+(paused?(STATE.platformPaused?'PACE has stopped sending for every company. Queued emails stay pending until it is lifted.':'All outbound email for your company is stopped. Queued emails stay pending until you resume.'):'Emergency stop halts all outbound email for your company immediately. Already-sent emails cannot be recalled.')+'</div>'+
     '</div>'+
     (paused
       ?'<button onclick="toggleSending(false)" class="fs-13" style="padding:9px 18px;background:var(--green);color:#fff;border:0;border-radius:8px;font-weight:700;cursor:pointer">Resume sending</button>'
       :'<button onclick="toggleSending(true)" class="fs-13" style="padding:9px 18px;background:#dc2626;color:#fff;border:0;border-radius:8px;font-weight:700;cursor:pointer">⏸ Emergency stop</button>')+
+    (STATE.isOperator&&STATE.multiOrg?'<button onclick="togglePlatformSending('+(STATE.platformPaused?'false':'true')+')" class="btn btn-sm btn-outline">'+(STATE.platformPaused?'Lift the all-companies stop':'Stop every company')+'</button>':'')+
   '</div>';
 
   return '<div class="page">'+

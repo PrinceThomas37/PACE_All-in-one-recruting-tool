@@ -93,11 +93,13 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole } = ctx;
   const admin = (req, res) => { if (!hasRole(req, 'admin')) { res.status(403).json({ error: 'Admin only' }); return false; } return true; };
+  // Every key here is the admin's OWN company's (R-067): the organisation is read from the session, never from the request body.
+  const orgOf = (req) => (req && (req.orgId || (req.user && req.user.org_id))) || null;
 
   router.get('/admin/integrations', auth, async (req, res) => {
     try {
       if (!admin(req, res)) return;
-      const out = await integrations.getAll(supabase);
+      const out = await integrations.getAll(supabase, orgOf(req));
       // The empty Model box names what REALLY runs (R-031), from the same
       // table the provider layer reads.
       (out.categories || []).forEach((c) => (c.items || []).forEach((it) => {
@@ -137,7 +139,7 @@ module.exports = (ctx) => {
       // outreach generator sends to a customer's prospects, had never once been
       // called. A caller may still pin a single tier deliberately.
       const tier = req.body && req.body.tier;
-      res.json(await aiProvider.diagnose(supabase, tier ? { tier } : {}));
+      res.json(await aiProvider.diagnose(supabase, Object.assign({ orgId: orgOf(req) }, tier ? { tier } : {})));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -147,7 +149,7 @@ module.exports = (ctx) => {
       if (!admin(req, res)) return;
       const address = (req.body && req.body.address) || '';
       if (!address) return res.status(400).json({ error: 'address required' });
-      res.json(await verifyEmailAddress(supabase, address));
+      res.json(await verifyEmailAddress(supabase, address, orgOf(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -159,7 +161,7 @@ module.exports = (ctx) => {
       if (!admin(req, res)) return;
       const b = req.body || {};
       if (b.values && typeof b.values === 'object') {
-        const r = await integrations.setIntegration(supabase, req.params.id, b.values);
+        const r = await integrations.setIntegration(supabase, req.params.id, b.values, orgOf(req));
         if (r.error) return res.status(400).json({ error: r.error });
       }
       if (b.active !== undefined) {
@@ -167,20 +169,20 @@ module.exports = (ctx) => {
         // verifier are each chosen from their own group.
         const def = integrations.BY_ID.get(req.params.id);
         const r = def && def.ai
-          ? await integrations.setActiveAi(supabase, b.active ? req.params.id : null)
-          : await integrations.setActiveVerifier(supabase, b.active ? req.params.id : null);
+          ? await integrations.setActiveAi(supabase, b.active ? req.params.id : null, orgOf(req))
+          : await integrations.setActiveVerifier(supabase, b.active ? req.params.id : null, orgOf(req));
         if (r.error) return res.status(400).json({ error: r.error });
       }
-      res.json(await integrations.getAll(supabase));
+      res.json(await integrations.getAll(supabase, orgOf(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   router.delete('/admin/integrations/:id', auth, async (req, res) => {
     try {
       if (!admin(req, res)) return;
-      const r = await integrations.clearIntegration(supabase, req.params.id);
+      const r = await integrations.clearIntegration(supabase, req.params.id, orgOf(req));
       if (r.error) return res.status(400).json({ error: r.error });
-      res.json(await integrations.getAll(supabase));
+      res.json(await integrations.getAll(supabase, orgOf(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -190,8 +192,8 @@ module.exports = (ctx) => {
     try {
       if (!admin(req, res)) return;
       if (!integrations.BY_ID.has(req.params.id)) return res.status(404).json({ error: 'Unknown integration' });
-      const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key');
-      const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url');
+      const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key', orgOf(req));
+      const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url', orgOf(req));
       const result = await testProvider(req.params.id, key, { base_url });
       // Apollo's answer is kept (never the key) beside the POC finder's own
       // calls, so "I pressed Test and it said…" can be read from the database.

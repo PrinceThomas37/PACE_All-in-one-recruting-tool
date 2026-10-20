@@ -40,7 +40,7 @@ const rules = new Function('contactStatusRules', 'emailSyntaxValid', pieces.join
 const c = (s) => ({ email: 'a@b.test', email_status: s });
 step('the send loop refuses to email a BLOCKED contact (any email type)', rules.isPermanentFollowupBlock('blocked') && rules.isPermanentFollowupBlock('invalid') && !rules.isPermanentFollowupBlock('out_of_office') && !rules.isPermanentFollowupBlock('valid'));
 step('a blocked contact gets no follow-ups; neither does an out-of-office one; a valid one does', !rules.isFollowupEligibleContact(c('blocked')) && !rules.isFollowupEligibleContact(c('out_of_office')) && rules.isFollowupEligibleContact(c('valid')) && rules.isFollowupEligibleContact(c(undefined)));
-step('the bounce sweep leaves a blocked contact Blocked (it does not turn it into Invalid)', /neverEmail\(c\.email_status\)\) continue/.test(src));
+step('the bounce sweep leaves a blocked contact Blocked (it does not turn it into Invalid)', /neverEmail\(c\.email_status\)\) continue/.test(fs.readFileSync(new URL('../services/bounce-mark.js', import.meta.url), 'utf8')));   // the rule moved to services/bounce-mark.js (R-243); test/org-isolation-r067-smoke.mjs calls it
 
 // ── 3. the real routes ──────────────────────────────────────────────────────
 const express = require('express');

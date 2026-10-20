@@ -162,7 +162,7 @@ module.exports = (ctx) => {
         // reason to see a conflict — the helper was deleted in one region and
         // called in another — so main shipped with the call and without the
         // function, and every load of the Compose tab got a 500.
-        ai: await aiProvider.isAvailable(supabase),
+        ai: await aiProvider.isAvailable(supabase, req.orgId),
         mailbox: mailbox ? {
           id: mailbox.id,
           email: mailbox.email_address,
@@ -214,7 +214,7 @@ module.exports = (ctx) => {
         signature_html: signatureHtml
       };
 
-      if (!(await aiProvider.isAvailable(supabase))) {
+      if (!(await aiProvider.isAvailable(supabase, req.orgId))) {
         return res.json({ ...built.variants[0], ...base, ai_available: false });
       }
 
@@ -336,7 +336,7 @@ module.exports = (ctx) => {
           limit: gen.REWRITE_LIMIT,
         });
       }
-      if (!(await aiProvider.isAvailable(supabase))) return res.status(409).json({ error: 'ai_unavailable' });
+      if (!(await aiProvider.isAvailable(supabase, req.orgId))) return res.status(409).json({ error: 'ai_unavailable' });
 
       let [companyName, mailbox] = await Promise.all([
         orgCompanyName(req), sendingMailboxFor(req, (req.body || {}).mailbox_id)

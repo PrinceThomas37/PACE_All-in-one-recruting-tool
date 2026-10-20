@@ -21,6 +21,7 @@ const { createDb } = require('../models');
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, engine, emit, EVENTS } = ctx;
+  const isOperator = ctx.isOperator || (() => false);   // one tick serves every company's mailboxes (R-049)
   // index.js mounts this router with its own small ctx (no `db`), so it builds
   // the scoped layer itself — auth() has already put the org on the request.
   const db = ctx.db || createDb(supabase);
@@ -207,7 +208,7 @@ module.exports = (ctx) => {
   // Manual "run warm-up now" (mirrors /wf/tick).
   router.post('/warmup/tick', auth, async (req, res) => {
     try {
-      if (!canManage(req)) return res.status(403).json({ error: 'Admin only' });
+      if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can run the warm-up engine.' });
       res.json(await engine.tick());
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

@@ -197,7 +197,7 @@ let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 // appears rather than at the next restart — on the free tier that could be
 // hours, and every one of them a window in which an org-less session silently
 // resolves to the FIRST org's data.
-require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
+require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; require('./config/integrations').noteOrgCreated(); });
 const { isRecyclable } = require('./services/lead-recycle');
 const oooReturn = require('./services/ooo-return');
 const autoReply = require('./services/auto-reply');
@@ -289,6 +289,7 @@ function auth(req, res, next) {
   }
   req.user = claims;
   req.orgId = orgIdFor(req);
+  rememberUserOrg(claims.id, req.orgId);
   // So that their OWN opens of what they sent are not counted as the recipient's
   // (services/open-tracking.js). Not awaited; throttled; never throws.
   openTracking.noteSenderIp(claims.id, req.ip);
@@ -585,6 +586,33 @@ const isSendAlive = (userId) => activeSendByUser.has(userId) || (selectedSendsBy
 // the check inside the send loop instant.
 let sendingPaused = false;
 function isSendingPaused() { return sendingPaused; }
+// R-049: the platform-wide switch above is the OPERATOR's (services/operator.js). A customer's admin has their own: a stop for
+// THEIR company only. Both live in app_settings so a pause survives a redeploy; the person→company map lets the send loop (which
+// knows a user id, not a request) learn which company it is checking.
+const sendingPause = require('./services/sending-pause');
+const operatorRule = require('./services/operator');
+let pausedOrgs = new Set();
+const userOrgOf = new Map();
+function rememberUserOrg(userId, orgId) { if (userId && orgId) userOrgOf.set(userId, orgId); }
+function isOperator(req) { return operatorRule.isOperator(req && req.user, { foundingOrgId: DEFAULT_ORG_ID }); }
+function isOrgPaused(orgId) { return sendingPause.isOrgPaused({ platform: sendingPaused, orgs: pausedOrgs }, orgId); }
+async function loadPausedOrgs() {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'sending_paused_orgs').maybeSingle();
+    const arr = data?.value ? JSON.parse(data.value) : [];
+    pausedOrgs = new Set(Array.isArray(arr) ? arr : []);
+    if (pausedOrgs.size) console.log(`[EmergencyStop] Loaded ${pausedOrgs.size} paused organisation(s)`);
+    const { data: us } = await db.crossOrg('users').select('id,org_id');
+    (us || []).forEach((u) => rememberUserOrg(u.id, u.org_id));
+  } catch (e) { console.error('[EmergencyStop] load organisations failed:', e.message); }
+}
+async function setOrgPaused(orgId, paused, actorUserId) {
+  if (paused) pausedOrgs.add(orgId); else pausedOrgs.delete(orgId);
+  try {
+    await supabase.from('app_settings').upsert({ key: 'sending_paused_orgs', value: JSON.stringify([...pausedOrgs]), updated_at: new Date() }, { onConflict: 'key' });
+  } catch (e) { console.error('[EmergencyStop] persist organisations failed:', e.message); }
+  emit(paused ? EVENTS.SENDING_PAUSED : EVENTS.SENDING_RESUMED, { scope: 'org', orgId, actorUserId: actorUserId || null });
+}
 async function loadSendingPaused() {
   try {
     const { data } = await supabase.from('app_settings').select('value').eq('key', 'sending_paused').maybeSingle();
@@ -604,7 +632,8 @@ async function setSendingPaused(paused, actorUserId) {
 // BD manager (e.g. a batch they just assigned) without affecting anyone else.
 // Durable in app_settings as a JSON array; mirrored to an in-memory Set.
 let pausedManagers = new Set();
-function isManagerPaused(id) { return !!id && pausedManagers.has(id); }
+// Everything that asks "is this person paused?" calls this, so a company's stop reaches every sender in it (services/sending-pause.js).
+function isManagerPaused(id) { return sendingPause.isUserPaused({ platform: false, orgs: pausedOrgs, managers: pausedManagers, userOrg: userOrgOf }, id); }
 async function loadPausedManagers() {
   try {
     const { data } = await supabase.from('app_settings').select('value').eq('key', 'sending_paused_managers').maybeSingle();
@@ -2054,7 +2083,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   let companyAiFirst = false, aiReady = false;
   try {
     companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', runOrg)) === 1;
-    aiReady = await aiProvider.isAvailable(supabase);
+    aiReady = await aiProvider.isAvailable(supabase, runOrg);
   } catch (_) { companyAiFirst = false; aiReady = false; }
   let aiChoiceMap = {};
   try {
@@ -2953,19 +2982,21 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
 
 // The NDR rule, shared by every provider's bounce sweep: a message from a mail-delivery daemon names the address that bounced, and
 // that contact is marked invalid (so it stops being mailed and its follow-ups are cancelled). `messages` are Graph-shaped.
+const bounceMark = require('./services/bounce-mark');
 async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder, newestStart) {
   let marked = 0, newest = newestStart;
+  // R-243: a bounce read from THIS company's mailbox can only invalidate THIS company's contacts. The same address held by
+  // another company's account is none of this mailbox's business.
+  const orgId = tokenRow.org_id || DEFAULT_ORG_ID;
+  const scoped = orgId ? db.forOrg(orgId) : null;
   for (const msg of messages) {
     if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
+    if (!scoped) continue;               // no company to scope to: record nothing rather than reach across companies
     if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
     if (!isNdrMessage(msg)) continue;
     const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
     for (const addr of extractBounceRecipients(text, ownAddresses)) {
-      const { data: matches } = await supabase.from('contacts')
-        .select('id,email_status,job_id').ilike('email', addr).limit(10);
-      for (const c of (matches || [])) {
-        if (contactStatusRules.neverEmail(c.email_status)) continue;      // already marked (a blocked address that bounces stays Blocked)
-        await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
+      for (const c of await bounceMark.invalidateBouncedContacts(scoped, addr, { neverEmail: contactStatusRules.neverEmail })) {
         emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
         emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
         await logActivity(c.job_id, c.id, null, 'email_bounced',
@@ -3499,7 +3530,7 @@ async function runClientIntelCatchUp({ force = false } = {}) {
 }
 app.post('/admin/client-intel/catch-up', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can run this for every company.' });
     res.json(await runClientIntelCatchUp({ force: !!(req.body && req.body.force) }));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3507,7 +3538,7 @@ app.post('/admin/client-intel/catch-up', auth, async (req, res) => {
 // Manual trigger (admin) — useful for verifying the loop without waiting for cron.
 app.post('/admin/bounce-sweep', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
+    if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can run this for every company.' });   // sweeps every company's mailboxes (R-049)
     const marked = await runBounceSweep();
     res.json({ success: true, marked });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3516,7 +3547,7 @@ app.post('/admin/bounce-sweep', auth, async (req, res) => {
 // Manual reply-sweep trigger (admin).
 app.post('/admin/reply-sweep', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
+    if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can run this for every company.' });   // sweeps every company's mailboxes (R-049)
     const detected = await runReplySweep();
     res.json({ success: true, detected });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3541,29 +3572,39 @@ app.post('/admin/mailbox/:id/resume', auth, async (req, res) => {
 // and resume on the next trigger once unpaused.
 app.get('/admin/sending/status', auth, (req, res) => {
   if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
-  res.json({ paused: isSendingPaused(), pausedManagers: [...pausedManagers] });
+  // Only this company's stops: another company's manager ids are none of this caller's business.
+  const mine = [...pausedManagers].filter((id) => userOrgOf.get(id) === req.orgId);
+  res.json({ paused: isOrgPaused(req.orgId), org: pausedOrgs.has(req.orgId), platform: isSendingPaused(), operator: isOperator(req), multi_org: MULTI_ORG, pausedManagers: mine });
 });
 // Any user can check whether THEIR OWN sending is paused (global or per-manager) —
 // used to show a paused banner on the BD's own Email page.
 app.get('/sending/my-status', auth, (req, res) => {
-  const global = isSendingPaused();
-  const mine = isManagerPaused(req.user.id);
+  const global = isOrgPaused(req.orgId);          // the operator's stop or this company's own
+  const mine = pausedManagers.has(req.user.id);   // this person named on their own
   res.json({ paused: global || mine, global, manager: mine });
 });
-// Pass `manager_id` to pause/resume one BD manager's sending; omit it for the
-// global switch. Per-manager control is available to admins and leads.
+// Pass `manager_id` to pause/resume one BD manager's sending (a manager of THIS company); omit it for the company-wide switch.
+// `scope:'platform'` is the operator's stop for every company (R-049) — a customer's admin gets a 403, never the whole deployment.
+// Per-manager control is available to admins and leads.
 app.post('/admin/sending/pause', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
     const managerId = req.body && req.body.manager_id;
     if (managerId) {
+      if (userOrgOf.get(managerId) !== req.orgId) return res.status(404).json({ error: 'Not found' });
       await setManagerPaused(managerId, true, req.user.id);
       console.log(`[EmergencyStop] Manager ${managerId} PAUSED by user ${req.user.id}`);
       return res.json({ paused: true, manager_id: managerId });
     }
-    await setSendingPaused(true, req.user.id);
-    console.log(`[EmergencyStop] GLOBAL PAUSED by user ${req.user.id}`);
-    res.json({ paused: true });
+    if (req.body && req.body.scope === 'platform') {
+      if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can stop sending for every company.' });
+      await setSendingPaused(true, req.user.id);
+      console.log(`[EmergencyStop] PLATFORM PAUSED by operator ${req.user.id}`);
+      return res.json({ paused: true, scope: 'platform' });
+    }
+    await setOrgPaused(req.orgId, true, req.user.id);
+    console.log(`[EmergencyStop] ORGANISATION ${req.orgId} PAUSED by user ${req.user.id}`);
+    res.json({ paused: true, scope: 'org' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/admin/sending/resume', auth, async (req, res) => {
@@ -3571,13 +3612,21 @@ app.post('/admin/sending/resume', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
     const managerId = req.body && req.body.manager_id;
     if (managerId) {
+      if (userOrgOf.get(managerId) !== req.orgId) return res.status(404).json({ error: 'Not found' });
       await setManagerPaused(managerId, false, req.user.id);
       console.log(`[EmergencyStop] Manager ${managerId} RESUMED by user ${req.user.id}`);
       return res.json({ paused: false, manager_id: managerId });
     }
-    await setSendingPaused(false, req.user.id);
-    console.log(`[EmergencyStop] GLOBAL RESUMED by user ${req.user.id}`);
-    res.json({ paused: false });
+    if (req.body && req.body.scope === 'platform') {
+      if (!isOperator(req)) return res.status(403).json({ error: 'Only the PACE operator can resume sending for every company.' });
+      await setSendingPaused(false, req.user.id);
+      console.log(`[EmergencyStop] PLATFORM RESUMED by operator ${req.user.id}`);
+      return res.json({ paused: isOrgPaused(req.orgId), scope: 'platform' });
+    }
+    await setOrgPaused(req.orgId, false, req.user.id);
+    console.log(`[EmergencyStop] ORGANISATION ${req.orgId} RESUMED by user ${req.user.id}`);
+    // Still held by the operator? Say so, so the screen does not claim sending is back.
+    res.json({ paused: isOrgPaused(req.orgId), scope: 'org', held_by_operator: isSendingPaused() });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3617,6 +3666,7 @@ engineRunner.register('pending_retry', {
 // Restore the emergency-stop state on boot so a pause survives a redeploy.
 loadSendingPaused();
 loadPausedManagers();
+loadPausedOrgs();
 // An email the previous process was part-way through sending when it died is
 // left at 'sending', on no screen. Before this process claims anything, show
 // it under "Didn't send" as "may have gone out" (services/interrupted-sends.js).
@@ -3788,6 +3838,7 @@ function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
 // Shared helpers/middleware stay defined above; routers receive them via ctx so
 // their closures and behaviour are identical to the original inline routes.
 const routeCtx = {
+  isOperator,
   applyLimiter,
   supabase, db, auth, hasRole, today, orgIdFor, withOrg, orgStamp,
   ownership, reportingChainIds, userOrgId, mailboxOrgId,
@@ -4189,7 +4240,7 @@ engineRunner.register('wf_tick', {
 // (warmup_status='warming') or opts it in as a receiver. Spread across a couple
 // of ticks a day so the traffic looks organic; offset from the other sweeps.
 const warmupEngine = createWarmupEngine({ supabase, graphMailRequest, getMicrosoftToken, gmail: gmailProvider, emit, EVENTS });
-app.use(require('./routes/warmup')({ supabase, auth, hasRole, engine: warmupEngine, emit, EVENTS }));
+app.use(require('./routes/warmup')({ supabase, auth, hasRole, isOperator, engine: warmupEngine, emit, EVENTS }));
 engineRunner.register('warmup_tick', {
   everyMs: 2 * 60 * 60 * 1000,
   description: 'Warm-up pool: graduate mailboxes, rescue from spam, send the next wave',
@@ -4225,7 +4276,7 @@ engineRunner.register('lead_finder', {
 //      cron-job.org, see .github/workflows/heartbeat.yml). This is the one that
 //      matters on Render's free tier, where the service sleeps on idle and every
 //      in-process timer stops with it.
-app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole }));
+app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole, isOperator }));
 
 // Check every 2 minutes; each job still only runs on its own cadence.
 setInterval(() => {

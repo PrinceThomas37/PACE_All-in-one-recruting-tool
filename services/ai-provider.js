@@ -258,10 +258,11 @@ function parseResponse(providerId, data) {
 
 // The providers that are actually usable right now, in the order to try them:
 // the admin's chosen provider first, then the rest of the registry order.
-async function resolveChain(supabase) {
+// The keys are the ORGANISATION's (R-067): `orgId` says whose. Another company's key is never tried.
+async function resolveChain(supabase, orgId) {
   if (!supabase) return [];
   let active = null;
-  try { active = await integrations.getActiveAi(supabase); } catch (_) {}
+  try { active = await integrations.getActiveAi(supabase, orgId); } catch (_) {}
   const order = active && PROVIDERS[active]
     ? [active, ...PROVIDER_ORDER.filter(id => id !== active)]
     : PROVIDER_ORDER.slice();
@@ -269,22 +270,22 @@ async function resolveChain(supabase) {
   const chain = [];
   for (const id of order) {
     const def = PROVIDERS[id];
-    const key = def.keyless ? null : await integrations.getSecret(supabase, id, 'api_key');
-    const baseUrl = def.url ? null : await integrations.getSecret(supabase, id, 'base_url');
+    const key = def.keyless ? null : await integrations.getSecret(supabase, id, 'api_key', orgId);
+    const baseUrl = def.url ? null : await integrations.getSecret(supabase, id, 'base_url', orgId);
     // A placeholder left in an env var is not configuration.
     if (!def.keyless && (!key || /^your_.*_here$/i.test(key))) continue;
     if (!def.url && !baseUrl) continue;
     // An admin-typed model is an OVERRIDE, kept distinct from the default so
     // the per-feature tiering below can tell "they chose this" from "nobody
     // chose anything".
-    const model = await integrations.getSecret(supabase, id, 'model');
+    const model = await integrations.getSecret(supabase, id, 'model', orgId);
     chain.push({ id, key, baseUrl, model_override: model || null, model: model || def.model });
   }
   return chain;
 }
 
-async function isAvailable(supabase) {
-  return (await resolveChain(supabase)).length > 0;
+async function isAvailable(supabase, orgId) {
+  return (await resolveChain(supabase, orgId)).length > 0;
 }
 
 // Can this FEATURE have AI right now, and if not, why? (Session 31.) A button
@@ -293,7 +294,7 @@ async function isAvailable(supabase) {
 // nothing is set up at all, or today's allowance is spent. Estimated the same
 // way complete() estimates, from the feature's own ceilings.
 async function availability(supabase, { feature, orgId } = {}) {
-  if (!(await isAvailable(supabase))) return { available: false, reason: 'not_configured' };
+  if (!(await isAvailable(supabase, orgId))) return { available: false, reason: 'not_configured' };
   try {
     const limits = budget.featureLimits(feature);
     const estimated = limits.in + limits.out + REASONING_HEADROOM;
@@ -439,7 +440,7 @@ function modelFor(entry, tier) {
 // skipped and the next one tried, because a daily free-tier ceiling is the
 // expected failure here, not the exceptional one.
 async function complete(supabase, opts = {}) {
-  const chain = await resolveChain(supabase);
+  const chain = await resolveChain(supabase, opts.orgId);
   if (!chain.length) return null;
   const failures = [];
 
@@ -678,8 +679,8 @@ async function diagnose(supabase, opts = {}) {
   const seen = [];
   for (const id of PROVIDER_ORDER) {
     const def = PROVIDERS[id];
-    const key = def.keyless ? null : await integrations.getSecret(supabase, id, 'api_key');
-    const baseUrl = def.url ? null : await integrations.getSecret(supabase, id, 'base_url');
+    const key = def.keyless ? null : await integrations.getSecret(supabase, id, 'api_key', opts.orgId);
+    const baseUrl = def.url ? null : await integrations.getSecret(supabase, id, 'base_url', opts.orgId);
     const placeholder = !!key && /^your_.*_here$/i.test(key);
     seen.push({
       provider: id,
@@ -695,7 +696,7 @@ async function diagnose(supabase, opts = {}) {
     });
   }
 
-  const chain = await resolveChain(supabase);
+  const chain = await resolveChain(supabase, opts.orgId);
   if (!chain.length) {
     const result = { configured: false, providers: seen, attempts: [] };
     await recordTest(supabase, result);
