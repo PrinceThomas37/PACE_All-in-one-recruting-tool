@@ -110,7 +110,7 @@ try {
   await page.evaluate(() => { __owed = ['mailbox']; STATE.setupOwed = undefined; STATE.page = 'dashboard'; render(); });
   await page.waitForTimeout(400);
   const done = await page.evaluate(() => ({ card: !!document.querySelector('[data-setup-card]'), txt: document.querySelector('#content').textContent }));
-  step('R-283: once the sequence is written the ordinary Today comes back', !done.card && /Needs you today|Upcoming interviews/.test(done.txt), done.txt.slice(0, 160));
+  step('R-283: once the sequence is written the ordinary Today comes back', !done.card && /Needs you/i.test(done.txt), done.txt.slice(0, 160));
   await switchRole(page, 'admin');
   await page.evaluate(() => { __owed = ['mailbox', 'sequence']; STATE.setupOwed = undefined; STATE.page = 'dashboard'; render(); });
   await page.waitForTimeout(400);

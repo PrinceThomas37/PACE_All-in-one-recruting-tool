@@ -230,7 +230,9 @@ try {
     spills.slice(0, 4).join(' | '));
 
   // ── 4. THE DASHBOARD BANNER ──────────────────────────────────────────────
-  await switchRole(page, 'admin');
+  // The clock chip lives on the recruiter's (and RA's) dashboard; a manager's Today (D-0160) has no clock in its banner — the
+  // top bar carries the date and time — and its banner is covered by the overflow sweep above.
+  await switchRole(page, 'recruiter');
   await page.evaluate(() => { window.STATE.page = 'dashboard'; window.render(); });
   await page.waitForTimeout(300);
   const banner = await page.evaluate(() => {

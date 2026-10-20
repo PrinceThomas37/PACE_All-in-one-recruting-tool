@@ -473,6 +473,8 @@ function renderManagerDashboard(u){
   return '<div class="page td">'+
     '<div class="banner td-banner"><div class="banner-name">'+greet+', '+htmlEsc(String(u.name||'').split(' ')[0])+' 👋</div>'+
       '<div class="banner-sub">'+htmlEsc(roleLabel(u.role))+' · '+htmlEsc(new Date().toLocaleDateString('en-US',{weekday:'short',day:'numeric',month:'short'}))+'</div></div>'+
+    // The morning briefing (D-0021) stays: the drawing (D-0160) did not take it away, and building the layout must not either.
+    (typeof renderMorningBriefingCard==='function'?renderMorningBriefingCard():'')+
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
     '<div class="td-tiles" data-today-tiles>'+tiles+'</div>'+

@@ -1537,7 +1537,10 @@
     c.sched=c.sched&&c.sched.open?{open:false}:{ open:true, date:(c.sched&&c.sched.date)||first.date, time:(c.sched&&c.sched.time)||first.time };
     schedRepaint(which);
     // The panel sits at the foot of the window's body: bring it into view, date and time boxes and the button included.
-    if(c.sched.open) setTimeout(function(){ var el=document.querySelector('#layer .mb-sched'); if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'}); },30);
+    if(c.sched.open){
+      var show=function(){ var el=document.querySelector('#layer .mb-sched'); if(el&&el.scrollIntoView) el.scrollIntoView({block:'nearest'}); };
+      show(); setTimeout(show,60);   // at once (the window is drawn synchronously), and again after anything that draws late
+    }
   };
   window.mbSchedClose=function(which){ var c=schedBag(which); if(!c) return; c.sched={open:false,date:c.sched&&c.sched.date,time:c.sched&&c.sched.time}; schedRepaint(which); };
   window.mbSchedField=function(which,k,v){ var c=schedBag(which); if(c&&c.sched){ c.sched[k]=v; c.sched.err=''; } };
