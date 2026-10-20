@@ -98,6 +98,11 @@ window.setAssignMode=function(mode){
   }
 };
 
+// A share is shown as a whole percent (the split is stored exact — 19 of 43 is 44.1860465116279 — and that is never what a
+// person should read). Something real but under half a percent says "<1" rather than a misleading 0.
+function ratioPct(v){ var n=Number(v); if(!isFinite(n)) return '0'; if(n>0&&n<0.5) return '&lt;1'; return String(Math.round(n)); }
+window.ratioPct=ratioPct;
+
 function showRatioPreview(ratio){
   STATE._assignRatio=ratio;
   var prev=document.getElementById('assign-ratio-preview');
@@ -129,9 +134,9 @@ function showRatioPreview(ratio){
     engineNote+
     '<div class="fs-12 c-text2" style="line-height:1.6;margin-bottom:8px">'+htmlEsc(ratio.summary||'')+'</div>'+
     '<div class="fs-11_5" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Freshness</div>'+Object.keys(bf).map(function(k){return '<div>'+k+': <strong>'+bf[k]+'%</strong></div>';}).join('')+'</div>'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Industry</div>'+Object.keys(bi).filter(function(k){return bi[k]>0;}).map(function(k){return '<div>'+k+': <strong>'+bi[k]+'%</strong></div>';}).join('')+'</div>'+
-      '<div><div class="c-text3" style="margin-bottom:3px">Timezone</div>'+Object.keys(btz).map(function(k){return '<div>'+k+': <strong>'+btz[k]+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Freshness</div>'+Object.keys(bf).map(function(k){return '<div>'+k+': <strong>'+ratioPct(bf[k])+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Industry</div>'+Object.keys(bi).filter(function(k){return bi[k]>0;}).map(function(k){return '<div>'+k+': <strong>'+ratioPct(bi[k])+'%</strong></div>';}).join('')+'</div>'+
+      '<div><div class="c-text3" style="margin-bottom:3px">Timezone</div>'+Object.keys(btz).map(function(k){return '<div>'+k+': <strong>'+ratioPct(btz[k])+'%</strong></div>';}).join('')+'</div>'+
     '</div>'+
   '</div>';
   if(btn){btn.disabled=false;btn.style.opacity='1';btn.style.cursor='pointer';}

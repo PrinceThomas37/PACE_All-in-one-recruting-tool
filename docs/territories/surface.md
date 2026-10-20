@@ -1444,3 +1444,5 @@ No screen code changed; the new numbers appear in System Settings automatically 
   profile; new cream surfaces (.td-tile/.oi-tile) must join the retro.css dark paper list. Outreach Plan tab tests retired (see archive).
 
 - Session 51 (R-049): `public/js/08-page-admin.js` / `09-page-workflows.js` — Emergency stop wording is "your company"; engine Run buttons and the warm-up tick hide when `/admin/sending/status` says `operator:false` (`STATE.isOperator===false`); the operator sees "Stop every company" (`togglePlatformSending`) only when `multi_org` is true.
+
+- Session 51 (20 Oct): public/js/22-api.js apiFetch reads the body as text — an empty/non-JSON answer to a GET is asked once more after 3 s, then shown as a plain "server may be waking up" sentence (`NOT_JSON_MSG`, error.unreachable); a POST is never repeated. public/js/19-distribution.js: the Assign-leads preview shows shares as whole percents via `ratioPct()` (was raw 44.1860465116279).

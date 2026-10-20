@@ -1317,3 +1317,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - Session 50: `test/outreach-insights-smoke.mjs` (15).
 
 - Session 51 (R-067/R-049/R-243): NEW `test/org-isolation-r067-smoke.mjs` (54, two-company in-memory db via fake-postgrest; 11 checks fail with the key-inheritance rule removed) and `test/operator-routes-smoke.mjs` (21, boots the real server with DEFAULT_ORG_ID). Updated `engine-runs-smoke` (stub cron ctx supplies `isOperator`) and `contact-status-smoke` (neverEmail rule now read from `services/bounce-mark.js`). Full Node 22 run in progress at time of writing; Node 26 run still owed before any merge.
+
+- Session 51 (20 Oct): NEW test/api-not-json-smoke.mjs (cuts the real apiFetch out of 22-api.js and runs it against a scripted fetch). Run 9/9; with assign-leads, session-expiry and login-repaint suites green. Full Node 22 + 26 runs still owed before a merge.
