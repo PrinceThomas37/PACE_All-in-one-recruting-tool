@@ -18,6 +18,7 @@ const T = {
   conversation_messages: [], emails: [], email_tracking: [], client_summaries: [], user_emails: [],
 };
 const reads = [];
+let slow = false, live = 0, peak = 0;   // the speed step: how many of the chunk queries are in flight at once
 function q(table) {
   const st = { f: [], op: 'select', payload: null, order: null, lim: null };
   const rows = () => {
@@ -43,6 +44,7 @@ function q(table) {
   };
   async function run() {
     reads.push(table);
+    if (slow && (table === 'contacts' || table === 'conversation_messages')) { live++; peak = Math.max(peak, live); await new Promise(r => setTimeout(r, 15)); live--; }
     if (st.op === 'upsert') {
       const k = st.conflict || 'id';
       const ex = T[table].find(r => r[k] === st.payload[k]);
@@ -308,6 +310,23 @@ setting('client_intel_ai_per_user_daily', 10);
   step('R-268: …and opening Today again within minutes asks the mailbox nothing new (cached)', sentLists === listsAfterFirst, 'lists=' + sentLists);
   d = (await dgLive(sam)).body;
   step('R-268: a manager\'s TEAM view is not read from anyone\'s mailbox (their own only)', d.team.length === 1 && d.team[0].waiting === 1);
+  // ── R-291 part 3 (20 Oct): the chunk queries run together, not one after another ──
+  {
+    const keepJobs = T.jobs.slice(), keepContacts = T.contacts.slice(), keepMsgs = T.conversation_messages.slice();
+    for (let i = 0; i < 650; i++) {
+      T.jobs.push({ id: 'bulk' + i, org_id: ORG, position: 'Role ' + i, assigned_to_bd: priya.id, deleted_at: null });
+      T.contacts.push({ id: 'bc' + i, org_id: ORG, job_id: 'bulk' + i });
+    }
+    slow = true; live = 0; peak = 0;
+    const t0 = Date.now();
+    const out = await freshDigest()(priya);
+    const took = Date.now() - t0;
+    slow = false;
+    step('digest speed: ~650 leads\' chunks are asked several at a time (peak in flight ' + peak + '), not one by one', peak >= 3, 'peak ' + peak);
+    step('…so the page does not wait for every trip in turn (' + took + ' ms)', took < 15 * 30, took + ' ms');
+    step('…and the answer is unchanged', out.body && out.body.enabled === true && out.body.mine.length === 1 && out.body.mine[0].id === 'j1', JSON.stringify(out.body && out.body.mine && out.body.mine.map(m => m.id)));
+    T.jobs = keepJobs; T.contacts = keepContacts; T.conversation_messages = keepMsgs;
+  }
   sentFolder = null;
   setting('client_intel_enabled', 0);
   delete require.cache[require.resolve('../config/settings.js')];
