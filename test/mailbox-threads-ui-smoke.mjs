@@ -178,7 +178,14 @@ try {
   step('Archive on a conversation archives its messages in the Inbox (one request)', !!bulk && bulk[2].action === 'archive' && JSON.stringify(bulk[2].ids) === '["r2"]', JSON.stringify(bulk && bulk[2]));
   step('…and the conversation leaves the list, the reader closes', await page.evaluate(() => !STATE.mailbox.messages.some(x => x.thread_id === 'T1') && !STATE.mailbox.selectedId));
 
-  // ── the view switch ──
+  // ── the view switch ── a small on/off switch (owner 20 Oct), not two buttons
+  step('the view control is ONE small switch, on by default (conversations)', await page.evaluate(() => { const b = document.querySelectorAll('#mb-toolbar .mb-switch'); return b.length === 1 && b[0].getAttribute('role') === 'switch' && b[0].getAttribute('aria-checked') === 'true' && !document.querySelector('#mb-toolbar .mb-view') && b[0].getBoundingClientRect().height < 30; }));
+  await page.evaluate(() => document.querySelector('#mb-toolbar .mb-switch').click());
+  await page.waitForFunction(() => document.querySelector('#mb-toolbar .mb-switch') && document.querySelector('#mb-toolbar .mb-switch').getAttribute('aria-checked') === 'false', { timeout: 8000 });
+  step('clicking the switch turns conversations off (every email on its own row)', await page.evaluate(() => STATE.mailbox.messages.every(m => !m.message_ids)));
+  await page.evaluate(() => document.querySelector('#mb-toolbar .mb-switch').click());
+  await page.waitForFunction(() => document.querySelector('#mb-toolbar .mb-switch') && document.querySelector('#mb-toolbar .mb-switch').getAttribute('aria-checked') === 'true', { timeout: 8000 });
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).some(m => m.message_ids), { timeout: 8000 });
   await page.evaluate(() => window.mbSetView('messages'));
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 3, { timeout: 8000 });
   step('"Single emails" lists every email on its own line', (await calls(/^\/mailbox\/mb1\/messages\?/)).length >= 1);

@@ -2012,10 +2012,10 @@
 
     // Conversations (the newest message either way, ours included) or every email on its own line (R-271).
     var t=threaded();
-    var viewSwitch='<span class="mb-view" role="group" aria-label="Show mail as">'+
-      '<button type="button" class="seg-btn'+(t?' is-on':'')+'" aria-pressed="'+t+'" title="Each conversation is one row: your replies join it, and it shows the newest message either way" onclick="mbSetView(\'threads\')">Conversations</button>'+
-      '<button type="button" class="seg-btn'+(!t?' is-on':'')+'" aria-pressed="'+(!t)+'" title="Every email on its own row" onclick="mbSetView(\'messages\')">Single emails</button>'+
-    '</span>';
+    // One small switch (owner, 20 Oct: "convert this into a toggle and make it small"): on = conversations, off = every email on its own row.
+    var viewSwitch='<button type="button" class="mb-switch'+(t?' is-on':'')+'" role="switch" aria-checked="'+t+'" '+
+      'title="'+(t?'Conversations: each one is a single row, your replies join it. Switch off to see every email on its own row':'Every email is on its own row. Switch on to group them into conversations')+'" '+
+      'onclick="mbSetView(\''+(t?'messages':'threads')+'\')"><span class="mb-switch-track" aria-hidden="true"><span class="mb-switch-knob"></span></span>Conversations</button>';
     return UI.toolbar({
       search:{ value:m.q||'', placeholder:m.all?'Search all folders of every email ID…':'Search all folders in this mailbox…', onkeydown:'mbSearchKey(event)' },
       icons:[
