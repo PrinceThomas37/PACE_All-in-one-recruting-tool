@@ -792,6 +792,11 @@
             acct:m.activeId, msgId:x.id, from:(x.from&&(x.from.name||x.from.email))||'', savedAt:null };
     var d=draftGet(c);
     if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
+    if(m._pendingDraft&&mode==='reply'){
+      // A draft continued from the Drafts folder: its words, recipients and subject, and a note of which draft to retire.
+      var pd=m._pendingDraft; m._pendingDraft=null;
+      c.to=pd.to||c.to; c.cc=pd.cc||c.cc; c.subject=pd.subject||c.subject; c.body=pd.body; c.showCc=!!c.cc; c.providerDraftId=pd.id;
+    }
     m.composer=c;
     if(c.sig) loadSignature(c.acct,true);
     loadRecipients(c.acct);
@@ -943,7 +948,7 @@
       .then(function(r){
         showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
         if(r&&r.label_error) showToast('Sent, but the label could not be added: '+r.label_error,'warning');
-        draftClear(c);
+        draftClear(c); finishProviderDraft(c);
         // Close whichever way the window is now: on screen, or parked while the person looked elsewhere.
         if(m.composer===c){ m.composer=null; if(winOnScreen('mailReply')) closeModal(); }
         else if(window.Dock) Dock.discardCtx(c);
@@ -1484,6 +1489,7 @@
       .then(function(r){
         showToast('Sent','success');
         if(r&&r.label_error) showToast('Sent, but the label could not be added: '+r.label_error,'warning');
+        finishProviderDraft(c);
         // Sent from the screen, or from a chip while the person looked elsewhere: close whichever it is, nothing else.
         if(m.compose===c){ m.compose=null; if(winOnScreen('mailCompose')) closeModal(); }
         else if(window.Dock) Dock.discardCtx(c);
@@ -1894,12 +1900,55 @@
     }).join(''):'<div class="dt-empty">Nothing being written. A reply you start is kept here, on this device, until you send or discard it.</div>';
     var draftsFolder=m.all?null:(m.folders||[]).filter(function(f){ return f.kind==='drafts'; })[0];
     h+='<div class="mb-sec-h">Saved in '+(m.all?'Gmail or Outlook':(((m.accounts||[]).filter(function(a){ return a.id===m.activeId; })[0]||{}).platform==='Gmail'?'Gmail':'Outlook'))+'</div>'+
-      '<div class="mb-sec-foot fs-12 c-text3">Drafts you saved in Gmail or Outlook itself are in that email ID\'s Drafts folder. '+
+      '<div class="mb-sec-foot fs-12 c-text3">Drafts you saved in Gmail or Outlook itself are in that email ID\'s Drafts folder — open one there and press <b>Continue writing</b> to finish it in PACE. '+
       (draftsFolder?'<button class="btn btn-sm btn-outline" onclick="mbSetFilter(\'all\');mbSelectFolder(\''+escAttr(draftsFolder.id)+'\')">Open the Drafts folder</button>':'Pick one email ID (not All inboxes) to open it.')+'</div>';
     return h;
   }
   // Continue a draft: the email it answers opens, and its reply window comes back with the words (from this device).
   window.mbDraftOpen=function(acct,msgId,mode){ mbOpenMessage(acct,msgId,{reply:true,mode:mode}); M().filter='all'; };
+
+  // ── continue a draft saved in Gmail or Outlook (R-287, owner 20 Oct: "build it") ──
+  // A draft is opened in PACE's own window with its words, and goes out through PACE's normal Send (same checks, same
+  // signature rule). A draft that was a REPLY opens as a reply to the email it answers, so it threads; one that was not opens as
+  // a new message. The old draft is moved to the mailbox's Trash once the email has gone — never before, and a draft that
+  // cannot be moved is said out loud, never silently left to be sent twice by hand.
+  // The words above the quoted original: a reply draft made in Gmail/Outlook already carries the quote, and PACE's reply adds
+  // it again, so everything from the first quote marker down is left out of what the person edits.
+  function draftOwnWords(html){
+    var s=String(html||'');
+    var cut=s.search(/<div[^>]*class=["'][^"']*gmail_quote|<blockquote|<div[^>]*id=["']?(?:divRplyFwdMsg|appendonsend)|<hr\b/i);
+    return cut>0?s.slice(0,cut):s;
+  }
+  function draftFields(d){
+    return { id:d.id, to:addrLine(d.to), cc:addrLine(d.cc), subject:d.subject||'', body:draftOwnWords(d.body_html||'') };
+  }
+  function finishProviderDraft(c){
+    if(!c||!c.providerDraftId) return;
+    apiDelete('/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.providerDraftId))
+      .catch(function(){ showToast('Sent. The old draft is still in your Drafts folder — you can delete it there.','info'); });
+  }
+  window.mbContinueDraft=function(id){
+    var m=M(), acct=m.activeId; if(!acct||!id) return;
+    apiGet('/mailbox/'+encodeURIComponent(acct)+'/messages/'+encodeURIComponent(id)).then(function(d){
+      if(!d||!d.is_draft){ showToast('That is not a draft','warning'); return; }
+      var f=draftFields(d);
+      var asNew=function(){
+        if(!parkOnScreen()) return;
+        mbCompose(f.to);
+        var c=m.compose; if(!c) return;
+        c.cc=f.cc; c.subject=f.subject; c.body=f.body; c.providerDraftId=f.id; c.showCc=!!f.cc;
+        paintComposeModal(true);
+      };
+      if(!d.thread_id) return asNew();
+      return apiGet('/mailbox/'+encodeURIComponent(acct)+'/threads/'+encodeURIComponent(d.thread_id)).then(function(list){
+        var prior=(list||[]).filter(function(x){ return !x.is_draft && x.id!==id; })
+          .sort(function(a,b){ return String(a.date||'').localeCompare(String(b.date||'')); }).pop();
+        if(!prior) return asNew();
+        m._pendingDraft=f;                                  // consumed by openComposer once the email it answers is open
+        mbOpenMessage(acct,prior.id,{reply:true,mode:'reply'});
+      }).catch(asNew);
+    }).catch(function(e){ showToast('Could not open the draft: '+((e&&e.message)||e),'error'); });
+  };
 
   // Nothing connected. This is a setup state, not an error — say what to do.
   function renderNoMailbox(){
@@ -2166,7 +2215,8 @@
       '</div>'+
       labelChips(x.label_ids,6)+
       '<div class="mb-acts">'+
-        '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
+        (x.is_draft?'<button class="btn btn-sm btn-primary" title="Open this draft in PACE and finish it" onclick="mbContinueDraft(\''+escAttr(x.id)+'\')">Continue writing</button>':'')+
+        '<button class="btn '+(x.is_draft?'btn-outline':'btn-primary')+' btn-sm" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
         // Reply all on every message (owner, 19 Oct): with only one other person on it, it answers that one person.
         '<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
