@@ -758,3 +758,6 @@ person who has not written their own (R-169).
 
 ## Each company has its own keys, and its own emergency stop (Session 51)
 A company's AI, Apollo and email-checker keys belong to that company alone; one with no key of its own simply writes with the rules / says Apollo is not connected. A company's admin can stop all sending for THEIR company with the Emergency stop; only the PACE operator can stop every company, run the shared background engines, or change the deployment-wide send times.
+
+## Needs you today knows when you replied — from anywhere (Session 52, R-296, D-0167 — on the branch)
+When you answer a client or candidate from Gmail, Outlook or PACE's own inbox — on the same email thread or a brand-new one — PACE notices in the background and stops saying "You haven't replied". A reply sent from PACE's inbox is noticed in about 15 seconds; one sent from Gmail or Outlook at the next mailbox check (every 30–45 minutes on the free server). PACE keeps a short copy (the first ~500 characters) of your replies to people who have written to you, nothing for cold outreach. Opening Today no longer asks your mailboxes anything, which is what was crashing the server. Not yet: Zoho / other IMAP mailboxes.
