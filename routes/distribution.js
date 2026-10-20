@@ -50,7 +50,7 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
     let pool = [], from = 0, batchSize = 1000;
     while (true) {
       const { data, error } = await withOrg(supabase.from('jobs')
-        .select('id,freshness,industry,timezone,is_duplicate,company:companies(industry)')
+        .select('id,freshness,industry,timezone,is_duplicate,company:companies(industry),contacts(email)')
         .is('deleted_at', null).eq('stage', 'Unassigned').is('assigned_to_bd', null)
         .range(from, from + batchSize - 1), req);
       if (error) throw error;
@@ -62,7 +62,7 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
     // by_freshness was missing while `freshness` was being selected — so the
     // preview's Freshness column was structurally always empty, whatever the
     // pool contained and whichever engine produced the split.
-    const stats = { total: pool.length, by_freshness: {}, by_industry: {}, by_timezone: {}, duplicates: 0 };
+    const stats = { total: pool.length, by_freshness: {}, by_industry: {}, by_timezone: {}, duplicates: 0, without_people: 0 };   // without_people: leads nobody can write to (no contact with an email) — Assign skips them
     pool.forEach(j => {
       const rawInd = j.industry || j.company?.industry || '';
       const ind = normInd(rawInd) || 'Unknown';
@@ -71,6 +71,7 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
       stats.by_industry[ind] = (stats.by_industry[ind] || 0) + 1;
       stats.by_timezone[j.timezone || 'Unknown'] = (stats.by_timezone[j.timezone || 'Unknown'] || 0) + 1;
       if (j.is_duplicate) stats.duplicates++;
+      if (!require('../services/lead-distribution').hasWritableContact(j)) stats.without_people++;
     });
     res.json(stats);
   } catch (err) { res.status(500).json({ error: err.message }); }

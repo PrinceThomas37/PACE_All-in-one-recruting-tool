@@ -79,6 +79,7 @@ function renderAssignLeads(){
         '</div>'+
       '</div>'+
       (poolStats.duplicates?'<div class="fs-12 c-amber" style="margin-top:8px">\u26a0 '+poolStats.duplicates+' duplicate leads in pool</div>':'')+
+      (poolStats.without_people?'<div class="fs-12 c-amber" style="margin-top:8px">\u26a0 '+poolStats.without_people+' of these have no contact person with an email \u2014 no email can be written for them, so they are not assigned. Add the people first.</div>':'')+
     '</div>';
   } else {
     poolBar='<div class="fs-13 c-green" style="background:var(--green-l);border:1px solid var(--green);border-radius:var(--r2);padding:14px 16px;margin-bottom:18px;font-weight:600">\u2713 No unassigned leads — pool is clear for today.</div>';

@@ -34,6 +34,7 @@ window.openAssignToManager=function(managerId){
     '<div class="mh">'+
       '<div><div class="mt">Assign leads \u2014 '+htmlEsc(m.name)+'</div>'+
         '<div class="fs-12 c-text3" style="margin-top:3px">'+pool.total+' unassigned leads \u00b7 '+capacity+' email capacity today</div>'+
+        (pool.without_people?'<div class="fs-12 c-amber" style="margin-top:6px;line-height:1.5">\u26a0 '+pool.without_people+' of these '+(pool.without_people===1?'has':'have')+' no contact person with an email, so no email can be written \u2014 they will NOT be assigned and stay in the pool. Add the people first.</div>':'')+
       '</div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button>'+
     '</div>'+
@@ -265,7 +266,7 @@ window.submitAssignToManager=function(){
   if(!ratio||!managerId)return;
   closeModal();
   apiPost('/distribute/execute',{manager_id:managerId,ratio:ratio}).then(function(res){
-    var msg=res.total_assigned+' leads assigned · emails sending automatically';
+    var msg=res.total_assigned+' leads assigned · emails sending automatically'+(res.skipped_no_people?' · '+res.skipped_no_people+' left in the pool (no contact person to write to)':'');
     showToast(msg,'success');
     STATE._assignRatio=null;STATE._assignManagerId=null;
     STATE.sendProgress=null;

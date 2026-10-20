@@ -2457,7 +2457,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // Fetch all unassigned leads — use range to bypass Supabase 1000 row default limit
     let pool = [], from = 0;
     while (true) {
-      let q = withOrg(supabase.from('jobs').select('id,position,freshness,industry,timezone,is_duplicate').is('deleted_at', null).eq('stage', 'Unassigned').is('assigned_to_bd', null).range(from, from + 999), req);
+      let q = withOrg(supabase.from('jobs').select('id,position,freshness,industry,timezone,is_duplicate,contacts(email)').is('deleted_at', null).eq('stage', 'Unassigned').is('assigned_to_bd', null).range(from, from + 999), req);
       if (ratio.exclude_duplicates) q = q.eq('is_duplicate', false);
       const { data } = await q;
       if (!data || !data.length) break;
@@ -2466,6 +2466,13 @@ app.post('/distribute/execute', auth, async (req, res) => {
       from += 1000;
     }
     if (!pool?.length) return res.status(400).json({ error: 'No unassigned leads in pool' });
+    // Leads with no contact person (no usable email address) are NOT handed out: nothing could be written for them. They stay in the pool.
+    const split = leadDistribution.splitByContacts(pool);
+    const skippedNoPeople = split.withoutPeople.length;
+    if (!split.reachable.length) {
+      return res.status(400).json({ error: `None of the ${pool.length} unassigned leads has a contact person with an email address, so no email can be written for them. Add the people first (open a lead → add a contact, or use the contact finder), then assign. Nothing was assigned.`, skipped_no_people: skippedNoPeople });
+    }
+    pool = split.reachable;
 
     const sorted = leadDistribution.orderPool(pool);
     const selected = [];
@@ -2532,7 +2539,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // assignment for audit but does not auto-send (autoSend:false).
     emit(EVENTS.LEAD_ASSIGNED, { jobIds, managerId: manager_id, actorUserId: req.user.id, autoSend, orgId: orgIdFor(req) });
 
-    res.json({ success: true, total_assigned: selected.length, manager_id, by_freshness: used.freshness, by_industry: used.industry, by_timezone: used.timezone, email_accounts_used: new Set(assignedLeads.map(l => l.user_email_id)).size, ratio_summary: ratio.summary || '', assigned_at: now.toISOString(), auto_send: autoSend, ra_mode: raMode });
+    res.json({ success: true, total_assigned: selected.length, skipped_no_people: skippedNoPeople, manager_id, by_freshness: used.freshness, by_industry: used.industry, by_timezone: used.timezone, email_accounts_used: new Set(assignedLeads.map(l => l.user_email_id)).size, ratio_summary: ratio.summary || '', assigned_at: now.toISOString(), auto_send: autoSend, ra_mode: raMode });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

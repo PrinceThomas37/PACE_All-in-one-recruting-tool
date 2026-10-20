@@ -19,6 +19,7 @@
 'use strict';
 
 const dailyLimit = require('./daily-limit');
+const { emailSyntaxValid } = require('../email-validation');
 
 const FRESHNESS_ORDER = { Old: 0, Normal: 1, New: 2, '': 3 };
 
@@ -129,4 +130,18 @@ async function connectedMailboxesFor({ supabase, withOrg, userId, todayStr, who 
   return { accounts, dailyDefault };
 }
 
-module.exports = { FRESHNESS_ORDER, orderPool, assignmentQueue, allocationQueue, dayRemaining, connectedMailboxesFor };
+// A lead with nobody to write to cannot be worked: no first email can be built for it (services/lead-outreach-queue.js keeps only people
+// with a well-formed address). So it is not handed out — "a task PACE cannot carry out is not created" (20 Oct: 85 leads were assigned
+// with no contact people at all, nothing was ever written, and the only trace was a message that vanished after five minutes).
+// `lead.contacts` is [{ email }]; the SAME address test the email builder uses.
+function hasWritableContact(lead) {
+  return (lead && lead.contacts || []).some(c => emailSyntaxValid(c && c.email));
+}
+/** Splits a pool into { reachable, withoutPeople }, order kept. */
+function splitByContacts(pool) {
+  const reachable = [], withoutPeople = [];
+  for (const l of (pool || [])) (hasWritableContact(l) ? reachable : withoutPeople).push(l);
+  return { reachable, withoutPeople };
+}
+
+module.exports = { hasWritableContact, splitByContacts, FRESHNESS_ORDER, orderPool, assignmentQueue, allocationQueue, dayRemaining, connectedMailboxesFor };

@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-10-08 (Session 42) · **Next id**: `R-289` (R-060 is PR #254's, another chat) · **Artifact**:
+**Updated**: 2026-10-08 (Session 42) · **Next id**: `R-291` (R-060 is PR #254's, another chat) · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -375,3 +375,5 @@ Kept, never deleted (rule 4): who dropped it and when.
 | `R-287` | **Continue a Gmail / Outlook draft inside PACE** (offered 19 Oct): today the Draft tab shows replies being written in PACE on this device, and points to the email ID's own Drafts folder; a draft saved in Gmail or Outlook can be read there but not continued in PACE's window (that needs the providers' draft calls). Also: a draft written in PACE is kept on one device only. | `PENDING` — owner: "yes, build it later" (D-0164) | 19 Oct |
 | `R-288` | **Two small leftovers from R-067/R-049 (found 20 Oct).** (a) The AI health card's last-test / last-error / provider-limit records are one set for the whole deployment, so a customer's admin can read another company's last AI error text (no keys in them). (b) `OPERATOR_EMAILS` is not set on Render — with no list, every admin of the founding company is the operator. | `PENDING` — (a) small, me; (b) the owner, before a second company signs up. |
 
+| `R-289` | **Assign must not hand out leads nobody can write to** (owner 20 Oct, after 85 contact-less leads were assigned and no email could be written: "yes" to the warning). | DONE on the dev branch (PR #354, not merged): pool count `without_people`, Assign window/page/toast warn, server skips and says `skipped_no_people`. `assign-needs-people-smoke`. |
+| `R-290` | **"Needs you today" rule changes** (owner 20 Oct): a reply is owed only once their email is 4+ days old (admin setting, default 4); a silence older than 45 days shows as a lower-priority nudge instead of being hidden; promise-due and reminder-due unchanged; opt-outs/clear "no" stay hidden. Owner asked to be shown the rules again. | PENDING — two readings to confirm with the owner before building (the 4-day meaning; what the 45-day nudge looks like). |
