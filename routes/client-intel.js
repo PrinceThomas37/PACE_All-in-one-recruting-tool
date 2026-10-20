@@ -132,19 +132,6 @@ module.exports = (ctx) => {
     return value;
   }
 
-  // "Did we answer?" from the caller's OWN mailboxes, for the list headlines (R-268, services/sent-side.js).
-  const replyCheck = sentSide.createReplyCheck({ mail });
-  async function answeredFromMailbox(req, threads) {
-    try {
-      const addrs = sentSide.addressesToCheck(threads);
-      if (!addrs.length) return 0;
-      const { data: boxes } = await supabase.from('user_emails')
-        .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
-      const latest = await replyCheck.latest(req.user.id, boxes || [], addrs);
-      return sentSide.addOurReplies(threads, latest);
-    } catch (_) { return 0; }   // unreadable = unchanged: the card stays (the safe direction)
-  }
-
   async function loadMessages(req, subject, opts) {
     const leadIds = subject.leadIds || [];
     const companyId = subject.companyId;
@@ -223,15 +210,23 @@ module.exports = (ctx) => {
     // all of it (the owner asked, 2026-09-25). Only the AI's copy is trimmed.
     const fullText = (html) => ci.fullEmailText(html, FULL_TEXT_CHARS);
     const messages = [];
-    inboundRows.forEach(r => messages.push({
-      id: 'in:' + r.id, source: 'reply', direction: r.direction || 'inbound', sent_at: r.sent_at,
-      from: r.from_email, to: r.to_email, subject: r.subject, text: r.body || '',
-      facts: r.facts || ci.factsForMessage(r.body || '', r.sent_at),
-      person: nameByEmail[ci.normEmail(r.from_email)] || null,
-      // A reply is stored trimmed; its full original can be fetched from the
-      // mailbox that received it, on request, and is never stored.
-      can_open_full: !!r.message_key, message_key: r.message_key || null,
-    }));
+    // Our replies learned from the Sent folder (R-296) are stored here too, as 'outbound'. One that is a copy of a send PACE
+    // already holds (a one-off client email, kept in email_tracking without the provider's id) is dropped, so it shows once.
+    const ourStored = [...sentRows.map(r => ({ sent_at: r.sent_at, subject: r.subject, to: r.to_email, message_id: r.graph_message_id || null })),
+      ...(tracked || []).map(r => ({ sent_at: r.sent_at, subject: r.subject, to: r.to_email }))];
+    inboundRows.forEach(r => {
+      const out = r.direction === 'outbound';
+      if (out && sentSide.alreadyHave({ id: r.message_key, subject: r.subject, date: r.sent_at, to: [{ email: r.to_email }] }, ourStored)) return;
+      messages.push({
+        id: 'in:' + r.id, source: out ? 'mailbox' : 'reply', direction: r.direction || 'inbound', sent_at: r.sent_at,
+        from: r.from_email, to: r.to_email, subject: r.subject, text: r.body || '',
+        facts: out ? null : (r.facts || ci.factsForMessage(r.body || '', r.sent_at)),
+        person: out ? null : (nameByEmail[ci.normEmail(r.from_email)] || null),
+        // A reply is stored trimmed; its full original can be fetched from the mailbox that received it, on request, and is
+        // never stored. Our own sent copy is opened from the Sent folder by the live read below, not from here.
+        can_open_full: !out && !!r.message_key, message_key: r.message_key || null, message_id: out ? (r.message_key || null) : undefined,
+      });
+    });
     sentRows.forEach(r => {
       if (!r.sent_at) return;
       const rendered = renderStoredEmail(r, mailboxes[r.sending_email_id] || null);
@@ -557,17 +552,23 @@ module.exports = (ctx) => {
         const { data: sv } = await supabase.from('app_settings').select('value').eq('key', dismissals.settingsKey(req.user.id)).maybeSingle();
         if (sv && sv.value) store = dismissals.prune(typeof sv.value === 'string' ? JSON.parse(sv.value) : sv.value, Date.now());
       } catch (_) { store = {}; }   // a store that cannot be read only makes the list noisier — the safe direction
-      // YOUR rows first ask your own mailboxes whether you already answered (R-268): a reply sent from Gmail, Outlook or
-      // PACE's mailbox is stored nowhere, so without this the headline said "You haven't replied" to people you had.
-      const mineLoaded = await Promise.all(mineIds.map(id => loadMessages(req, { kind: 'lead', id, companyId: null, leadIds: [id] })));
-      await answeredFromMailbox(req, mineLoaded.map(r => ({ messages: r.messages, addresses: r.contacts.map(c => c.email) })));
-      const mineAll = ci.sortDigest(await Promise.all(mineIds.map((id, i) => itemFor(id, true, mineLoaded[i])))).filter(Boolean);
+      // Whether you already answered comes from PACE's own records (R-296): the reply sweep keeps your sent replies, from any
+      // mailbox and any thread. No mailbox is asked while this list loads (that is what crashed the server, R-291). The leads
+      // are read FOUR at a time — each read holds up to a few hundred emails, and 60 of them at once is a memory spike.
+      const fourAtATime = async (ids, fn) => {
+        const out = new Array(ids.length); let next = 0;
+        await Promise.all(Array.from({ length: Math.min(4, ids.length) }, async () => {
+          while (next < ids.length) { const k = next++; out[k] = await fn(ids[k], k); }
+        }));
+        return out;
+      };
+      const mineAll = ci.sortDigest(await fourAtATime(mineIds, id => itemFor(id, true))).filter(Boolean);
       const mine = mineAll.filter(it => !dismissals.isDismissed(store, ci.completionItem(it), Date.now()))
         // the browser echoes this back to POST /next-actions/dismiss, so it never builds the item itself
         .map(it => Object.assign({}, it, { complete: ci.completionItem(it) }));
       let team = [];
       if (teamIds.length) {
-        const items = await Promise.all(teamIds.map(id => itemFor(id, false)));
+        const items = await fourAtATime(teamIds, id => itemFor(id, false));
         const ownerIds = [...new Set(items.filter(Boolean).map(i => i.owner_id))];
         const nameOf = {};
         if (ownerIds.length) {

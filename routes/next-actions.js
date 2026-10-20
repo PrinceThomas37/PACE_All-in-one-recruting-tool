@@ -47,8 +47,6 @@ const dismissals = require('../services/next-action-dismissals');
 const ownership = require('../services/ownership');
 const { decodeEntities } = require('../services/html-entities');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
-const sentSide = require('../services/sent-side');
-const { createMailProvider } = require('../services/mail-provider');
 const settingsConfig = require('../config/settings');
 
 module.exports = (ctx) => {
@@ -56,18 +54,9 @@ module.exports = (ctx) => {
   const { supabase, auth, orgIdFor, withOrg, today } = ctx;
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
-  // "Did we answer?" from the caller's own mailboxes (R-268, services/sent-side.js). Unreadable = unchanged.
-  const mail = createMailProvider({ graphMailRequest: ctx.graphMailRequest, getMicrosoftToken: ctx.getMicrosoftToken, gmailProvider: ctx.gmailProvider });
-  const replyCheck = sentSide.createReplyCheck({ mail });
-  async function answeredFromMailbox(req, threads) {
-    try {
-      const addrs = sentSide.addressesToCheck(threads);
-      if (!addrs.length) return 0;
-      const { data: boxes } = await supabase.from('user_emails')
-        .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
-      return sentSide.addOurReplies(threads, await replyCheck.latest(req.user.id, boxes || [], addrs));
-    } catch (_) { return 0; }
-  }
+  // "Did we answer?" is NOT asked of any mailbox here (R-296). Asking every mailbox live on every load (R-268) ran the server
+  // out of memory (R-291). Our replies — from Gmail, Outlook or PACE's mailbox, on any thread — are learned in the background
+  // by the reply sweep (services/sent-sweep.js) and arrive below as stored 'outbound' conversation rows.
   const MAX_THREAD_PEOPLE = 300;   // bounded so one big org can't stall the request
 
   // Display names for the owners of a set of items. A count with nobody named
@@ -212,7 +201,8 @@ module.exports = (ctx) => {
         for (const e of (sentByContact.get(c.id) || [])) {
           messages.push({ direction: 'outbound', sent_at: e.sent_at || e.created_at, body: e.subject || '' });
         }
-        if (!stored.length) {
+        if (!stored.some(m => m.direction === 'inbound')) {
+          // (Our replies are stored too now — R-296 — so "nothing stored" is "none of THEIR words stored".)
           // Fallback shape from what already exists: the single reply snippet
           // the old sweep kept. Thin, but honest.
           if (c.replied_at) {
@@ -295,7 +285,7 @@ module.exports = (ctx) => {
           messages.push({ direction: 'outbound', sent_at: e.sent_at, body: e.subject || '' });
         }
 
-        if (!stored.length) {
+        if (!stored.some(m => m.direction === 'inbound')) {
           // Thinner fallback, same shape as the contacts one: the sends we
           // logged via email_tracking, plus the single last-reply timestamp
           // candidates.last_reply_at keeps (no snippet text exists for
@@ -349,9 +339,6 @@ module.exports = (ctx) => {
       // waiting on you" over a due reminder of their own — and put the org's
       // "gone quiet" count and "N more" under the admin's personal list.
       const ownThreads = threads.filter(t => ownership.isMine(t, me));
-      // Replies sent from Gmail, Outlook or PACE's mailbox are stored nowhere: ask the caller's OWN mailboxes whether
-      // the newest waiting conversations were already answered, before anything is ranked as "reply due" (R-268).
-      await answeredFromMailbox(req, ownThreads.map(t => Object.assign(t, { addresses: t.email ? [t.email] : [] })));
       const ownRemRows = (remRows || []).filter(r => ownership.isMine({ owner_id: r.user_id }, me));
 
       const reminders = ownRemRows.map(r => {

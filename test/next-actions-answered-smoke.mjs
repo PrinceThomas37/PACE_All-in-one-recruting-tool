@@ -3,9 +3,10 @@
 // driving the REAL GET /next-actions route against an in-memory database and a fake mailbox:
 //   1. once the reply sweep had stored a conversation (their emails), the emails PACE itself had sent were left out of it,
 //      so every stored thread read as unanswered;
-//   2. a reply typed in Gmail, Outlook or PACE's mailbox is stored nowhere, so it was never seen. The list now asks the
-//      caller's OWN mailboxes (headers only, cached, time-boxed) before calling a conversation "reply due".
-// A mailbox that cannot be read changes nothing — the card stays, the safe direction.
+//   2. a reply typed in Gmail, Outlook or PACE's mailbox is stored nowhere, so it was never seen. R-268 asked every mailbox
+//      LIVE on every load — and that burst ran the server out of memory (R-291). Now (R-296) the reply sweep keeps our sent
+//      replies as 'outbound' conversation rows (services/sent-sweep.js), and the list reads ONLY those: no mailbox is touched
+//      while the card loads. Matching is by person, so a reply on a different thread counts.
 // Usage: node test/next-actions-answered-smoke.mjs
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -85,18 +86,28 @@ step('a conversation PACE\'s engine answered AFTER their email is NOT "reply due
 step('a conversation nobody answered, with the mailbox unreadable, still asks for a reply (the safe direction)',
   replyDueFor(b, 'Shane'), JSON.stringify(b.items.map(i => [i.kind, i.name || i.title])));
 
-seed(); sentFolder = [{ id: 's1', subject: 'Re: Candidate Submission', date: '2026-10-14T10:00:00Z', to: [{ email: 'shane@williselectrical.com' }] }];
+// Our reply, as the sweep stores it: an 'outbound' conversation row for Shane — sent BEFORE their last email.
+seed(); lists = 0; bodies = 0;
+T.conversation_messages.push({ contact_id: 'c1', direction: 'outbound', body: 'Here is the submission', sent_at: '2026-10-14T10:00:00Z' });
 b = await mount()();
-step('our mailbox reply from BEFORE their last email does not count', replyDueFor(b, 'Shane'));
+step('our stored reply from BEFORE their last email does not count', replyDueFor(b, 'Shane'));
 
-seed(); sentFolder = [{ id: 's2', subject: 'Re: Candidate Submission', date: '2026-10-15T17:30:00Z', to: [{ email: 'Shane@WillisElectrical.com' }] }];
-lists = 0; bodies = 0;
-const run = mount();
-b = await run();
-step('a reply sent from Gmail/Outlook/PACE\'s mailbox AFTER theirs → no longer "reply due"', !replyDueFor(b, 'Shane'), JSON.stringify(b.items.map(i => [i.kind, i.name || i.title])));
-step('…read from headers only — no email body was opened', lists > 0 && bodies === 0, `lists=${lists} bodies=${bodies}`);
-const before = lists; await run();
-step('…and asked once: a second load within minutes is answered from the cache', lists === before, `lists=${lists}`);
+// …and one sent AFTER theirs, on a different thread (the row carries the person, not the thread).
+seed();
+T.conversation_messages.push({ contact_id: 'c1', direction: 'outbound', thread_key: 'another-thread', body: 'Yes — Tuesday 10am works, start date is the 3rd', sent_at: '2026-10-15T17:30:00Z' });
+b = await mount()();
+step('a reply sent from Gmail/Outlook/PACE\'s mailbox AFTER theirs (kept by the sweep, any thread) → no longer "reply due"',
+  !replyDueFor(b, 'Shane'), JSON.stringify(b.items.map(i => [i.kind, i.name || i.title])));
+step('loading the card asked NO mailbox anything (the live check that crashed the server is gone)', lists === 0 && bodies === 0, `lists=${lists} bodies=${bodies}`);
+
+// A contact whose words were never stored (only replied_at) is still "waiting on you" once we have stored our older reply.
+seed();
+T.conversation_messages = T.conversation_messages.filter(m => m.contact_id !== 'c1');
+T.contacts[0].replied_at = '2026-10-15T15:00:00Z'; T.contacts[0].reply_snippet = 'What is the start date?';
+T.conversation_messages.push({ contact_id: 'c1', direction: 'outbound', body: 'First note', sent_at: '2026-10-10T10:00:00Z' });
+b = await mount()();
+step('a stored reply of OURS does not hide their later reply that only replied_at remembers', replyDueFor(b, 'Shane'),
+  JSON.stringify(b.items.map(i => [i.kind, i.name || i.title])));
 
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

@@ -1325,3 +1325,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - Session 51 (20 Oct, R-290): NEW test/needs-you-rules-smoke.mjs (21; guard verified — 3 checks fail with the 4-day rule off). next-action-smoke and next-action-dismiss-smoke now switch the reply rule off explicitly (they test other rules); dismiss-smoke asserts a 91-day silence is now SHOWN as a quiet nudge.
 
 - Session 51 (20 Oct, R-291): NEW test/mail-speed-smoke.mjs (8; real gmail-provider token cache, real mailbox route with 200 ms-per-query fake — 464 ms sequential vs 268 ms parallel, guard verified; sweep wiring pin).
+
+- 2026-10-20 (Session 52, R-296): new `test/sent-sweep-smoke.mjs` (20: kept/not-kept rules, engine sends never read, one-at-a-time, MAX_FETCH cap, 30-day first visit, org-scoped lookup). `next-actions-answered-smoke` and `client-intel-routes-smoke` R-268 blocks rewritten for stored outbound rows + "no mailbox asked while the list loads" (`lists === 0`); the fallback guard was proven by reintroducing the bug (1 fail).

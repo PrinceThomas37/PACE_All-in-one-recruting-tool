@@ -3404,6 +3404,95 @@ async function sweepGmailReplies(tokenRow, ownAddresses) {
   return detected;
 }
 
+// OUR SIDE OF EACH CONVERSATION, learned in the background (R-296, services/sent-sweep.js). After a mailbox's replies are read,
+// its Sent folder since the last visit is read too — ids first, PACE's own engine sends dropped by id, then headers + the
+// provider's short preview one message at a time — and a sent email to someone who has written to us before is kept as an
+// outbound conversation_messages row. "Needs you today" and the client conversations then read only PACE's records; nothing
+// asks a mailbox while a page loads (that live check is what ran the server out of memory, R-291).
+const sentSweep = require('./services/sent-sweep');
+const { decodeEntities: decodeHtmlEntities } = require('./services/html-entities');
+async function sweepSentFolder(tokenRow, provider, ownAddresses) {
+  const sinceKey = `sent_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  let listIds, readHeaders;
+  if (provider === 'gmail') {
+    if (!gmailProvider.isConfigured()) return 0;
+    listIds = async (sinceIso, max) => {
+      const afterSec = Math.max(0, Math.floor(Date.parse(sinceIso) / 1000) || 0);
+      const ids = []; let pageToken = null;
+      do {
+        const page = await gmailProvider.listMessagePage(tokenRow.user_email_id, {
+          labelIds: ['SENT'], q: `after:${afterSec}`, maxResults: Math.min(100, max - ids.length), pageToken: pageToken || undefined,
+        });
+        (page.messages || []).forEach(m => ids.push(String(m.id)));
+        pageToken = page.nextPageToken;
+      } while (pageToken && ids.length < max);
+      return { ids, more: !!pageToken };
+    };
+    readHeaders = async (id) => {
+      const raw = await gmailProvider.getMessage(tokenRow.user_email_id, id, { format: 'metadata', metadataHeaders: ['To', 'Cc', 'Subject'] });
+      const h = {}; ((raw.payload && raw.payload.headers) || []).forEach(x => { h[String(x.name || '').toLowerCase()] = x.value; });
+      const ms = Number(raw.internalDate);
+      return { id: raw.id, thread_key: raw.threadId || null, to: sentSweep.addressesIn(h.to), cc: sentSweep.addressesIn(h.cc),
+        subject: h.subject || '', date: Number.isFinite(ms) ? new Date(ms).toISOString() : null, preview: decodeHtmlEntities(raw.snippet || '') };
+    };
+  } else {
+    const accessToken = await getMicrosoftToken(tokenRow.user_email_id);
+    let page = null;
+    listIds = async (sinceIso, max) => {
+      const filter = encodeURIComponent(`sentDateTime ge ${sinceIso}`);
+      page = await graphMailRequest(accessToken, `/me/mailFolders/SentItems/messages?$top=${Math.min(max, 200)}&$orderby=sentDateTime desc`
+        + `&$select=id,conversationId,subject,toRecipients,ccRecipients,sentDateTime,bodyPreview&$filter=${filter}`);
+      return { ids: (page.value || []).map(m => String(m.id)), more: !!page['@odata.nextLink'] };
+    };
+    // Outlook hands the headers back with the listing, so reading one is a lookup, not another call.
+    readHeaders = async (id) => {
+      const m = (page.value || []).find(x => String(x.id) === String(id));
+      if (!m) return null;
+      const list = (r) => (r || []).map(x => String((x.emailAddress && x.emailAddress.address) || '').toLowerCase()).filter(Boolean);
+      return { id: m.id, thread_key: m.conversationId || null, to: list(m.toRecipients), cc: list(m.ccRecipients),
+        subject: m.subject || '', date: m.sentDateTime || null, preview: m.bodyPreview || '' };
+    };
+  }
+  const r = await sentSweep.sweepSent({
+    mailbox: { ...tokenRow, provider }, since: sinceRow && sinceRow.value, listIds, readHeaders, own: ownAddresses,
+    paceIds: async (ids) => {
+      const { data } = await supabase.from('emails').select('graph_message_id').in('graph_message_id', ids);
+      return new Set((data || []).map(e => String(e.graph_message_id)));
+    },
+    knownPeople: (addrs) => sentSweep.lookupKnownPeople(supabase, tokenRow.org_id || null, addrs),
+    store: async (row) => {
+      let { error } = await supabase.from('conversation_messages').insert(row);
+      if (error && row.company_id && /company_id/.test(error.message || '')) { delete row.company_id; ({ error } = await supabase.from('conversation_messages').insert(row)); }
+      if (error && error.code !== '23505') throw error;   // 23505 = already kept: success
+    },
+  });
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: r.newest, updated_at: new Date() }, { onConflict: 'key' });
+  if (r.capped) console.warn(`[SentSweep] ${tokenRow.email_address}: more sent mail than one visit reads — the newest was kept`);
+  return r.stored;
+}
+
+// A reply sent from PACE's own mailbox is learned within seconds, not at the next sweep: the Send button asks for one visit
+// of that mailbox's Sent folder. One at a time per mailbox, and a burst of sends is one visit.
+const _sentSoon = new Map();
+function sentSweepSoon(userEmailId) {
+  if (!userEmailId || _sentSoon.has(userEmailId)) return;
+  _sentSoon.set(userEmailId, setTimeout(async () => {
+    try {
+      const [{ data: ms }, { data: gm }] = await Promise.all([
+        supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id').eq('user_email_id', userEmailId).maybeSingle(),
+        supabase.from('gmail_tokens').select('user_email_id,email_address,org_id').eq('user_email_id', userEmailId).maybeSingle(),
+      ]);
+      const t = gm || ms;
+      if (t) {
+        const own = new Set([String(t.email_address || '').toLowerCase()]);
+        await sweepSentFolder(t, gm ? 'gmail' : 'microsoft', own);
+      }
+    } catch (e) { console.error('[SentSweep] after send:', e.message); }
+    finally { _sentSoon.delete(userEmailId); }
+  }, 15000));
+}
+
 async function runReplySweep() {
   try {
     // org_id added to both selects only so a suppression row written from a
@@ -3423,10 +3512,14 @@ async function runReplySweep() {
     for (const t of ms) {
       try { total += await sweepMailboxReplies(t, ownAddresses); }
       catch (e) { console.error(`[ReplySweep] ${t.email_address}: ${e.message}`); }
+      try { await sweepSentFolder(t, 'microsoft', ownAddresses); }
+      catch (e) { console.error(`[SentSweep] ${t.email_address}: ${e.message}`); }
     }
     for (const t of gm) {
       try { total += await sweepGmailReplies(t, ownAddresses); }
       catch (e) { console.error(`[ReplySweep/gmail] ${t.email_address}: ${e.message}`); }
+      try { await sweepSentFolder(t, 'gmail', ownAddresses); }
+      catch (e) { console.error(`[SentSweep/gmail] ${t.email_address}: ${e.message}`); }
     }
     for (const t of sm) {
       try { total += await sweepSmtpReplies(t, ownAddresses); }
@@ -3866,6 +3959,7 @@ const routeCtx = {
   // through the SAME provider calls the outreach engine sends with — there is
   // deliberately no second send path.
   graphMailRequest, gmailProvider, sendMicrosoftNewMessage,
+  sentSweepSoon,   // a send from the in-app mailbox is learned as "we replied" within seconds (R-296)
 };
 app.use(require('./routes/auth')(routeCtx));
 app.use(require('./routes/my-setup')(routeCtx));

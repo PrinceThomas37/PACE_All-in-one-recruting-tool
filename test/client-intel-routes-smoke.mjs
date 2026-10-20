@@ -281,7 +281,9 @@ setting('client_intel_ai_per_user_daily', 10);
   d = (await dg(sam)).body;
   step('digest: completing is per person — the manager\'s own list and the report\'s row in the team view are unaffected', d.mine.length === 1 && d.team.length === 1);
 
-  // ── R-268: a reply WE sent from Gmail / Outlook / PACE's mailbox counts (owner, 19 Oct) ──
+  // ── R-268 → R-296: a reply WE sent from Gmail / Outlook / PACE's mailbox counts (owner, 19 Oct) — read from PACE's own
+  // records (the reply sweep keeps our sent replies as 'outbound' rows, services/sent-sweep.js), never from a mailbox while
+  // the list loads: asking every mailbox live is what ran the server out of memory (R-291, 20 Oct).
   const freshDigest = () => {
     delete require.cache[require.resolve('../routes/client-intel.js')];
     const r = require('../routes/client-intel.js')({ supabase, auth: (_q, _s, n) => n(), hasRole: (req, x) => (req.user.roles || []).includes(x),
@@ -290,26 +292,22 @@ setting('client_intel_ai_per_user_daily', 10);
     return (user) => call(h, null, user, {});
   };
   const waiting = (body) => !!(body.mine[0] && body.mine[0].state === 'needs_reply') || /You haven't replied/.test(JSON.stringify(body.mine));
-  sentFolder = null;
+  const keepConv = T.conversation_messages.slice();
+  const ours = (id, at, thread) => ({ id, org_id: ORG, contact_id: 'ct1', company_id: 'co1', direction: 'outbound', message_key: id, thread_key: thread,
+    from_email: 'priya@ours.com', to_email: 'maria@acme.com', subject: 'Re: HVAC roles', body: 'Our rates are attached.', sent_at: at });
+  sentFolder = []; sentLists = 0;
   d = (await freshDigest()(priya)).body;
-  step('R-268: a mailbox that cannot be listed changes nothing — the card still says it waits on you (the safe direction)', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
-  sentFolder = [{ id: 's0', subject: 'Re: HVAC roles', date: '2026-09-21T08:00:00Z', to: [{ email: 'maria@acme.com' }] }];
+  step('R-296: nothing stored from our side → the card still says it waits on you', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
+  T.conversation_messages.push(ours('s0', '2026-09-21T08:00:00Z', 't1'));
   d = (await freshDigest()(priya)).body;
-  step('R-268: a send of ours from BEFORE their last email does not count as an answer', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
-  sentFolder = [{ id: 's1', subject: 'Re: HVAC roles', date: '2026-09-23T09:00:00Z', to: [{ email: 'someone@else.com' }], snippet: 'cc maria@acme.com' }];
+  step('R-296: a stored reply of ours from BEFORE their last email does not count as an answer', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
+  T.conversation_messages.push(ours('s2', '2026-09-23T09:00:00Z', 'a-different-thread'));
   d = (await freshDigest()(priya)).body;
-  step('R-268: a loose search hit that was not addressed to them does not count', waiting(d), JSON.stringify(d.mine[0] && d.mine[0].state));
-  sentFolder = [{ id: 's2', subject: 'Re: HVAC roles', date: '2026-09-23T09:00:00Z', to: [{ email: 'Maria@Acme.com' }] }];
-  sentLists = 0;
-  const dgLive = freshDigest();
-  d = (await dgLive(priya)).body;
-  step('R-268: our reply sent from the mailbox AFTER theirs → the card no longer says "You haven\'t replied"', d.mine.length === 1 && !waiting(d), JSON.stringify(d.mine[0] && { state: d.mine[0].state, h: d.mine[0].headline }));
-  step('R-268: …asked with headers only — no email body was opened for the list', sentLists > 0, 'lists=' + sentLists);
-  const listsAfterFirst = sentLists;
-  await dgLive(priya);
-  step('R-268: …and opening Today again within minutes asks the mailbox nothing new (cached)', sentLists === listsAfterFirst, 'lists=' + sentLists);
-  d = (await dgLive(sam)).body;
-  step('R-268: a manager\'s TEAM view is not read from anyone\'s mailbox (their own only)', d.team.length === 1 && d.team[0].waiting === 1);
+  step('R-296: our reply stored AFTER theirs (any thread) → the card no longer says "You haven\'t replied"', d.mine.length === 1 && !waiting(d), JSON.stringify(d.mine[0] && { state: d.mine[0].state, h: d.mine[0].headline }));
+  step('R-296: loading the list asked NO mailbox anything', sentLists === 0, 'lists=' + sentLists);
+  d = (await freshDigest()(sam)).body;
+  step('R-296: a manager\'s TEAM view is read from records only too', d.team.length === 1 && sentLists === 0, JSON.stringify(d.team));
+  T.conversation_messages = keepConv;
   // ── R-291 part 3 (20 Oct): the chunk queries run together, not one after another ──
   {
     const keepJobs = T.jobs.slice(), keepContacts = T.contacts.slice(), keepMsgs = T.conversation_messages.slice();

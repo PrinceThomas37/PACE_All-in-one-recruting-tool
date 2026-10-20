@@ -559,6 +559,7 @@ module.exports = (ctx) => {
       try {
         const r = await sender.send(mailbox, req.user.id, kind, req.params.id || null, req.body);
         recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
+        if (ctx.sentSweepSoon) ctx.sentSweepSoon(mailbox.id);   // "we replied" reaches Needs you today in seconds (R-296)
         res.json(r);
       } catch (err) { providerError(res, err); }
     };
