@@ -1,0 +1,56 @@
+# Moves PACE's database from Seoul to Ohio (R-292, D-0166). Run BY HAND only (Actions → "Database move" → Run workflow); it has no schedule.
+# It reads the old database and writes the NEW one; the live app is not touched. See docs/DATABASE_MOVE_RUNBOOK.md.
+# This repository is public, so its logs are public: the script prints counts and table names, never rows, and uploads nothing.
+name: Database move
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "rehearsal = copy and check (safe, repeatable) · verify = only compare · final = the real copy"
+        type: choice
+        options: [rehearsal, verify, final]
+        default: rehearsal
+      confirm_stopped:
+        description: "final only: type YES once sending is stopped and the team has paused"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-move
+  cancel-in-progress: false
+
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the project's packages (for the storage copy)
+        run: npm ci --omit=dev
+      - name: Install the Postgres 17 client (the database is version 17)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client-17
+          /usr/lib/postgresql/17/bin/psql --version
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Copy and check
+        env:
+          SRC_DB_URL: ${{ secrets.SRC_DB_URL }}
+          DST_DB_URL: ${{ secrets.DST_DB_URL }}
+          SRC_SERVICE_KEY: ${{ secrets.SRC_SERVICE_KEY }}
+          DST_SERVICE_KEY: ${{ secrets.DST_SERVICE_KEY }}
+          CONFIRM_STOPPED: ${{ inputs.confirm_stopped == 'YES' && 'YES' || '' }}
+        run: scripts/db-move/db-move.sh "${{ inputs.mode }}"
