@@ -7026,3 +7026,5 @@ Owner: "work on the critical ones … leave the render thing". Built on branch `
 - **Not done / owed.** R-160 is the owner's: questions drafted in `docs/APOLLO_QUESTIONS_R160.md`, not sent. Set `OPERATOR_EMAILS` on Render before the second customer if the founding company's other admins should not hold platform powers. Paid always-on server: the owner, in a couple of months (D-0163/D-0165). The admin page header still says "Fute Global LLC" (R-168 family).
 
 - 2026-10-20 (Session 51) IN PROGRESS: R-067/R-049/R-243 built on `ccr-75a114b2-d2l91w`, new suites green; full Node 22 run was still running, Node 26 run and the draft PR not yet done. Not merged — the owner has not approved a merge.
+
+- 2026-10-20 (Session 51) RELEASED: #353 merged on the owner's "Yes" after Node 22 and Node 26.12.0 full runs (285/285 each); Render deploy dep-dbbl6arm8hqs7392o3d0 live 11:41 UTC. Owed: OPERATOR_EMAILS on Render before a second customer; send docs/APOLLO_QUESTIONS_R160.md to Apollo.
