@@ -69,9 +69,8 @@ const thread = (over) => ({
 
   const idx = (id) => items.findIndex(i => i.entity_id === id);
   ok('a longer-ignored reply outranks a newer one', idx('stale') < idx('fresh'), JSON.stringify(items.map(i => i.entity_id)));
-  ok('someone waiting on us outranks a silent nudge', idx('fresh') < idx('quiet'), JSON.stringify(items.map(i => i.entity_id)));
-  ok('the silent one is a nudge, not a reply_due',
-    items.find(i => i.entity_id === 'quiet').kind === KIND.NUDGE);
+  // D-0169 (owner, 20 Oct): silence after OUR email is not a tile — only what is owed.
+  ok('a silent thread (we wrote, they did not answer) makes no tile', idx('quiet') === -1, JSON.stringify(items.map(i => i.entity_id)));
   ok('priorities are descending', items.every((it, i) => i === 0 || items[i - 1].priority >= it.priority),
     JSON.stringify(items.map(i => i.priority)));
 }
@@ -147,24 +146,25 @@ const thread = (over) => ({
     buildNextActions({ reminders: [{ id: 'bad', return_date: 'nope', status: 'pending' }], now: NOW }).length === 0);
 }
 
-// ── 6b. Stage suggestion — candidate threads only, advisory not automatic ──
+// ── 6b. A positive candidate reply is ONE row that carries the stage move (D-0169) ──
+// The separate "replied — interested, move them forward?" row is gone: it duplicated the reply row, and it stayed after we had
+// answered. The reply row carries the candidate's stage so the stage move is offered right there.
 {
   const candidate = thread({
     entity_type: 'candidate', entity_id: 'cand1', name: 'Grace Hopper', stage: 'Screening',
     messages: [m('outbound', 5, 'Hi, are you open to a new role?'), m('inbound', 1, 'Yes, sounds good — happy to chat.')],
   });
   const items = buildNextActions({ threads: [candidate], now: NOW });
-  const suggestion = items.find(i => i.kind === KIND.STAGE_SUGGESTED);
-  ok('a positive-intent candidate reply produces a stage suggestion', !!suggestion, JSON.stringify(items));
-  ok('...naming the current stage', /Screening/.test(suggestion.reason), suggestion.reason);
-  ok('...tagged to the candidate entity', suggestion.entity_type === 'candidate' && suggestion.entity_id === 'cand1');
+  ok('a positive candidate reply is one row — the reply we owe', items.length === 1 && items[0].kind === KIND.REPLY_DUE && items[0].entity_id === 'cand1', JSON.stringify(items));
+  ok('...carrying the candidate\'s stage for the stage move', items[0] && items[0].stage === 'Screening');
+  const answered = thread({ entity_type: 'candidate', entity_id: 'cand1b', stage: 'Screening',
+    messages: [m('outbound', 5, 'Hi'), m('inbound', 3, 'Yes, sounds good — happy to chat.'), m('outbound', 2, 'Great, Tuesday?')] });
+  ok('...and once we have answered, nothing is left on the card', buildNextActions({ threads: [answered], now: NOW }).length === 0);
 }
 {
-  // Same positive reply, but on a contact (BD lead) thread — no ATS stage
-  // exists for a lead, so no stage suggestion should ever fire there.
   const lead = thread({ entity_id: 'lead1', messages: [m('outbound', 5, 'Hi'), m('inbound', 1, 'Sounds good, let\'s set up a call.')] });
   const items = buildNextActions({ threads: [lead], now: NOW });
-  ok('a contact/lead thread never produces a stage suggestion', !items.some(i => i.kind === KIND.STAGE_SUGGESTED), JSON.stringify(items));
+  ok('a lead\'s reply row carries no candidate stage', items.length === 1 && items[0].stage === undefined, JSON.stringify(items));
 }
 {
   // A candidate thread with no positive intent (or no stage on record) must
@@ -178,28 +178,13 @@ const thread = (over) => ({
     !items.some(i => i.entity_id === 'cand2'), JSON.stringify(items));
 }
 
-// ── 6c. BD-lead nudges only fire once the lead is actually engaged ─────────
-// At outreach volume (hundreds of leads a month), a silence-nudge on every
-// still-'Assigned' lead is noise — the fu1/fu2 engine is already chasing
-// those on its own schedule. A nudge should only appear once there's a real,
-// ongoing conversation ('Connected' / 'In Discussion').
+// ── 6c. Silence after our email is never a tile, whatever the stage (D-0169) ──
 {
-  const silentQuiet = (stage) => thread({ entity_id: 'nudge-' + stage, stage, messages: [m('outbound', 9, 'Hi there')] });
-  for (const stage of ['Assigned', 'Rejected', 'Unassigned', undefined]) {
-    const items = buildNextActions({ threads: [silentQuiet(stage)], now: NOW });
-    ok(`a silent BD lead in stage "${stage}" is NOT nudged`, items.length === 0, JSON.stringify(items));
+  const silentQuiet = (stage, type) => thread({ entity_type: type || 'contact', entity_id: 'quiet-' + stage, stage, messages: [m('outbound', 9, 'Hi there')] });
+  for (const stage of ['Assigned', 'Rejected', 'Unassigned', undefined, 'Connected', 'In Discussion']) {
+    ok(`a silent lead in stage "${stage}" makes no tile`, buildNextActions({ threads: [silentQuiet(stage)], now: NOW }).length === 0);
   }
-  for (const stage of ['Connected', 'In Discussion']) {
-    const items = buildNextActions({ threads: [silentQuiet(stage)], now: NOW });
-    ok(`a silent BD lead in stage "${stage}" IS nudged`, items.length === 1 && items[0].kind === KIND.NUDGE, JSON.stringify(items));
-  }
-}
-{
-  // Candidate (ATS) threads use a different stage vocabulary entirely and are
-  // not subject to this gate — a candidate nudge should fire regardless.
-  const candidateQuiet = thread({ entity_type: 'candidate', entity_id: 'cand-quiet', stage: 'Screening', messages: [m('outbound', 9, 'Hi there')] });
-  const items = buildNextActions({ threads: [candidateQuiet], now: NOW });
-  ok('a silent candidate thread is still nudged regardless of ATS stage', items.length === 1 && items[0].kind === KIND.NUDGE, JSON.stringify(items));
+  ok('a silent candidate makes no tile either', buildNextActions({ threads: [silentQuiet('Screening', 'candidate')], now: NOW }).length === 0);
 }
 {
   // The gate is specifically on the silent NUDGE — an actual unanswered reply
@@ -207,7 +192,7 @@ const thread = (over) => ({
   // since that is someone actively waiting on a human, not routine silence.
   const stillAssignedButReplied = thread({ entity_id: 'assigned-reply', stage: 'Assigned' });
   const items = buildNextActions({ threads: [stillAssignedButReplied], now: NOW });
-  ok('a reply_due item is NOT suppressed by the Assigned-stage nudge gate',
+  ok('a reply from a lead still at Assigned IS a tile (someone is waiting on a human)',
     items.length === 1 && items[0].kind === KIND.REPLY_DUE, JSON.stringify(items));
 }
 
@@ -220,37 +205,18 @@ const thread = (over) => ({
   });
   const s = summarize(items);
   ok('summary counts the total', s.total === items.length, JSON.stringify(s));
-  ok('...breaks down by kind', s.by_kind.reply_due === 1 && s.by_kind.nudge === 1 && s.by_kind.reminder_due === 1, JSON.stringify(s.by_kind));
+  ok('...breaks down by kind (the silent one is not counted — it is not a tile)', s.by_kind.reply_due === 1 && s.by_kind.reminder_due === 1 && !('nudge' in s.by_kind), JSON.stringify(s.by_kind));
   ok('...and exposes the top item', s.top && s.top.priority === items[0].priority);
   ok('summary of an empty queue is safe', summarize([]).total === 0 && summarize([]).top === null);
 }
 
-// ── 6d. ONE ROW PER LEAD, NOT ONE PER SILENT CONTACT (R-122 step 3) ─────────
-// The owner's screenshot: dozens of "No reply yet" rows for ONE company, each
-// "Sent 6 days ago". The silence is a fact about the lead, so it is one row —
-// that says how many people were written to and how long ago the latest went.
+// ── 6d. A whole company that went quiet is not a tile either; a person there who replied is (D-0169) ──
 {
   const silent = (id, days, over = {}) => thread({ entity_id: id, name: 'Person ' + id, company: 'Renewable Energy Partners, Inc.', stage: 'Connected', job_id: 'lead-1', owner_id: 'u-bd', messages: [m('outbound', days, 'Hi')], ...over });
   const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((x, i) => silent(x, 6 + (i === 0 ? 0 : 1)));
-  const items = buildNextActions({ threads: six, now: NOW });
-  const nudges = items.filter(i => i.kind === KIND.NUDGE);
-  ok('six silent contacts of one lead are ONE row', nudges.length === 1, JSON.stringify(nudges.map(n => n.title)));
-  const g = nudges[0] || {};
-  ok('…titled with the company and counting the people', g.title === 'Renewable Energy Partners, Inc.' && g.subtitle === '6 people' && g.group_size === 6, JSON.stringify(g));
-  ok('…and it says the basis in plain words, with the LATEST email\'s age', /emailed 6 people here \(the latest 6 days ago\) and nobody has replied/.test(g.reason || ''), g.reason);
-  ok('…it is the lead\'s row (opens the lead), never one person\'s address', g.entity_type === 'lead' && g.entity_id === 'lead-1' && g.job_id === 'lead-1' && g.email === null);
-  ok('…ownership stays exact — the row is the lead owner\'s', g.owner_id === 'u-bd');
-  // A single silent contact keeps its own row, unchanged.
-  const one = buildNextActions({ threads: [silent('solo', 5, { job_id: 'lead-2' })], now: NOW }).filter(i => i.kind === KIND.NUDGE);
-  ok('a lead with ONE silent contact keeps that person\'s own row', one.length === 1 && one[0].entity_type === 'contact' && one[0].title === 'Person solo', JSON.stringify(one));
-  // Two leads are two rows; two owners on one lead are two rows (the ownership split must stay exact).
-  const mixed = buildNextActions({ threads: [silent('x1', 5), silent('x2', 5), silent('y1', 5, { job_id: 'lead-9' }), silent('y2', 5, { job_id: 'lead-9' }),
-    silent('z1', 5, { owner_id: 'u-other' }), silent('z2', 5, { owner_id: 'u-other' })], now: NOW }).filter(i => i.kind === KIND.NUDGE);
-  ok('different leads / different owners are not merged into each other', mixed.length === 3 && mixed.filter(n => n.group_size === 2).length === 3, JSON.stringify(mixed.map(n => [n.entity_id, n.owner_id, n.group_size])));
-  // Someone who REPLIED is never swallowed by the group.
+  ok('six silent contacts of one lead make no tile ("you emailed 6 people and nobody replied" is gone)', buildNextActions({ threads: six, now: NOW }).length === 0);
   const withReply = buildNextActions({ threads: [silent('q1', 5), silent('q2', 5), thread({ entity_id: 'q3', name: 'Replied Person', stage: 'Connected', job_id: 'lead-1', owner_id: 'u-bd', messages: [m('outbound', 8, 'Hi'), m('inbound', 2, 'Yes, call me')] })], now: NOW });
-  ok('a person who replied still has their own reply_due row', withReply.some(i => i.kind === KIND.REPLY_DUE && i.entity_id === 'q3'));
-  ok('the dismissal key of the group is the LEAD (stable while its members change)', require('../services/next-action-dismissals.js').itemKey(g) === 'nudge:lead:lead-1');
+  ok('a person who replied there has their reply_due row — and only that', withReply.length === 1 && withReply[0].kind === KIND.REPLY_DUE && withReply[0].entity_id === 'q3', JSON.stringify(withReply.map(i => [i.entity_id, i.kind])));
 }
 
 console.log('\n=== NEXT ACTION SMOKE ===');

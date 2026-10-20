@@ -19,18 +19,15 @@
 // ============================================================================
 
 const { analyzeThread } = require('./conversation-intel');
+const reminderSource = require('./services/reminder-source');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-// Below every live item, so a quiet nudge never pushes a real one down.
-const STALE_NUDGE_PRIORITY = 5;
 
 // Kinds, in rough order of how much it costs to ignore one.
 const KIND = {
   REPLY_DUE: 'reply_due',           // they wrote, we didn't answer
   COMMITMENT_DUE: 'commitment_due', // we said we'd do something by now
   REMINDER_DUE: 'reminder_due',     // an explicit reminder came due
-  NUDGE: 'nudge',                   // we wrote, silence, long enough to chase
-  STAGE_SUGGESTED: 'stage_suggested', // a candidate signal worth a manual stage move
   PIPELINE_STEP: 'pipeline_step',   // an interview or a submission needs the recruiter's next step (R-297)
 };
 
@@ -39,10 +36,15 @@ const KIND = {
 //   1 a client replied positively (interested, wants to talk, rates, send something) and is still unanswered
 //   2 a candidate replied positively and is still unanswered
 //   3 any other client reply we owe        4 any other candidate reply we owe
-//   5 an interview or submission needs a step (and "replied — interested, move them forward?")
-//   6 a reminder came due, or they promised something by a date that has passed
-//   7 a lead went quiet
-const TIER = { client_hot: 1, candidate_hot: 2, client_reply: 3, candidate_reply: 4, pipeline: 5, reminder: 6, quiet: 7 };
+//   5 an interview or submission needs a step
+//   6 a reminder a PERSON set came due, or they promised something by a date that has passed
+//
+// ONLY THINGS THAT ARE OWED (owner, 20 Oct, D-0169: "it's better to create a tile if we have received a reply and we have not replied
+// back"). The card no longer makes tiles from our own outreach or one-off emails: no "No reply yet" / "you emailed 30 people and nobody
+// replied" chases (the follow-up engine chases those), no reminders a SEQUENCE created (they stay on the Reminders page), and no
+// separate "replied — interested, move them forward?" row (the reply row itself carries the stage picker; once answered it leaves).
+// Kept by the owner's choice: interview / submission steps, reminders a person set, and "they promised a date".
+const TIER = { client_hot: 1, candidate_hot: 2, client_reply: 3, candidate_reply: 4, pipeline: 5, reminder: 6 };
 // A POSITIVE reply is owed sooner than an ordinary one (owner: "If the user has not replied back in 2 days of a positive reply …
 // the card should be on top"). The admin sets the number (config/settings.js needs_reply_positive_after_days); this is the
 // fallback for a caller that passes none.
@@ -53,53 +55,6 @@ const INTERVIEW_OUTCOME_AFTER_DAYS = 1;
 
 const dayDiff = (a, b) => Math.floor((a - b) / DAY_MS);
 const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
-
-// ONE ROW PER LEAD, NOT ONE PER CONTACT (R-122 step 3).
-// A lead is a company, and a sales sequence writes to every person it found
-// there. Once ONE of them replies the lead moves to "Connected", and from then
-// on each of the others who had simply not answered yet became its own "No reply
-// yet" row — 30 near-identical rows for one company, none of which the owner
-// could explain ("on what basis is this shown?"). The silence is a fact about
-// the LEAD, so it is ONE row that says how many people were written to and how
-// long ago the latest email went. Candidates are unaffected (a candidate is a
-// person, not a company), and a lead with a single silent contact keeps its own
-// row. Rows are grouped per (lead, owner) so the ownership split stays exact.
-function groupNudgesByLead(items) {
-  const groups = new Map();
-  const out = [];
-  for (const it of items) {
-    if (it.kind !== KIND.NUDGE || it.entity_type !== 'contact' || !it.job_id) { out.push(it); continue; }
-    const key = `${it.job_id}|${it.owner_id || ''}`;
-    if (!groups.has(key)) { const slot = { members: [] }; groups.set(key, slot); out.push(slot); }
-    groups.get(key).members.push(it);
-  }
-  return out.map(x => {
-    if (!x.members) return x;
-    if (x.members.length === 1) return x.members[0];
-    const m = x.members;
-    const latest = m.reduce((a, b) => ((b.overdue_days ?? Infinity) < (a.overdue_days ?? Infinity) ? b : a));
-    const days = latest.overdue_days;
-    const lastAt = m.reduce((mx, i) => (i.last_activity_at && i.last_activity_at > mx ? i.last_activity_at : mx), '') || null;
-    return {
-      kind: KIND.NUDGE,
-      tier: TIER.quiet,
-      last_activity_at: lastAt,
-      entity_type: 'lead', entity_id: latest.job_id,
-      title: latest.subtitle || 'This lead',
-      subtitle: `${m.length} people`,
-      email: null,                 // there is no single person to write to — the row opens the lead
-      job_id: latest.job_id, owner_id: latest.owner_id || null,
-      stale: m.every(i => i.stale),
-      reason: `You have emailed ${m.length} people here${Number.isFinite(days) ? ` (the latest ${fmtDays(days)} ago)` : ''} and nobody has replied.${m.every(i => i.stale) ? ' Chase them, or drop the lead.' : ''}`,
-      state: latest.state,
-      intent: null,
-      priority: Math.max.apply(null, m.map(i => i.priority)),
-      due_at: null,
-      overdue_days: days,
-      group_size: m.length,
-    };
-  });
-}
 
 // THE THREE PIPELINE STEPS (owner's choice, D-0168). Pure. `rows` = the caller's own submissions:
 // [{ submission_id, candidate_id, name, email, company, job_title, job_order_id, owner_id, stage, interview_at, stage_updated_at, submitted_at }].
@@ -155,26 +110,15 @@ function pipelineSteps(rows, { now = Date.now(), clientSilentAfterDays = CLIENT_
  * Returns items: { kind, entity_type, entity_id, title, subtitle, reason,
  *                  priority, due_at, overdue_days, state, intent }
  */
-// A SILENCE THAT OLD IS A DECISION, NOT A CHORE (Session 23).
-// "Needs you today" was showing a lead last contacted 91 days ago. Re-presenting
-// that every morning for three months is not a queue, it is wallpaper — and the
-// items you scroll past daily are what teach you to ignore the ones that matter.
-// Past this age a nudge leaves the daily list and is COUNTED instead (see
-// `stale_nudges`), so it becomes one decision — chase them or drop them —
-// rather than 90 identical mornings.
-// Only NUDGES age out. Someone actually waiting on a reply never does: that is
-// a debt we owe, and it does not expire because we ignored it for a quarter.
-const NUDGE_MAX_AGE_DAYS = 45;
 // A reply is OWED once their email is this old (owner, 20 Oct: "show it if the reply is due after 4 days"). The admin sets the real number
 // (config/settings.js needs_reply_after_days); this is only the fallback for a caller that passes none. 0 = at once.
 const REPLY_DUE_AFTER_DAYS = 4;
 
-function buildNextActions({ threads = [], reminders = [], pipeline = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS,
+function buildNextActions({ threads = [], reminders = [], pipeline = [], now = Date.now(), limit = 50,
   replyDueAfterDays = REPLY_DUE_AFTER_DAYS, positiveReplyDueAfterDays = POSITIVE_REPLY_DUE_AFTER_DAYS,
   clientSilentAfterDays = CLIENT_SILENT_AFTER_DAYS, interviewOutcomeAfterDays = INTERVIEW_OUTCOME_AFTER_DAYS,
   todayKey = null, tomorrowKey = null, dayKeyOf = null } = {}) {
   const items = [];
-  let staleNudges = 0;
   let replyNotDueYet = 0;
 
   for (const t of threads) {
@@ -203,6 +147,8 @@ function buildNextActions({ threads = [], reminders = [], pipeline = [], now = D
         // A reply from a lead already marked Rejected is still owed — it may be a second chance — but the row says so (owner, 20 Oct:
         // "show them as 'rejected lead'"), so the person decides knowingly.
         rejected_lead: t.entity_type === 'contact' && t.stage === 'Rejected',
+        // A candidate's reply row offers the stage move itself (it replaced the separate "move them forward?" row, D-0169).
+        stage: t.entity_type === 'candidate' ? (t.stage || null) : undefined,
         last_activity_at: lastAt,
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
@@ -216,48 +162,8 @@ function buildNextActions({ threads = [], reminders = [], pipeline = [], now = D
         due_at: null,
         overdue_days: a.days_since_inbound,
       });
-    } else if (a.priority > 0) {
-      // Long silence after our message — worth a chase, but clearly ranked
-      // below someone who is actually waiting on us.
-      //
-      // BD leads only: while a lead is still 'Assigned', the follow-up engine
-      // (fu1/fu2) is already chasing it on its own schedule — a silence-nudge
-      // on top of that is noise, and at outreach volume it is a LOT of noise
-      // (hundreds of leads a month sitting in Assigned with no reply yet is
-      // normal, not urgent). 'Rejected' is a closed door same as opted-out —
-      // nudging to chase someone who said no is not useful either. So a BD
-      // lead only earns a nudge once it has moved to 'Connected' or
-      // 'In Discussion' — i.e. there is a real, ongoing conversation to keep
-      // alive. Candidate threads (ATS stage vocabulary, unrelated) are not
-      // gated by this — ATS stages don't map to "engaged vs not yet".
-      const bdLeadNotEngagedYet = t.entity_type === 'contact' && !['Connected', 'In Discussion'].includes(t.stage);
-      // See NUDGE_MAX_AGE_DAYS. A 0/negative limit disables the age gate.
-      const tooOldToNag = nudgeMaxAgeDays > 0
-        && Number.isFinite(a.days_since_outbound)
-        && a.days_since_outbound > nudgeMaxAgeDays;
-      if (!bdLeadNotEngagedYet && tooOldToNag) staleNudges++;
-      // A silence older than the limit is no longer hidden (owner, 20 Oct): it is shown, lower than everything else, as a decision —
-      // chase them or drop the lead.
-      if (!bdLeadNotEngagedYet) {
-        items.push({
-          kind: KIND.NUDGE,
-          tier: TIER.quiet,
-          stale: tooOldToNag,
-          last_activity_at: lastAt,
-          entity_type: t.entity_type, entity_id: t.entity_id,
-          title: t.name || t.email || 'Unknown',
-          subtitle: t.company || null,
-          email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
-          job_id: t.job_id || null, owner_id: t.owner_id || null,
-          reason: tooOldToNag ? `You wrote ${fmtDays(a.days_since_outbound)} ago and heard nothing — chase them, or drop the lead.` : a.headline,
-          state: a.state,
-          intent: a.intent ? a.intent.id : null,
-          priority: tooOldToNag ? Math.min(a.priority, STALE_NUDGE_PRIORITY) : a.priority,
-          due_at: null,
-          overdue_days: a.days_since_outbound,
-        });
-      }
     }
+    // We wrote and they have not answered: NOT a tile (D-0169). The automatic follow-ups chase silence; the card is for what is owed.
 
     // A commitment THEY made that has come due — "they said they'd come back
     // to us after the 15th, and it is the 20th." Distinct from a reply being
@@ -282,40 +188,13 @@ function buildNextActions({ threads = [], reminders = [], pipeline = [], now = D
         overdue_days: late,
       });
     }
-
-    // A candidate thread carrying a positive signal (interested, wants to talk,
-    // asked for rates/info) — worth a manual look at whether their ATS stage
-    // should move. Advisory only, and deliberately does NOT know the stage
-    // taxonomy or what the "next" stage would be: that vocabulary lives in
-    // services/recruiting-core.js and CLAUDE.md is explicit that it must not be
-    // duplicated across more files than it already is. The recruiter decides
-    // the actual move; this only says a signal is there worth acting on.
-    if (t.entity_type === 'candidate' && t.stage && a.intent && a.intent.tone === 'good') {
-      items.push({
-        kind: KIND.STAGE_SUGGESTED,
-        tier: TIER.pipeline,
-        entity_type: t.entity_type, entity_id: t.entity_id,
-        title: t.name || t.email || 'Unknown',
-        subtitle: t.company || null,
-        email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
-        job_id: t.job_id || null, owner_id: t.owner_id || null,
-        stage: t.stage,
-        reason: `${a.intent.label} — currently at "${t.stage}". Worth moving them forward?`,
-        state: a.state,
-        intent: a.intent.id,
-        priority: 35 + (a.needs_reply ? 5 : 0),
-        due_at: null,
-        overdue_days: a.days_since_inbound,
-      });
-    }
   }
-
-  // Silent contacts of one lead are one row (see groupNudgesByLead).
-  { const merged = groupNudgesByLead(items); items.length = 0; merged.forEach(i => items.push(i)); }
 
   // Reminders: the feature that existed and never fired.
   for (const r of reminders) {
     if (r.status && r.status !== 'pending') continue;
+    // A reminder a SEQUENCE created (its call / LinkedIn / task step) is not a tile (D-0169) — it stays on the Reminders page.
+    if (reminderSource.isSequenceMade(r.reminder_type)) continue;
     const due = Date.parse(r.return_date);
     if (!Number.isFinite(due)) continue;
     // Compare on CALENDAR DAY. return_date is a date, not a moment, so a
@@ -353,7 +232,7 @@ function buildNextActions({ threads = [], reminders = [], pipeline = [], now = D
   // GROUP first (the owner's order, TIER above), then highest priority, then how overdue, then by name so the order is
   // stable between refreshes (a queue that reshuffles on every load is one nobody trusts).
   items.sort((a, b) =>
-    ((a.tier || TIER.quiet) - (b.tier || TIER.quiet)) ||
+    ((a.tier || 99) - (b.tier || 99)) ||
     (b.priority - a.priority) ||
     ((b.overdue_days || 0) - (a.overdue_days || 0)) ||
     String(a.title).localeCompare(String(b.title))
@@ -369,17 +248,16 @@ function buildNextActions({ threads = [], reminders = [], pipeline = [], now = D
   // The overflow is reported, never silently dropped — a queue that truncates
   // without saying so is how "needs you today" starts lying.
   shown.overflow = Math.max(0, items.length - shown.length);
-  shown.stale_nudges = staleNudges;
   shown.reply_not_due_yet = replyNotDueYet;
   return shown;
 }
 
 /** Small headline counts for the dashboard card. */
 function summarize(items) {
-  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0, pipeline_step: 0 };
+  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, pipeline_step: 0 };
   for (const i of items) if (by[i.kind] !== undefined) by[i.kind]++;
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
 
 module.exports = {
-  pipelineSteps, TIER, buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS, REPLY_DUE_AFTER_DAYS, STALE_NUDGE_PRIORITY };
+  pipelineSteps, TIER, buildNextActions, summarize, KIND, DAY_MS, REPLY_DUE_AFTER_DAYS };

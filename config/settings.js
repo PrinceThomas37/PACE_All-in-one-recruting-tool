@@ -169,16 +169,11 @@ const SETTINGS_SCHEMA = [
     description: 'Adds a "Generate AI summary" button to the timeline. A summary is only ever made when someone presses it, costs at most ~3,400 tokens however long the history, and nothing when there is nothing new.',
     default: 0, min: 0, max: 1,
   },
-  // "Needs you today" (R-290, owner 20 Oct): when a reply becomes OWED, and how long a silence runs before it is shown as a quiet nudge.
+  // "Needs you today" (R-290, owner 20 Oct): when a reply becomes OWED. (The "quiet nudge" setting went with the no-reply tiles, D-0169.)
   {
     key: 'needs_reply_after_days', label: 'A reply becomes "owed" after', unit: 'days', group: 'Needs you today',
     description: 'A client or candidate wrote and nobody has answered. It appears on "Needs you today" once their email is this many days old. 0 shows it at once.',
     default: 4, min: 0, max: 30,
-  },
-  {
-    key: 'nudge_quiet_after_days', label: 'A silence becomes a quiet nudge after', unit: 'days', group: 'Needs you today',
-    description: 'We wrote and heard nothing. For this many days it is an ordinary chase; after that it is shown lower down as "chase or drop?". 0 keeps every silence as an ordinary chase.',
-    default: 45, min: 0, max: 365,
   },
   // R-297 (owner 20 Oct, D-0168): a POSITIVE reply is owed sooner, and the three interview / submission steps.
   {

@@ -2,7 +2,7 @@
 //
 //   Reply due      a reply is OWED once their email is `needs_reply_after_days` old (default 4); fresher ones are counted, not listed
 //   Promise due    unchanged            Reminder due   unchanged
-//   Chase          up to `nudge_quiet_after_days` (45) an ordinary chase; past it a QUIET nudge — shown, lowest, "chase or drop"
+//   Chase          GONE (D-0169, owner 20 Oct): silence after OUR email makes no tile at all; sequence-made reminders make none either
 //   Opt-outs / a clear "no": never shown
 //
 // Usage: node test/needs-you-rules-smoke.mjs
@@ -10,7 +10,7 @@
 import { createRequire } from 'node:module';
 import { createFakeDb } from './helpers/fake-postgrest.mjs';
 const require = createRequire(import.meta.url);
-const { buildNextActions, KIND, STALE_NUDGE_PRIORITY, REPLY_DUE_AFTER_DAYS } = require('../next-action.js');
+const { buildNextActions, KIND, REPLY_DUE_AFTER_DAYS } = require('../next-action.js');
 const settings = require('../config/settings');
 
 const results = [];
@@ -39,9 +39,9 @@ ok('the default is 4 days', REPLY_DUE_AFTER_DAYS === 4);
   ok('the admin\'s own number is the one used (10 days: an 8-day-old reply is not yet due)', !lax.some((i) => i.kind === KIND.REPLY_DUE) && lax.reply_not_due_yet === 1);
 }
 {
-  const t = lead('p', [msg('outbound', 9, 'Hello'), msg('inbound', 2, 'Interested — I will come back to you in a few days')]);
+  const t = lead('p', [msg('outbound', 9, 'Hello'), msg('inbound', 1, 'Interested — I will come back to you in a few days')]);   // a positive reply is owed at 2 days (D-0168)
   const items = run([t]);
-  ok('a fresh reply that is not yet due is not turned into a chase either', !items.some((i) => i.entity_id === 'p' && i.kind === KIND.NUDGE));
+  ok('a fresh reply that is not yet due makes no tile of any kind yet', !items.some((i) => i.entity_id === 'p'), JSON.stringify(items.map((i) => i.kind)));
 }
 
 // ── Promise due and Reminder due: unchanged ─────────────────────────────────
@@ -53,26 +53,20 @@ ok('the default is 4 days', REPLY_DUE_AFTER_DAYS === 4);
   ok('a reminder that came due is still listed', rem.some((i) => i.kind === KIND.REMINDER_DUE));
 }
 
-// ── Chase: ordinary up to 45 days, then a quiet nudge ───────────────────────
+// ── Silence after OUR email is not a tile (D-0169) ──────────────────────────
 const silent = (id, days, extra) => lead(id, [msg('outbound', days, 'Following up')], extra);
 {
-  const items = run([silent('s10', 10), silent('s44', 44), silent('s46', 46), silent('s91', 91)]);
-  const by = Object.fromEntries(items.filter((i) => i.kind === KIND.NUDGE).map((i) => [i.entity_id, i]));
-  ok('10 and 44 days of silence are ordinary chases', by.s10 && !by.s10.stale && by.s44 && !by.s44.stale);
-  ok('46 and 91 days are STILL shown (they used to vanish), marked as quiet nudges', by.s46 && by.s46.stale === true && by.s91 && by.s91.stale === true);
-  ok('…the reason asks for a decision: chase or drop', /chase them, or drop the lead/i.test(by.s91.reason), by.s91.reason);
-  const rank = items.map((i) => i.entity_id);
-  ok('…and they sit BELOW every ordinary one', rank.indexOf('s91') > rank.indexOf('s10') && rank.indexOf('s46') > rank.indexOf('s44'), rank.join());
-  ok('…with the lowest priority a live row can have', by.s91.priority <= STALE_NUDGE_PRIORITY && by.s10.priority > STALE_NUDGE_PRIORITY);
-}
-{
+  const items = run([silent('s10', 10), silent('s46', 46), silent('s91', 91), silent('g1', 60, { job_id: 'J' }), silent('g2', 70, { job_id: 'J' })]);
+  ok('we wrote and nobody answered (10, 46, 91 days; one person or a whole company) → no tile', items.length === 0, JSON.stringify(items.map((i) => [i.entity_id, i.kind])));
   const owed = run([replyThread('o', 6), silent('q', 91)]);
-  ok('a quiet nudge never pushes a reply you owe down the list', owed[0].kind === KIND.REPLY_DUE);
-  const early = run([silent('e', 91, { stage: 'Assigned' })]);
-  ok('a lead that is only Assigned still gets no chase at all (the follow-up engine is chasing it)', !early.some((i) => i.kind === KIND.NUDGE));
-  const lead2 = [silent('g1', 60, { job_id: 'J' }), silent('g2', 70, { job_id: 'J' })];
-  const grouped = run(lead2).filter((i) => i.kind === KIND.NUDGE);
-  ok('several quiet people at one company are ONE quiet row', grouped.length === 1 && grouped[0].stale === true && /Chase them, or drop the lead/.test(grouped[0].reason), JSON.stringify(grouped.map((g) => [g.entity_type, g.stale])));
+  ok('…while a reply we owe is still listed', owed.length === 1 && owed[0].kind === KIND.REPLY_DUE && owed[0].entity_id === 'o');
+  const seq = run([], { reminders: [
+    { id: 'r-seq', user_id: 'u1', return_date: '2026-10-19', note: 'Call + LinkedIn', status: 'pending', contact_name: 'Seq', reminder_type: 'bd_touch' },
+    { id: 'r-task', user_id: 'u1', return_date: '2026-10-19', note: 'Candidate task', status: 'pending', contact_name: 'Task', reminder_type: 'recruiter_task' },
+    { id: 'r-me', user_id: 'u1', return_date: '2026-10-19', note: 'Call back', status: 'pending', contact_name: 'Mine', reminder_type: 'manual' },
+    { id: 'r-mgr', user_id: 'u1', return_date: '2026-10-19', note: 'Reconnect your mailbox', status: 'pending', contact_name: 'Manager', reminder_type: 'manager_prompt' },
+  ] });
+  ok('a reminder a SEQUENCE made is not a tile; one a person set (or a manager asked) is', seq.map((i) => i.reminder_id).sort().join() === 'r-me,r-mgr', JSON.stringify(seq.map((i) => i.reminder_id)));
 }
 
 // ── Opt-outs and a clear "no": never shown ──────────────────────────────────
@@ -83,14 +77,15 @@ const silent = (id, days, extra) => lead(id, [msg('outbound', days, 'Following u
   ok('an opt-out and a clear "no" are never shown', items.length === 0, JSON.stringify(items.map((i) => [i.entity_id, i.kind])));
 }
 
-// ── the admin's two numbers exist, with the owner's defaults ────────────────
+// ── the admin's numbers exist, with the owner's defaults ────────────────────
 {
   const sch = settings.SETTINGS_SCHEMA.filter((s) => s.group === 'Needs you today');
   const byKey = Object.fromEntries(sch.map((s) => [s.key, s]));
-  ok('both numbers are admin settings, not typed into the code (D-0123)', byKey.needs_reply_after_days && byKey.nudge_quiet_after_days);
-  ok('…defaults 4 and 45, the owner\'s own', byKey.needs_reply_after_days.default === 4 && byKey.nudge_quiet_after_days.default === 45);
+  ok('the reply numbers are admin settings, not typed into the code (D-0123)', byKey.needs_reply_after_days && byKey.needs_reply_positive_after_days);
+  ok('…defaults 4 and 2, the owner\'s own', byKey.needs_reply_after_days.default === 4 && byKey.needs_reply_positive_after_days.default === 2);
+  ok('…and the quiet-nudge setting is gone with the no-reply tiles (no setting that does nothing)', !byKey.nudge_quiet_after_days);
   const db = createFakeDb({ tables: { app_settings: [] } });
-  ok('…and the app reads them from there (default when the admin has not chosen)', await settings.getSetting(db.supabase, 'needs_reply_after_days', 'org-1') === 4 && await settings.getSetting(db.supabase, 'nudge_quiet_after_days', 'org-1') === 45);
+  ok('…and the app reads them from there (default when the admin has not chosen)', await settings.getSetting(db.supabase, 'needs_reply_after_days', 'org-1') === 4 && await settings.getSetting(db.supabase, 'needs_reply_positive_after_days', 'org-1') === 2);
   const db2 = createFakeDb({ tables: { app_settings: [] } });
   const saved = await settings.setSettings(db2.supabase, { needs_reply_after_days: 2 }, 'org-2');
   ok('…an admin\'s own choice is saved and is the one used, for their company only', !saved.error && await settings.getSetting(db2.supabase, 'needs_reply_after_days', 'org-2') === 2 && await settings.getSetting(db2.supabase, 'needs_reply_after_days', 'org-3') === 4, JSON.stringify(saved));

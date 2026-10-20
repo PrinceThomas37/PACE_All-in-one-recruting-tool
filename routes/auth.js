@@ -322,12 +322,9 @@ router.delete('/users/:id', auth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // USER EMAILS — email IDs per user
 // ══════════════════════════════════════════════════════════════
-router.get('/users/:id/emails', auth, async (req, res) => {
-  try {
-    if (!(await guardUser(req, res, req.params.id))) return;
-    const { data, error } = await supabase.from('user_emails')
-      .select('*').eq('user_id', req.params.id).order('created_at');
-    if (error) throw error;
+// One way to describe mailboxes, for one person or many (R-298): the connection flags, sign-in health, "sends as" and own-signature
+// marks, read in ONE set of queries for all the rows — not one set per person.
+async function describeMailboxes(data) {
     // Attach ms_connected / gmail_connected flags
     const ids = (data || []).map(e => e.id);
     const { data: tokens } = ids.length
@@ -357,8 +354,36 @@ router.get('/users/:id/emails', auth, async (req, res) => {
         });
       } catch (_) { /* a missing note is "not set", never a failed list */ }
     }
-    res.json((data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id), connection: conns[e.id] || { connected: false, status: 'none' },
-      sends_as: sendsAs[e.id] && Object.keys(sendsAs[e.id]).length ? sendsAs[e.id] : null, has_own_signature: hasSig.has(e.id) })));
+    return (data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id), connection: conns[e.id] || { connected: false, status: 'none' },
+      sends_as: sendsAs[e.id] && Object.keys(sendsAs[e.id]).length ? sendsAs[e.id] : null, has_own_signature: hasSig.has(e.id) }));
+}
+
+router.get('/users/:id/emails', auth, async (req, res) => {
+  try {
+    if (!(await guardUser(req, res, req.params.id))) return;
+    const { data, error } = await supabase.from('user_emails')
+      .select('*').eq('user_id', req.params.id).order('created_at');
+    if (error) throw error;
+    res.json(await describeMailboxes(data));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// EVERY COLLEAGUE'S MAILBOXES IN ONE ANSWER (R-298, owner 20 Oct: "correct this issue"). An admin's / lead's app used to ask
+// /users/:id/emails once PER PERSON the moment it opened — ten requests in the same second, each five database trips away,
+// queueing everything else behind them. Same visibility as that route (any user of the caller's own company, never another's):
+// { "<userId>": [mailbox, …], … }, every person of the company present, an empty list for someone with none.
+router.get('/users-emails', auth, async (req, res) => {
+  try {
+    const { data: people, error: pe } = await withOrg(supabase.from('users').select('id').is('deleted_at', null), req);
+    if (pe) throw pe;
+    const ids = (people || []).map(u => u.id);
+    const out = {};
+    ids.forEach(id => { out[id] = []; });
+    if (!ids.length) return res.json(out);
+    const { data, error } = await supabase.from('user_emails').select('*').in('user_id', ids).order('created_at');
+    if (error) throw error;
+    (await describeMailboxes(data)).forEach(e => { if (out[e.user_id]) out[e.user_id].push(e); });
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

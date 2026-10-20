@@ -73,7 +73,7 @@ try {
     const it = (o) => Object.assign({ last_activity_at: '2026-10-06T08:00:00Z', priority: 50, overdue_days: 1, owner_id: STATE.user.id }, o);
     STATE.nextActions = { items: [
       it({ kind: 'reply_due', entity_type: 'contact', entity_id: 'c1', title: 'Melanie Nero', subtitle: 'Pinpoint', email: 'm@x.test', job_id: 'job-1', reason: "They replied 3 days ago. You haven't replied." }),
-      it({ kind: 'nudge', entity_type: 'lead', entity_id: 'job-1', title: 'Pinpoint Engineering', subtitle: '30 people', email: null, job_id: 'job-1', reason: 'You have emailed 30 people here and nobody has replied.' }),
+      it({ kind: 'commitment_due', entity_type: 'lead', entity_id: 'job-1', title: 'Pinpoint Engineering', subtitle: 'the lead', email: null, job_id: 'job-1', reason: 'They said "next week" — that was 6 days ago.' }),
       it({ kind: 'reminder_due', entity_type: 'contact', entity_id: 'c2', reminder_id: 'r1', title: 'Dana Fox', subtitle: 'Acme', email: null, job_id: 'job-1', reason: 'Call Dana about the Dallas role' }),
       it({ kind: 'reply_due', entity_type: 'candidate', entity_id: 'cand-1', title: 'Maya Rao', subtitle: 'Estimator', email: 'maya@example.test', job_id: 'jo-9', reason: 'They replied.' }),
       it({ kind: 'reply_due', entity_type: 'contact', entity_id: 'c9', title: 'Zed', subtitle: 'Off Co', email: 'z@x.test', job_id: 'job-off', reason: 'x' }),
@@ -108,10 +108,10 @@ try {
   await page.evaluate(() => document.querySelector('.ev-actions button').click()); await wait();
   step('…and it opens the lead (and the drawer steps aside first)', await page.evaluate(() => __opened.join() === 'job:job-1' && !document.querySelector('.ev-drawer')));
 
-  // 2. the grouped "No reply yet"
+  // 2. a row about the whole lead (the "No reply yet" group is gone since D-0169; a lead-level promise uses the same window)
   await clickRow('Pinpoint Engineering');
   d = await drawer();
-  step('a "No reply yet" group shows the basis AND only the newest two emails, with the rest one click away', d && /you emailed and nobody has answered for 3 or more days/.test(d.hint) && d.rows.length === 2 && /Show 1 earlier email$/.test(d.showAll), JSON.stringify(d && [d.rows.map(r => r.p), d.showAll]));
+  step('a lead-level row shows the basis AND only the newest two emails, with the rest one click away', d && /they wrote that they would do something by a date/.test(d.hint) && d.rows.length === 2 && /Show 1 earlier email$/.test(d.showAll), JSON.stringify(d && [d.hint, d.rows.map(r => r.p), d.showAll]));
   await page.evaluate(() => document.querySelector('.ev-showall').click()); await wait();
   d = await drawer();
   step('…"Show earlier" brings the third back (nothing is dropped)', d.rows.length === 3 && !d.showAll, JSON.stringify(d.rows.map(r => r.p)));
@@ -177,18 +177,18 @@ try {
   // "Your team today", not a row — so there is nothing of theirs to open at all.
   step('a teammate\'s conversation is never a row you can open on Today (counts only — D-0040, D-0160)', await page.evaluate(() => !document.querySelector('.cd-person .cd-row') && !/Dev · Globex/.test(document.getElementById('content').innerText)));
 
-  // 6b. a candidate whose reply reads as interest: the window offers the stage move itself
+  // 6b. a candidate whose reply reads as interest: their REPLY row's window offers the stage move (D-0169 folded the separate row in)
   await page.evaluate(() => {
     window.__stage = null;
     window.stageSubmissionFor = (cid, jid) => Promise.resolve({ id: 'sub-1', stage: 'Screening' });
     window.openStageModal = (id, stage, done, o) => { __stage = { id, stage, jobId: o && o.jobId }; };
-    STATE.nextActions = { items: [{ kind: 'stage_suggested', entity_type: 'candidate', entity_id: 'cand-1', title: 'Claudia Perez', subtitle: 'Renewable Energy Partners', email: 'c@x.test', job_id: 'job-5', stage: 'Screening', last_activity_at: '2026-10-06T08:00:00Z', priority: 40, owner_id: STATE.user.id, reason: 'Interested — currently at "Screening". Worth moving them forward?' }], summary: {}, team: null, snoozed: 0, overflow: 0 };
+    STATE.nextActions = { items: [{ kind: 'reply_due', hot: true, entity_type: 'candidate', entity_id: 'cand-1', title: 'Claudia Perez', subtitle: 'Renewable Energy Partners', email: 'c@x.test', job_id: 'job-5', stage: 'Screening', last_activity_at: '2026-10-06T08:00:00Z', priority: 40, owner_id: STATE.user.id, reason: 'Interested — 2 days ago. You haven\'t replied.' }], summary: {}, team: null, snoozed: 0, overflow: 0 };
     STATE.naExpanded = true; STATE.page = 'dashboard'; render();
   });
   await page.waitForTimeout(300);
   await clickRow('Claudia Perez');
   d = await drawer();
-  step('a "Replied — interested" row says what to do and offers the stage move, suggesting the next stage', d && /Decide whether to move Claudia Perez forward from "Screening"/.test(d.task) && d.taskBtns.includes('Move to Submitted to BDM'), JSON.stringify([d && d.task, d && d.taskBtns]));
+  step('a positive candidate reply says what to do (reply) and offers the stage move, suggesting the next stage', d && /^Reply to Claudia Perez/.test(d.task) && d.taskBtns.includes('Reply to Claudia') && d.taskBtns.includes('Move to Submitted to BDM'), JSON.stringify([d && d.task, d && d.taskBtns]));
   step('…the stage list is there for any other stage, and only that candidate\'s mail is listed (no lead-engine mail)', await page.evaluate(() => document.querySelectorAll('.ev-task-acts select option').length > 5) && d.rows.every(r => !/abitos/.test(r.p + r.s + r.t)));
   await page.evaluate(() => [...document.querySelectorAll('.ev-task-acts button')].find(b => /^Move to Submitted to BDM/.test(b.textContent)).click()); await wait();
   step('…clicking it opens the ordinary stage window on that person\'s submission for that job', await page.evaluate(() => __stage && __stage.id === 'sub-1' && __stage.stage === 'Submitted to BDM' && __stage.jobId === 'job-5' && !document.querySelector('.ev-drawer')), await page.evaluate(() => JSON.stringify(__stage)));

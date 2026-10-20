@@ -135,8 +135,8 @@ window.naActItem=function(it){
   var isCand=it.entity_type==='candidate';
   // A reply owed, or a follow-up on a lead's contact: answered INSIDE the conversation — the exact email opens in the person's mailbox
   // with the reply window ready (8 Oct, owner). Only when it cannot be found does it fall back to what it did before.
-  if(!isCand&&it.job_id&&window.replyInThread&&(it.kind==='reply_due'||it.kind==='stage_suggested'||it.kind==='commitment_due'||it.kind==='nudge')){
-    var theirs=it.kind==='reply_due'||it.kind==='stage_suggested';
+  if(!isCand&&it.job_id&&window.replyInThread&&(it.kind==='reply_due'||it.kind==='commitment_due')){
+    var theirs=it.kind==='reply_due';
     return replyInThread(it.job_id,theirs?'inbound':'last',it.email).then(function(ok){
       if(ok) return;
       if(theirs) showToast('Could not open that exact email — '+(it.kind==='reply_due'?'showing their messages instead':'opening the email screen instead'),'warning');
@@ -157,18 +157,8 @@ function naActFallback(it,isCand){
   outreachComposeTo({id:it.entity_type==='contact'?it.entity_id:null,name:it.title,email:it.email,
     company:it.subtitle||'',job_id:it.job_id||null,outreach_type:'followup'});
 };
-// "Replied — interested": moving them forward is the task. The stage is the
-// person's choice (the queue only suggests, it never asserts which); the choice
-// opens the ordinary stage window on that person's submission for that job.
-function naMoveStageSelect(){
-  var opts='<option value="">Move to…</option>'+(window.ATS_STAGE_LIST||[]).map(function(st){return '<option value="'+htmlEsc(st)+'">'+htmlEsc(st)+'</option>';}).join('');
-  return '<select class="sel na-act na-act-do" aria-label="Move this candidate to a stage" onclick="event.stopPropagation()" onchange="naMoveStage(this,event)">'+opts+'</select>';
-}
-window.naMoveStage=function(sel,ev){
-  if(ev&&ev.stopPropagation)ev.stopPropagation();
-  var it=naItemOf(sel),stage=sel.value; sel.value='';
-  naMoveStageItem(it,stage);
-};
+// Moving a candidate on from the card (their reply row, or an interview / submission step). The stage is the person's choice (the
+// queue only suggests, it never asserts which); the choice opens the ordinary stage window on that person's submission for that job.
 window.naMoveStageItem=function(it,stage){
   if(!it||!stage)return;
   if(!it.job_id||!window.stageSubmissionFor){showToast('Open the candidate to move them','warning');return;}
@@ -238,7 +228,7 @@ window.naTrace=function(row){
     title:(it.title||'')+(it.subtitle&&it.entity_type!=='lead'?' · '+it.subtitle:'')+(it.entity_type==='lead'&&it.subtitle?' · '+it.subtitle:''),
     hint:(k.why||'')+(it.reason?' Right now: '+it.reason:''),
     reminderId:it.reminder_id||null,
-    firstChip:it.kind==='reply_due'?'the reply you owe':(it.kind==='nudge'?'your last email':null),
+    firstChip:it.kind==='reply_due'?'the reply you owe':null,
     meta:meta
   };
   if(it.entity_type==='lead'){ opts.leadId=it.entity_id; }
@@ -267,13 +257,12 @@ function naTaskFor(it){
   switch(it.kind){
     case 'reply_due':
       text='Reply to '+(it.title||'them')+'. Their email is below; the answer is written in your mailbox with their thread already open.';
+      // A candidate's reply row carries the stage move too — it replaced the separate "replied — interested" row (D-0169).
+      if(it.entity_type==='candidate'&&it.stage) stages={suggest:it.hot?naNextStage(it):'',options:(window.ATS_STAGE_LIST||[]).slice(),fn:function(st){ naMoveStageItem(it,st); }};
       b.push({label:'Reply to '+first,primary:true,fn:act}); break;
     case 'commitment_due':
       text='Chase '+(it.title||'them')+' about what they promised.';
       b.push({label:'Write to '+first,primary:true,fn:act}); break;
-    case 'nudge':
-      text=it.entity_type==='lead'?'Nobody on this lead has answered. Open it to see who you have emailed and follow up.':'Follow up with '+(it.title||'them')+' — nobody has answered.';
-      b.push({label:it.entity_type==='lead'?'Open the lead':'Follow up with '+first,primary:true,fn:act}); break;
     case 'reminder_due':
       text=it.reason||'A reminder has come due.';
       if(it.email) b.push({label:'Write the email',primary:true,fn:act}); break;
@@ -283,11 +272,6 @@ function naTaskFor(it){
       b.push({label:'Open '+first,primary:true,fn:act});
       if(it.email) b.push({label:'Write to '+first,fn:function(){ STATE.mailbox=STATE.mailbox||{};STATE.mailbox.q=it.email;goPage('mailbox'); }});
       break;
-    case 'stage_suggested':
-      var nx=naNextStage(it);
-      text='Their reply reads as interest. Decide whether to move '+(it.title||'them')+' forward'+(it.stage?' from "'+it.stage+'"':'')+'.';
-      stages={suggest:nx,options:(window.ATS_STAGE_LIST||[]).slice(),fn:function(st){ naMoveStageItem(it,st); }};
-      b.push({label:'Reply to '+first,fn:act}); break;
     default: text=it.reason||'';
   }
   if(it.reminder_id) b.push({label:'Mark done',quiet:true,fn:function(){ naDone(it.reminder_id); }});
@@ -318,10 +302,9 @@ window.naOpen=function(kind,entityType,entityId,jobId){
   goPage('leads');
 };
 
-// Every kind next-action.js can emit has a label HERE. `stage_suggested` (a
-// candidate's reply that reads as interest — "worth moving them forward?") had
-// none, so it fell through to `nudge` and drew "No reply yet" over a candidate
-// who HAD replied, and the count chips left it out entirely (Session 34).
+// Every kind next-action.js can emit has a label HERE. Since D-0169 (owner, 20 Oct) the card holds only what is OWED: a reply, an
+// interview / submission step, a reminder a person set, a promise that came due — no "No reply yet" chases and no separate
+// "replied — interested" row (the candidate's reply row carries the stage move).
 var NA_KIND={
   reply_due:       {lbl:'Reply due',           bg:'#fee2e2', fg:'#b91c1c',
                     why:'Shown because their latest email to you has no reply from you after it.'},
@@ -329,15 +312,10 @@ var NA_KIND={
                     why:'Shown because they wrote that they would do something by a date, and that date has passed.'},
   reminder_due:    {lbl:'Reminder',            bg:'#e0e7ff', fg:'#3730a3',
                     why:'Shown because a reminder set for this person has come due.'},
-  nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569',
-                    why:'Shown because you emailed and nobody has answered for 3 or more days, on a lead that is already talking to you. Not shown for leads still in the automatic follow-up.'},
-  stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534',
-                    why:'Shown because their reply reads as interest, so it may be time to move them forward.'},
   pipeline_step:   {lbl:'Interview',         bg:'#fef9c3', fg:'#854d0e',
                     why:'Shown because the interview is today or tomorrow, or it has passed and there is no outcome yet. Your admin sets how many days.'}
 };
-// A kind this file does not know says so neutrally. The old fallback was `nudge`,
-// which asserts something specific and false about every kind added later.
+// A kind this file does not know says so neutrally — never a label that asserts something specific and false.
 var NA_KIND_UNKNOWN={lbl:'Needs a look',bg:'#f1f5f9',fg:'#475569'};
 // One kind, two short labels (R-297): a step on a submission waiting with the client reads "Submission", an interview step "Interview".
 var NA_KIND_SUBMISSION={lbl:'Submission',bg:'#fef9c3',fg:'#854d0e',why:'Shown because the candidate has sat at "Submitted to Client" with no movement. Your admin sets how many days.'};
@@ -391,7 +369,7 @@ window.naRowHtml=function(it){
     var k=naKindOf(it);
     // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
     // Only reminders used to have a Done button, so reply_due, commitment_due,
-    // nudge and stage_suggested could not be dismissed AT ALL — which is how a
+    // and the kinds that were removed later could not be dismissed AT ALL — which is how a
     // lead last contacted 91 days ago sat here under a heading reading
     // "today", with no way to remove it. That is what the owner reported as
     // "the memory does not get cleared after an activity is finished".
@@ -403,13 +381,12 @@ window.naRowHtml=function(it){
     // message lands on the thread.
     // R-073 (owner: "no option to do the task … just information is mentioned"):
     // the row itself does the work — see naAct below for what each does.
-    var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write',pipeline_step:'Open'}[it.kind]||'';
+    var doLbl={reply_due:'Reply',commitment_due:'Chase',reminder_due:'Write',pipeline_step:'Open'}[it.kind]||'';
     // A reminder with nobody to write to (a task someone asked you to do, like "reconnect your mailbox") has no Write — a button that can only say "no address" is worse than none.
     if(it.kind==='reminder_due'&&!it.email)doLbl='';
     if(it.kind==='reminder_due'&&it.subtitle==='My Setup')doLbl='Open My Setup';
-    if(it.kind==='nudge'&&it.entity_type==='lead')doLbl='Open lead';
-    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:(it.entity_type==='lead'?'Open the lead to see who you have emailed':'Write a follow-up'),reminder_due:'Write the email this reminder is for',pipeline_step:'Open the candidate — their job, stage and interview'}[it.kind])+'">'+doLbl+'</button>'
-      :(it.kind==='stage_suggested'?naMoveStageSelect():'');
+    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',reminder_due:'Write the email this reminder is for',pipeline_step:'Open the candidate — their job, stage and interview'}[it.kind])+'">'+doLbl+'</button>'
+      :'';
     var acts=doAct+(it.reminder_id
       ?'<button class="na-act" onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done">Done</button>'
       :'<button class="na-act" onclick="naSnooze(this,\'today\',event)" title="Hide until tomorrow. Comes back if they reply.">Not today</button>'+
@@ -424,7 +401,10 @@ window.naRowHtml=function(it){
       last_activity_at:it.last_activity_at||null,
       overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
       state:it.state||null, rejected_lead:!!it.rejected_lead, title:it.title||'', reason:it.reason||'',
-      email:it.email||null, subtitle:it.subtitle||null, stage:it.stage||null
+      email:it.email||null, subtitle:it.subtitle||null, stage:it.stage||null,
+      // R-297 / D-0169: a positive reply (the window suggests the next stage) and an interview / submission step (snoozed per
+      // submission and step, not per candidate) need these too — without them "Not today" on one job hid the candidate's others.
+      hot:!!it.hot, step:it.step||null, submission_id:it.submission_id||null
     }));
     return '<div data-na-item="'+payload+'" '+
       'onclick="naTrace(this)" title="Click to see where this comes from" '+
@@ -509,8 +489,6 @@ function renderNextActionsCard(){
           chip(bk.reply_due,'to reply','#b91c1c')+
           chip(bk.commitment_due,'promised','#92400e')+
           chip(bk.reminder_due,bk.reminder_due===1?'reminder':'reminders','#3730a3')+
-          chip(bk.nudge,'to chase','#475569')+
-          chip(bk.stage_suggested,'interested','#166534')+
           chip(bk.pipeline_step,bk.pipeline_step===1?'interview / submission':'interviews / submissions','#854d0e')+
         '</div>'+
       '</div>'+
@@ -605,20 +583,17 @@ function renderTeamReview(){
 UI.registerOverlay('naTeam',function(){ return STATE.naTeam?renderTeamReview():''; });
 
 // WHAT IS NOT ON THIS LIST, AND WHY (Session 23).
-// The queue now holds things back — snoozed items, silences older than the
-// nudge age limit, anything past the display limit. A list that filters itself
+// The queue holds things back — snoozed items and anything past the display limit. A list that filters itself
 // and does not admit it is a lie the user cannot see, and it is exactly how
 // "Needs you today" came to be trusted less than it deserved. So the counts
 // are stated, and the stale ones are offered as ONE decision (chase or drop)
 // rather than ninety identical mornings.
 function naHiddenLine(s){
   var bits=[];
-  if(s.stale_nudges)bits.push(s.stale_nudges+' gone quiet over '+(s.nudge_max_age_days||45)+' days');
   if(s.snoozed)bits.push(s.snoozed+' hidden by you');
   if(s.overflow)bits.push(s.overflow+' more');
   if(!bits.length)return '';
   return '<div class="na-hidden">'+
     '<span>'+bits.join(' · ')+'</span>'+
-    (s.stale_nudges?'<button class="na-act na-act-quiet" onclick="goPage(\'leads\')" title="Review the quiet leads on the Leads page">Review quiet leads</button>':'')+
   '</div>';
 }
