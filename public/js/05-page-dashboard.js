@@ -141,9 +141,14 @@ function withDashReports(html,isViewingOther){
   // Inside the page's own wrapper, so it takes the page's width and padding.
   return html.replace(/<\/div>\s*$/, section+'</div>');
 }
+// Only the dashboards built with withDashReports carry the report. A manager's Today does not (D-0160: "the charts are in
+// Reports"), so for them this answers false and the caller opens the Reports page itself — never a link that lands back on Today.
 window.dashScrollToReports=function(){
+  var u=STATE.user;
+  if(u&&!isPureRecruiter(u)&&(isManagerRole(u)||getTeam(u).length)) return false;
   var go=function(){ var el=document.getElementById('dash-reports'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
   if(STATE.page!=='dashboard'){ goPage('dashboard'); setTimeout(go,150); } else go();
+  return true;
 };
 
 // ── NO REMINDERS BOX ON TODAY (R-122 step 3) ─────────────────────────────────

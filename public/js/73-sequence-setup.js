@@ -91,16 +91,33 @@
       }).filter(function(x){ return x!==null; }).join('\n');
     }
     return s.replace(/{{\s*(\w+)\s*}}/g,function(m,k){
-      if(k==='sender') return (STATE.user&&STATE.user.name)||'You';
-      if(k==='senderemail') return (STATE.user&&STATE.user.email)||'';
+      // The sender is the EMAIL ID that sends, never the profile (CLAUDE.md: every preview resolves from the selected mailbox):
+      // the email ID whose tab is open, else the person's primary one. Without one connected, the field is marked, not invented.
+      if(k==='sender'){ var sb=previewSender(); return sb?(sb.name||String(sb.email).split('@')[0]):'[your name — from the email ID that sends]'; }
+      if(k==='senderemail'){ var se=previewSender(); return se?se.email:'[the email ID that sends]'; }
       return v[k]!=null&&v[k]!=='' ? String(v[k]) : '';
     });
   }
 
+  // The person's own connected email IDs, for the preview's sender (any role can read its own list).
+  function loadSenders(){
+    if(typeof apiGet!=='function') return;
+    apiGet('/mailbox/accounts').then(function(list){
+      if(!Q) return;
+      Q.senders=(list||[]).filter(function(m){ return m&&m.is_active!==false; }).map(function(m){ return { id:m.id, email:m.email_address, name:m.display_name||'', primary:!!m.is_primary }; });
+      if(STATE.page==='seqsetup') paint(true);
+    }).catch(function(){});
+  }
+  function previewSender(){
+    var list=(Q&&Q.senders)||[];
+    if(Q&&Q.mbTab&&Q.mbTab!=='person'){ var t=list.filter(function(m){ return m.id===Q.mbTab; })[0]; if(t) return t; }
+    return list.filter(function(m){ return m.primary; })[0]||list[0]||null;
+  }
   // ── loading and saving ─────────────────────────────────────────────────────
   window.openSequenceSetup = function(){
     Q = STATE.seqSetup = fresh();
     goPage('seqsetup');
+    loadSenders();
     apiGet('/my-setup/sequence').then(function(r){
       Q.loaded=true; Q.mode=r.mode||null; Q.max=r.followup_max==null?5:r.followup_max; Q.sample=r.sample||null;
       Q.first={ subject:tokensToHtml(r.first&&r.first.subject), body:tokensToHtml(r.first&&r.first.body),
@@ -174,6 +191,7 @@
     Q.target={ id:opts.id||null, entity:et, cand:cand, name:'', enrollAfter:opts.enrollAfter||null, back:opts.back||STATE.page||'email' };
     Q.mode='template';
     goPage('seqsetup');
+    loadSenders();
     var def=opts.id?((STATE.wf&&STATE.wf.defs)||[]).find(function(d){ return d.id===opts.id; }):null;
     if(def){
       Q.target.name=def.name||'';

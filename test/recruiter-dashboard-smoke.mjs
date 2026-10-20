@@ -186,7 +186,8 @@ try {
   const bdNav = await page.evaluate(() =>
     Array.from(document.querySelectorAll('.sb-nav .nav-item')).map(e => e.textContent.trim()));
   step('BD lands on the team desk, not the recruiter dashboard',
-    bdContent.includes('Your team') && !bdContent.includes('No jobs on your desk yet'), bdContent.slice(0, 200));
+    // The manager's Today (D-0160): its four action numbers are the mark of the team desk ("Your team today" shows only when someone needs a nudge).
+    bdContent.includes('data-today-tiles') && !bdContent.includes('No jobs on your desk yet'), bdContent.slice(0, 200));
   step('BD dashboard shows no seeded lead-gen widgets',
     !bdContent.includes('Response rate trend'), 'the legacy demo-fed dashboard is gone');
   step('BD still sees Leads nav', bdNav.includes('Leads'), bdNav.join(' | '));

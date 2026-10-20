@@ -26,7 +26,7 @@ async function api(route) {
   const req = route.request(), u = new URL(req.url()), m = req.method(), body = req.postData() ? JSON.parse(req.postData()) : null;
   const j = (o, st = 200) => route.fulfill({ status: st, contentType: 'application/json', body: JSON.stringify(o) });
   if (u.pathname === '/my-setup/sequence' && m === 'GET') return j({ mode: 'template', teach: teachMod.normalize(null), teach_options: teachMod.options(),
-    first: { subject: 'About {{company}}', body: 'Hi {{fn}},\n\nMain wording here.\n\nThanks,', versions: [] },
+    first: { subject: 'About {{company}}', body: 'Hi {{fn}},\n\nMain wording here.\n\nThanks,\n{{sender}}', versions: [] },
     followups: [{ day: 3, subject: '', body: 'Just checking you saw my note.', thread: 'same', versions: [] }], followup_max: 5,
     sample: { vars, example: false, name: 'Dana Lee', company: 'Acme Health', email: 'dana@acme.example' } });
   if (u.pathname === '/my-setup/sequence' && m === 'PUT') { saved = body; return j({ ok: true }); }
@@ -35,7 +35,9 @@ async function api(route) {
   if (u.pathname === '/emails/spam-check') { spam.push(body); return j({ score: 12, level: 'ok', warnings: [] }); }
   if (u.pathname === '/outreach-plan' && m === 'GET') return j({ tmpl_scope: 'all' });
   if (u.pathname === '/outreach-plan/mailboxes') return j({ emails: [{ id: 'mb1', email: 'prince@futeglobal.com' }, { id: 'mb2', email: 'prince@vhcstaffing.com' }],
-    mailboxes: { mb2: { tmpl_o1_subject: 'VHC subject', tmpl_o1_body: 'VHC wording for {{fn}}' } } });
+    mailboxes: { mb2: { tmpl_o1_subject: 'VHC subject', tmpl_o1_body: 'VHC wording for {{fn}}\n{{sender}}' } } });
+  if (u.pathname === '/mailbox/accounts') return j([{ id: 'mb1', email_address: 'prince@futeglobal.com', display_name: 'Prince at Fute', is_primary: true, is_active: true },
+    { id: 'mb2', email_address: 'prince@vhcstaffing.com', display_name: 'Prince at VHC', is_primary: false, is_active: true }]);
   if (m === 'POST') { posts.push([u.pathname, body]); return j({ ok: true }); }
   return j({});
 }
@@ -58,6 +60,9 @@ try {
   await pg.waitForSelector('#sq-root #sq-body');
   await pg.waitForSelector('[data-sq="scope"]');
   ok('My Setup → "Open it" opens the builder with the person\'s wording', (await pg.textContent('#sq-body')).includes('Main wording here'));
+  await pg.waitForFunction(() => /Prince at Fute/.test((document.querySelector('#sq-pv') || {}).textContent || ''), null, { timeout: 6000 }).catch(() => {});
+  const pv1 = await pg.textContent('#sq-pv');
+  ok('the preview signs as the email ID that sends (the primary one), never the profile name', /Prince at Fute/.test(pv1) && !(await pg.evaluate((t) => t.includes(STATE.user.name), pv1)), pv1.slice(-120));
 
   // ── R-286: same thread / new email, per follow-up ──
   ok('each follow-up offers "same thread" (the default) or "a new email"', await pg.evaluate(() => document.querySelector('[data-sq="futhread"][data-thr="same"]').getAttribute('aria-checked') === 'true' && !document.getElementById('sq-fusubj0')));
@@ -100,6 +105,7 @@ try {
   await pg.click('[data-sq="mbtab"][data-mb="mb2"]');
   await pg.waitForFunction(() => document.querySelector('#sq-body').textContent.includes('VHC wording'));
   ok('an email ID\'s tab shows ITS wording', (await pg.textContent('#sq-subj')).includes('VHC subject'));
+  ok('…and its preview signs as THAT email ID', /Prince at VHC/.test(await pg.textContent('#sq-pv')));
   await pg.click('[data-sq="mbtab"][data-mb="mb1"]');
   await pg.waitForFunction(() => !document.querySelector('#sq-body').textContent.includes('VHC wording'));
   ok('an email ID with none of its own says it uses the main wording', (await pg.textContent('#sq-root')).includes('Leave an email empty and it uses the main wording'));

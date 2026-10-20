@@ -862,6 +862,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   color:var(--text);
 }
 html :where(#content :where(
+  .td-tile,.oi-tile,
   .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,.fd-block-box,.ms-box,.ms-preview,.ms-tag,.ms-step,.ms-toolbar,.ms-tb,.ms-tb-sel,
   .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
   .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,

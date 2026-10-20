@@ -51,54 +51,50 @@ try {
   await waitForLogin(page);
   await enterApp(page, 'admin');
 
-  const open = async (tab) => {
-    await page.evaluate((t) => { window.STATE.emailTab = t; window.STATE.page = 'email'; window.render(); }, tab);
-    await page.waitForTimeout(250);
-  };
+  // Since D-0161 the person's wording is written in the sequence builder (the Outreach Plan tab is gone), so the clicks that
+  // used to throw that tab to the top are tried there: each one repaints the builder, and none may move the page.
+  await page.evaluate(() => {
+    window.apiGet = (p) => {
+      if (p === '/my-setup/sequence') return Promise.resolve({ mode: 'template', first: { subject: 'Hello {{fn}}', body: 'Hi {{fn}},\n\nA first email long enough to read.\n\nThanks,', versions: [] },
+        followups: [{ day: 3, subject: '', body: 'Just checking.', thread: 'same', versions: [] }, { day: 7, subject: '', body: 'One more note.', thread: 'same', versions: [] }],
+        followup_max: 5, teach: null, teach_options: { angles: [] }, sample: { vars: { fn: 'Dana', company: 'Acme' }, example: true, name: 'Dana Lee', company: 'Acme' } });
+      if (/^\/mailbox\/accounts/.test(p)) return Promise.resolve([]);
+      return Promise.resolve({});
+    };
+    window.apiPost = (p) => Promise.resolve(/spam-check/.test(p) ? { score: 5, level: 'ok', warnings: [] } : { ok: true });
+    window.openSequenceSetup();
+  });
+  await page.waitForSelector('#sq-root #sq-fu1', { timeout: 8000 });
   const scrollDown = () => page.evaluate(() => { const b = document.querySelector('#content .pg-body'); b.scrollTop = 500; return { top: b.scrollTop, room: b.scrollHeight - b.clientHeight }; });
   const top = () => page.evaluate(() => { const b = document.querySelector('#content .pg-body'); return b ? b.scrollTop : -1; });
-
-  // Follow-ups start at none (D-0114); this test needs the two tabs it clicks, so the person has turned two on.
-  await page.evaluate(() => { window.STATE.myOutreachPlan = Object.assign(window.STATE.myOutreachPlan || {}, { fu_count: '2' }); });
-  // The probe must be able to measure: the page has to be tall enough to scroll.
-  await open('outreachplan');
   const probeBox = await scrollDown();
   step('the page is tall enough to scroll (the probe can measure)', probeBox.top > 100 && probeBox.room > 100, JSON.stringify(probeBox));
 
-  // Real buttons, found by their visible labels and clicked WITHOUT letting the
-  // browser scroll them into view first (Playwright's own click() does, which
-  // would move the page for us and make a jump look like a kept place).
+  // Clicked WITHOUT letting the browser scroll them into view first (Playwright's own click() would move the page for us).
   const CLICKS = [
-    ['Follow-up 2', 'button:has-text("Follow-up 2")'],
-    ['Follow-up 1', 'button:has-text("Follow-up 1")'],
-    ['Outreach 1', 'button:has-text("Outreach 1")'],
-    ['a writing-style preset', 'button:has-text("Question opener")'],
-    ['Random', 'button:has-text("Random")'],
-    ['Specific', 'button:has-text("Specific")'],
+    ['follow-up 2: "as a new email"', '[data-sq="futhread"][data-i="1"][data-thr="new"]'],
+    ['follow-up 2: "in the same thread"', '[data-sq="futhread"][data-i="1"][data-thr="same"]'],
+    ['Check for spam triggers', '[data-sq="spam"][data-slot="1"]'],
+    ['Add a detail ▾', '[data-sq="menu"][data-menu="fu1"]'],
+    ['+ Add another follow-up', '[data-sq="addfu"]'],
   ];
   const jumped = [];
   for (const [label, sel] of CLICKS) {
-    await open('outreachplan');
     const before = (await scrollDown()).top;
     if (before < 50) { jumped.push(`${label}: page too short to test (${before})`); continue; }
-    const found = await page.evaluate((q) => {
-      const t = q.match(/has-text\("(.+)"\)/)[1];
-      const b = [...document.querySelectorAll('#content button')].find(x => (x.textContent || '').includes(t));
-      if (!b) return false; b.click(); return true;
-    }, sel);
+    const found = await page.evaluate((q) => { const b = document.querySelector(q); if (!b) return false; b.click(); return true; }, sel);
     if (!found) { jumped.push(`${label}: button not found`); continue; }
     await page.waitForTimeout(300);
     const after = await top();
     if (Math.abs(after - before) > 4) jumped.push(`${label}: ${before} → ${after}`);
   }
-  step(`clicking buttons on the Outreach Plan does not scroll the page to the top (${CLICKS.length} buttons)`, jumped.length === 0, jumped.join(' | '));
+  step(`clicking buttons in the sequence builder does not scroll the page to the top (${CLICKS.length} buttons)`, jumped.length === 0, jumped.join(' | '));
 
-  // A different TAB is a different page: it starts at the top.
-  await open('outreachplan');
+  // A different PAGE starts at the top.
   await scrollDown();
-  await page.evaluate(() => window.setEmailTab('compose'));
-  await page.waitForTimeout(250);
-  step('moving to another tab starts at the top', (await top()) === 0, 'scrollTop ' + (await top()));
+  await page.evaluate(() => { window.STATE.emailTab = 'compose'; window.goPage('email'); });
+  await page.waitForTimeout(300);
+  step('moving to another page starts at the top', (await top()) === 0, 'scrollTop ' + (await top()));
 } catch (e) {
   step('suite ran', false, String(e && e.stack || e));
 } finally {

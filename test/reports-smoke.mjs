@@ -82,6 +82,18 @@ try {
     return { html, navPresent };
   });
   step('the standalone Reports nav item is gone (R-006)', !out.navPresent);
+  // A manager's Today is the desk only (D-0160, R-278): no report on it, and "Reports" opens the report — never a link back to Today.
+  const mgr = await page.evaluate(async () => {
+    STATE.page = 'dashboard'; render(); await new Promise(r => setTimeout(r, 300));
+    const onToday = !!document.getElementById('dash-reports');
+    goPage('reports'); await new Promise(r => setTimeout(r, 400));
+    return { onToday, pageAfter: STATE.page, shows: /Work funnel/.test(document.getElementById('content').innerText) };
+  });
+  step('a manager\'s Today carries no report (D-0160) and "Reports" opens the report itself, not Today', !mgr.onToday && mgr.pageAfter !== 'dashboard' && mgr.shows, JSON.stringify(mgr));
+  // Everyone whose dashboard still carries it (R-006) — a recruiter here — reads it on the Dashboard, as before.
+  const keep = await page.evaluate(() => STATE.reports);
+  await switchRole(page, 'recruiter');
+  await page.evaluate((r) => { STATE.reports = r; }, keep);
   const onDash = await page.evaluate(async () => {
     STATE.page = 'dashboard'; render();
     await new Promise(r => setTimeout(r, 300));
