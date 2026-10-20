@@ -1,6 +1,7 @@
 // A RECRUITER HAS A SEQUENCE BUILDER FOR CANDIDATES (owner, 20 Oct: "I don't see any sequence builder for recruiter profiles"), on the real page:
 //   the Email page has a Sequence tab for a recruiter; it lists candidate sequences only (not lead sequences); "+ New sequence" goes
 //   straight to the candidates builder (a recruiter is not asked "leads or candidates"); only the recruiter's own sequence has Edit.
+//   and My Setup shows an OPTIONAL "Write a candidate sequence" step that is not counted in "N of M done".
 // Usage: node test/recruiter-sequence-ui-smoke.mjs
 import http from 'node:http';
 import fs from 'node:fs';
@@ -46,6 +47,8 @@ try {
     ];
     window.apiGet = function (p) {
       if (/^\/wf\/definitions/.test(p)) return Promise.resolve(defs);
+      if (/^\/my-setup\/send-window/.test(p)) return Promise.resolve({ prefs: {}, days: ['mon','tue','wed','thu','fri'], org: { start: 8, end: 16 }, effective: { days: null, start: 8, end: 16, narrowed: false } });
+      if (/^\/smtp\/enabled/.test(p)) return Promise.resolve({ enabled: false });
       if (/^\/wf\/(enrollments|stats|channels|primary)/.test(p)) return Promise.resolve(/stats/.test(p) ? { by_workflow: {}, total: 0 } : (/channels/.test(p) ? { channels: [], catalogue: [] } : []));
       return Promise.resolve([]);
     };
@@ -66,6 +69,14 @@ try {
   await page.evaluate(() => document.querySelector('[data-wf-new]').click());
   await page.waitForTimeout(200);
   step('"+ New sequence" opens the CANDIDATES builder straight away (no "leads or candidates?" question)', await page.evaluate(() => !!window.__built && window.__built.entity_type === 'submission' && !document.querySelector('[data-wf-who]')), JSON.stringify(await page.evaluate(() => window.__built)));
+  // ── My Setup: an optional step, never counted ──
+  await page.evaluate(() => { STATE.myOutreachPlan = null; window.goPage('mysetup'); });
+  await page.waitForTimeout(500);
+  const ms = await page.evaluate(() => document.getElementById('content').innerText.replace(/\s+/g, ' '));
+  step('My Setup for a recruiter offers "Write a candidate sequence (optional)"', /Write a candidate sequence \(optional\)/.test(ms), ms.slice(0, 300));
+  step('…and it is NOT counted: the heading counts the mailbox steps only', /0 of 2 done/.test(ms), ms.slice(0, 200));
+  step('…it knows they already made one (their own candidate sequence exists)', /You have a sequence for candidates/.test(ms));
+  step('…and its button goes to the Sequence tab', await page.evaluate(() => { window.mySetupOpenCandSeq(); return STATE.page === 'email' && STATE.emailTab === 'sequence'; }));
   step('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
   step('the page part ran to the end', false, String(e && e.stack || e));
