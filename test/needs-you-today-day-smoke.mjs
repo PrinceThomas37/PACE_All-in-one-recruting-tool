@@ -7,6 +7,9 @@
 //   * the day is the VIEWER'S: the same instant is "today" in one time zone and "yesterday" in another;
 //   * an item with no readable date is kept (never hide what cannot be dated);
 //   * the chips count what is shown.
+//   * EXCEPT a reply you owe or a candidate's next step (R-297, D-0168): a reply is only "owed" once their email is days old, so
+//     the day rule hid every owed reply under "older". Those stay in today's list until done; the day rule is checked here
+//     with a dated kind ("they promised").
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright-core';
 import { enterApp, waitForLogin } from './helpers/enter-app.mjs';
@@ -22,10 +25,12 @@ const it = (id, kind, extra) => Object.assign({ kind, entity_type:'contact', ent
 const ITEMS = [
   it('rem-today', 'reminder_due',   { reminder_id:'r1', due_at:'2026-10-01' }),
   it('rem-old',   'reminder_due',   { reminder_id:'r2', due_at:'2026-09-27' }),
-  it('reply-now', 'reply_due',      { last_activity_at:'2026-10-01T17:30:00Z' }),
-  it('reply-old', 'reply_due',      { last_activity_at:'2026-09-25T10:00:00Z' }),
+  it('reply-now', 'commitment_due', { last_activity_at:'2026-10-01T17:30:00Z' }),
+  it('reply-old', 'commitment_due', { last_activity_at:'2026-09-25T10:00:00Z' }),
   it('nudge-old', 'nudge',          { last_activity_at:'2026-08-20T10:00:00Z' }),
-  it('undated',   'reply_due',      {}),
+  it('undated',   'commitment_due', {}),
+  it('owed-old',  'reply_due',      { last_activity_at:'2026-09-20T10:00:00Z' }),
+  it('step-old',  'pipeline_step',  { entity_type:'candidate', last_activity_at:'2026-09-10T10:00:00Z' }),
 ];
 let browser; const errs=[];
 try{
@@ -46,7 +51,7 @@ try{
       const html2 = renderNextActionsCard();
       STATE.naExpanded=false;
       STATE.naShowOlder=false;
-      STATE.nextActions={ items: items.filter(i=>/old/.test(i.entity_id)), summary:{by_kind:{}} };
+      STATE.nextActions={ items: items.filter(i=>/old/.test(i.entity_id) && !/owed|step/.test(i.entity_id)), summary:{by_kind:{}} };
       const html3 = renderNextActionsCard();
       return { today: sp.today.map(i=>i.entity_id), older: sp.older.map(i=>i.entity_id), html1, html2, html3 };
     }, {items:ITEMS, now:NOW});
@@ -54,12 +59,14 @@ try{
   }
   const la = await run('America/Los_Angeles');
   step('Los Angeles: today = the reminder due today, the reply from this morning, and the undated one',
-    JSON.stringify(la.today)==='["rem-today","reply-now","undated"]', JSON.stringify(la.today));
+    JSON.stringify(la.today)==='["rem-today","reply-now","undated","owed-old","step-old"]', JSON.stringify(la.today));
+  step('R-297: a reply you owe from 11 days ago, and a candidate step from weeks ago, stay in TODAY\'s list (owed until done)',
+    la.today.includes('owed-old') && la.today.includes('step-old') && la.html2.includes('P-owed-old') && la.html2.includes('P-step-old'), JSON.stringify(la.today));
   step('Los Angeles: the old reminder, old reply and old nudge are set aside', JSON.stringify(la.older)==='["rem-old","reply-old","nudge-old"]', JSON.stringify(la.older));
   step('the card lists today\'s three rows and none of the old ones', ['P-rem-today','P-reply-now','P-undated'].every(n=>la.html1.includes(n)) && !/P-rem-old|P-reply-old|P-nudge-old/.test(la.html1));
   step('it says how many are older, and offers them', /3 older items still open/.test(la.html1) && /Show older/.test(la.html1));
   step('Show older brings every row back — nothing was deleted', ['P-rem-old','P-reply-old','P-nudge-old','P-rem-today'].every(n=>la.html2.includes(n)) && /Hide older/.test(la.html2));
-  step('chips count what is shown (2 to reply · 1 reminder), not the whole pile', /2 to reply/.test(la.html1) && /1 reminder/.test(la.html1) && !/to chase/.test(la.html1));
+  step('chips count what is shown (2 promised · 1 to reply · 1 reminder), not the whole pile', /2 promised/.test(la.html1) && /1 to reply/.test(la.html1) && /1 reminder/.test(la.html1) && !/to chase/.test(la.html1), la.html1.slice(0, 900));
   step('only old things left → says nothing is new today, still offers them', /Nothing new for today/.test(la.html3) && /Show older/.test(la.html3), la.html3.slice(0,300));
   const ist = await run('Asia/Kolkata');
   step('Kolkata (already 2 Oct): the same instant is a different day — "reply from this morning" is now older',

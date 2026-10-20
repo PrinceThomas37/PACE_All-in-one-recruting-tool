@@ -107,6 +107,26 @@ step('a candidate who answered is known', known.get('priya@mail.com') && known.g
 step('a contact who never replied is NOT known (cold outreach stays out)', !known.has('never@replied.com'));
 step('another company\'s people are NOT known', !known.has('other@org.com'));
 
+// ── R-297: older mail, a slice per visit, back to 90 days ──────────────────────────────────────────────────────
+{
+  const old = Array.from({ length: 100 }, (_, k) => ({ id: 'b' + k, to: ['shane@willis.com'], cc: [], subject: 'Re: old', date: new Date(NOW - (31 + k * 0.5) * 864e5).toISOString(), preview: 'old reply' }));
+  let listed = [], reads = 0, kept = 0;
+  const run = (back) => ss.sweepSentBack({
+    mailbox: MAILBOX, back, own: OWN, now: NOW,
+    listIds: async (from, max, until) => { listed.push([from, until]); const ids = old.filter(m => m.date >= from && m.date < until).map(m => m.id); return { ids: ids.slice(0, max), more: ids.length > max }; },
+    paceIds: async () => new Set(), readHeaders: async (id) => { reads++; return old.find(m => m.id === id); },
+    knownPeople: async (addrs) => new Map([...KNOWN].filter(([a]) => addrs.includes(a))), store: async () => { kept++; },
+  });
+  let r1 = await run(null);
+  step('the first slice starts where the 30-day pass ended, and reads at most BACKFILL_FETCH', listed[0][1] === new Date(NOW - 30 * 864e5).toISOString() && reads === ss.BACKFILL_FETCH && !r1.done, JSON.stringify([listed[0], reads, r1]));
+  let back = r1.back, visits = 1;
+  while (!r1.done && visits < 10) { r1 = await run(back); back = r1.back; visits++; }
+  step('a few visits later it has covered 90 days and says so', r1.done && r1.back === new Date(NOW - ss.BACKFILL_DAYS * 864e5).toISOString(), JSON.stringify([visits, r1]));
+  step('…keeping the older replies to people who wrote in (all 100, none twice-counted per read)', kept === 100 && reads === 100, `kept=${kept} reads=${reads}`);
+  const after = await run(r1.back);
+  step('once finished, a visit reads nothing more', after.done && after.read === 0);
+}
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

@@ -1450,3 +1450,5 @@ No screen code changed; the new numbers appear in System Settings automatically 
 - Session 51 (20 Oct): the Assign leads window and page warn when leads in the pool have no contact person with an email (`pool.without_people`, amber line) and the result toast says how many were left in the pool.
 
 - Session 51 (20 Oct, R-290): `61-client-digest.js` `clientDigestMineRows` hides a digest row for a reply that is not yet due (`STATE.nextActions.reply_due_after_days`) unless a promise came due; NOT covered by a UI test (screenshot owed).
+
+- 2026-10-20 (Session 52, R-297): `44-next-actions.js` — `withTz('/next-actions')`; `NA_ALWAYS_TODAY` (reply_due, pipeline_step) bypass the R-097 day split; kind `pipeline_step` labelled "Interview" or "Submission" (`naKindOf`), row button "Open" (opens the candidate), window: Open / Write to / stage picker; chip "interviews / submissions". `05-page-dashboard.js renderNeedsYou`: items of tier ≤ 3, then client conversations needing a reply, then the rest, then other conversations. Screenshot checked (scratch, not committed).

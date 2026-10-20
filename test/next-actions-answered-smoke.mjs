@@ -109,6 +109,16 @@ b = await mount()();
 step('a stored reply of OURS does not hide their later reply that only replied_at remembers', replyDueFor(b, 'Shane'),
   JSON.stringify(b.items.map(i => [i.kind, i.name || i.title])));
 
+// R-297: an interview today on one of MY submissions reaches the card through the real route, as an interview / submission step.
+seed();
+T.submissions = [{ id: 'sub1', org_id: ORG, candidate_id: 'cand1', job_order_id: 'jo1', recruiter_id: ME, stage: 'Interview Scheduled', deleted_at: null,
+  interview_at: new Date(Date.now() + 2 * 3600e3).toISOString(), candidate: { id: 'cand1', full_name: 'Priya Nair', email: 'priya@mail.com' },
+  job_order: { job_title: 'HVAC Tech', client: 'Acme' } }];
+b = await mount()();
+const iv = (b.items || []).find(i => i.kind === 'pipeline_step');
+step('R-297: an interview today on my own submission is on the card, with its submission', !!iv && iv.title === 'Priya Nair' && iv.submission_id === 'sub1' && iv.tier === 5,
+  JSON.stringify((b.items || []).map(i => [i.kind, i.title, i.tier])));
+
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

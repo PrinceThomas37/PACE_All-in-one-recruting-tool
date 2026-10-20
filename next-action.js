@@ -31,7 +31,25 @@ const KIND = {
   REMINDER_DUE: 'reminder_due',     // an explicit reminder came due
   NUDGE: 'nudge',                   // we wrote, silence, long enough to chase
   STAGE_SUGGESTED: 'stage_suggested', // a candidate signal worth a manual stage move
+  PIPELINE_STEP: 'pipeline_step',   // an interview or a submission needs the recruiter's next step (R-297)
 };
+
+// THE ORDER THE OWNER GAVE (R-297, D-0168, 20 Oct): the list is sorted by GROUP first, urgency second — so no amount of
+// lateness lets a lower group jump a higher one (a reminder 5 days late used to outrank a client's interested reply).
+//   1 a client replied positively (interested, wants to talk, rates, send something) and is still unanswered
+//   2 a candidate replied positively and is still unanswered
+//   3 any other client reply we owe        4 any other candidate reply we owe
+//   5 an interview or submission needs a step (and "replied — interested, move them forward?")
+//   6 a reminder came due, or they promised something by a date that has passed
+//   7 a lead went quiet
+const TIER = { client_hot: 1, candidate_hot: 2, client_reply: 3, candidate_reply: 4, pipeline: 5, reminder: 6, quiet: 7 };
+// A POSITIVE reply is owed sooner than an ordinary one (owner: "If the user has not replied back in 2 days of a positive reply …
+// the card should be on top"). The admin sets the number (config/settings.js needs_reply_positive_after_days); this is the
+// fallback for a caller that passes none.
+const POSITIVE_REPLY_DUE_AFTER_DAYS = 2;
+// Interview / submission steps (owner's three, D-0168). Admin numbers again (pipeline_* settings); fallbacks here.
+const CLIENT_SILENT_AFTER_DAYS = 3;
+const INTERVIEW_OUTCOME_AFTER_DAYS = 1;
 
 const dayDiff = (a, b) => Math.floor((a - b) / DAY_MS);
 const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
@@ -64,6 +82,7 @@ function groupNudgesByLead(items) {
     const lastAt = m.reduce((mx, i) => (i.last_activity_at && i.last_activity_at > mx ? i.last_activity_at : mx), '') || null;
     return {
       kind: KIND.NUDGE,
+      tier: TIER.quiet,
       last_activity_at: lastAt,
       entity_type: 'lead', entity_id: latest.job_id,
       title: latest.subtitle || 'This lead',
@@ -80,6 +99,49 @@ function groupNudgesByLead(items) {
       group_size: m.length,
     };
   });
+}
+
+// THE THREE PIPELINE STEPS (owner's choice, D-0168). Pure. `rows` = the caller's own submissions:
+// [{ submission_id, candidate_id, name, email, company, job_title, job_order_id, owner_id, stage, interview_at, stage_updated_at, submitted_at }].
+// `dayKeyOf(ms)` gives the viewer's calendar day ('YYYY-MM-DD'), so "today / tomorrow" is THEIR day, not the server's.
+function pipelineSteps(rows, { now = Date.now(), clientSilentAfterDays = CLIENT_SILENT_AFTER_DAYS, interviewOutcomeAfterDays = INTERVIEW_OUTCOME_AFTER_DAYS,
+  todayKey = null, tomorrowKey = null, dayKeyOf = null } = {}) {
+  const out = [];
+  const keyOf = dayKeyOf || ((ms) => new Date(ms).toISOString().slice(0, 10));
+  const today = todayKey || keyOf(now), tomorrow = tomorrowKey || keyOf(now + DAY_MS);
+  for (const r of rows || []) {
+    if (!r || !r.stage) continue;
+    const since = Date.parse(r.stage_updated_at || r.submitted_at || '');
+    const daysInStage = Number.isFinite(since) ? dayDiff(now, since) : null;
+    const iv = Date.parse(r.interview_at || '');
+    const base = {
+      kind: KIND.PIPELINE_STEP, tier: TIER.pipeline,
+      entity_type: 'candidate', entity_id: r.candidate_id, submission_id: r.submission_id || null,
+      title: r.name || r.email || 'Candidate',
+      subtitle: [r.job_title, r.company].filter(Boolean).join(' · ') || null,
+      email: r.email || null, job_id: r.job_order_id || null, owner_id: r.owner_id || null,
+      stage: r.stage, state: 'pipeline', intent: null,
+      // A snooze is voided when the stage moves or the interview is re-timed (services/next-action-dismissals.js).
+      last_activity_at: r.stage_updated_at || r.interview_at || r.submitted_at || null,
+    };
+    let step = null;
+    if (r.stage === 'Interview Scheduled' && Number.isFinite(iv)) {
+      const day = keyOf(iv);
+      if (day === today || day === tomorrow) {
+        const when = day === today ? 'today' : 'tomorrow';
+        step = { step: 'interview_soon', reason: `Interview ${when} — confirm the time with them and prepare them.`, priority: day === today ? 95 : 85, due_at: day, overdue_days: 0 };
+      } else if (iv < now && interviewOutcomeAfterDays >= 0 && dayDiff(now, iv) >= interviewOutcomeAfterDays) {
+        const late = dayDiff(now, iv);
+        step = { step: 'interview_no_outcome', reason: `The interview was ${fmtDays(late)} ago and there is no outcome yet — get the feedback and move them on.`, priority: 70 + Math.min(20, late * 4), due_at: null, overdue_days: late };
+      }
+    } else if (r.stage === 'Interview Completed' && daysInStage != null && daysInStage >= interviewOutcomeAfterDays) {
+      step = { step: 'interview_no_outcome', reason: `Interview done ${fmtDays(daysInStage)} ago and no outcome yet — get the client's feedback (offer or not).`, priority: 70 + Math.min(20, daysInStage * 4), due_at: null, overdue_days: daysInStage };
+    } else if (r.stage === 'Submitted to Client' && daysInStage != null && daysInStage >= clientSilentAfterDays) {
+      step = { step: 'client_silent', reason: `Submitted to the client ${fmtDays(daysInStage)} ago with no movement — chase the client for feedback.`, priority: 60 + Math.min(20, daysInStage * 2), due_at: null, overdue_days: daysInStage };
+    }
+    if (step) out.push(Object.assign({}, base, step));
+  }
+  return out;
 }
 
 /**
@@ -107,7 +169,10 @@ const NUDGE_MAX_AGE_DAYS = 45;
 // (config/settings.js needs_reply_after_days); this is only the fallback for a caller that passes none. 0 = at once.
 const REPLY_DUE_AFTER_DAYS = 4;
 
-function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS, replyDueAfterDays = REPLY_DUE_AFTER_DAYS } = {}) {
+function buildNextActions({ threads = [], reminders = [], pipeline = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS,
+  replyDueAfterDays = REPLY_DUE_AFTER_DAYS, positiveReplyDueAfterDays = POSITIVE_REPLY_DUE_AFTER_DAYS,
+  clientSilentAfterDays = CLIENT_SILENT_AFTER_DAYS, interviewOutcomeAfterDays = INTERVIEW_OUTCOME_AFTER_DAYS,
+  todayKey = null, tomorrowKey = null, dayKeyOf = null } = {}) {
   const items = [];
   let staleNudges = 0;
   let replyNotDueYet = 0;
@@ -125,10 +190,16 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     if (a.state === 'opted_out' || a.state === 'closed_lost') continue;
 
     if (a.needs_reply) {
-      // Their email is too fresh to be OVERDUE: not listed yet, but counted, never silently dropped.
-      if (replyDueAfterDays > 0 && Number.isFinite(a.days_since_inbound) && a.days_since_inbound < replyDueAfterDays) { replyNotDueYet++; continue; }
+      // Their email is too fresh to be OVERDUE: not listed yet, but counted, never silently dropped. A positive reply is owed
+      // sooner (2 days by default) than an ordinary one (4) — and goes to the top when it is.
+      const hot = !!(a.intent && a.intent.tone === 'good');
+      const wait = hot ? positiveReplyDueAfterDays : replyDueAfterDays;
+      if (wait > 0 && Number.isFinite(a.days_since_inbound) && a.days_since_inbound < wait) { replyNotDueYet++; continue; }
+      const cand = t.entity_type === 'candidate';
       items.push({
         kind: KIND.REPLY_DUE,
+        tier: hot ? (cand ? TIER.candidate_hot : TIER.client_hot) : (cand ? TIER.candidate_reply : TIER.client_reply),
+        hot,
         // A reply from a lead already marked Rejected is still owed — it may be a second chance — but the row says so (owner, 20 Oct:
         // "show them as 'rejected lead'"), so the person decides knowingly.
         rejected_lead: t.entity_type === 'contact' && t.stage === 'Rejected',
@@ -170,6 +241,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
       if (!bdLeadNotEngagedYet) {
         items.push({
           kind: KIND.NUDGE,
+          tier: TIER.quiet,
           stale: tooOldToNag,
           last_activity_at: lastAt,
           entity_type: t.entity_type, entity_id: t.entity_id,
@@ -196,6 +268,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
       const late = dayDiff(now, due);
       items.push({
         kind: KIND.COMMITMENT_DUE,
+        tier: TIER.reminder,
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
@@ -220,6 +293,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     if (t.entity_type === 'candidate' && t.stage && a.intent && a.intent.tone === 'good') {
       items.push({
         kind: KIND.STAGE_SUGGESTED,
+        tier: TIER.pipeline,
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
@@ -256,6 +330,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     const late = Math.max(0, dayDiff(now, due));
     items.push({
       kind: KIND.REMINDER_DUE,
+      tier: TIER.reminder,
       entity_type: r.contact_id ? 'contact' : 'reminder',
       entity_id: r.contact_id || r.id,
       reminder_id: r.id,
@@ -272,10 +347,13 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     });
   }
 
-  // Highest priority first; ties broken by how overdue, then by name so the
-  // order is stable between refreshes (a queue that reshuffles on every load
-  // is one nobody trusts).
+  // Interviews and submissions that need the recruiter's next step (R-297).
+  for (const it of pipelineSteps(pipeline, { now, clientSilentAfterDays, interviewOutcomeAfterDays, todayKey, tomorrowKey, dayKeyOf })) items.push(it);
+
+  // GROUP first (the owner's order, TIER above), then highest priority, then how overdue, then by name so the order is
+  // stable between refreshes (a queue that reshuffles on every load is one nobody trusts).
   items.sort((a, b) =>
+    ((a.tier || TIER.quiet) - (b.tier || TIER.quiet)) ||
     (b.priority - a.priority) ||
     ((b.overdue_days || 0) - (a.overdue_days || 0)) ||
     String(a.title).localeCompare(String(b.title))
@@ -298,9 +376,10 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
 
 /** Small headline counts for the dashboard card. */
 function summarize(items) {
-  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0 };
+  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0, pipeline_step: 0 };
   for (const i of items) if (by[i.kind] !== undefined) by[i.kind]++;
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
 
-module.exports = { buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS, REPLY_DUE_AFTER_DAYS, STALE_NUDGE_PRIORITY };
+module.exports = {
+  pipelineSteps, TIER, buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS, REPLY_DUE_AFTER_DAYS, STALE_NUDGE_PRIORITY };

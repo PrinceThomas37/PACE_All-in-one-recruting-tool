@@ -3417,12 +3417,13 @@ async function sweepSentFolder(tokenRow, provider, ownAddresses) {
   let listIds, readHeaders;
   if (provider === 'gmail') {
     if (!gmailProvider.isConfigured()) return 0;
-    listIds = async (sinceIso, max) => {
+    listIds = async (sinceIso, max, untilIso) => {
       const afterSec = Math.max(0, Math.floor(Date.parse(sinceIso) / 1000) || 0);
+      const q = `after:${afterSec}` + (untilIso ? ` before:${Math.floor(Date.parse(untilIso) / 1000)}` : '');
       const ids = []; let pageToken = null;
       do {
         const page = await gmailProvider.listMessagePage(tokenRow.user_email_id, {
-          labelIds: ['SENT'], q: `after:${afterSec}`, maxResults: Math.min(100, max - ids.length), pageToken: pageToken || undefined,
+          labelIds: ['SENT'], q, maxResults: Math.min(100, max - ids.length), pageToken: pageToken || undefined,
         });
         (page.messages || []).forEach(m => ids.push(String(m.id)));
         pageToken = page.nextPageToken;
@@ -3439,8 +3440,8 @@ async function sweepSentFolder(tokenRow, provider, ownAddresses) {
   } else {
     const accessToken = await getMicrosoftToken(tokenRow.user_email_id);
     let page = null;
-    listIds = async (sinceIso, max) => {
-      const filter = encodeURIComponent(`sentDateTime ge ${sinceIso}`);
+    listIds = async (sinceIso, max, untilIso) => {
+      const filter = encodeURIComponent(`sentDateTime ge ${sinceIso}` + (untilIso ? ` and sentDateTime lt ${untilIso}` : ''));
       page = await graphMailRequest(accessToken, `/me/mailFolders/SentItems/messages?$top=${Math.min(max, 200)}&$orderby=sentDateTime desc`
         + `&$select=id,conversationId,subject,toRecipients,ccRecipients,sentDateTime,bodyPreview&$filter=${filter}`);
       return { ids: (page.value || []).map(m => String(m.id)), more: !!page['@odata.nextLink'] };
@@ -3454,8 +3455,8 @@ async function sweepSentFolder(tokenRow, provider, ownAddresses) {
         subject: m.subject || '', date: m.sentDateTime || null, preview: m.bodyPreview || '' };
     };
   }
-  const r = await sentSweep.sweepSent({
-    mailbox: { ...tokenRow, provider }, since: sinceRow && sinceRow.value, listIds, readHeaders, own: ownAddresses,
+  const common = {
+    mailbox: { ...tokenRow, provider }, listIds, readHeaders, own: ownAddresses,
     paceIds: async (ids) => {
       const { data } = await supabase.from('emails').select('graph_message_id').in('graph_message_id', ids);
       return new Set((data || []).map(e => String(e.graph_message_id)));
@@ -3466,10 +3467,21 @@ async function sweepSentFolder(tokenRow, provider, ownAddresses) {
       if (error && row.company_id && /company_id/.test(error.message || '')) { delete row.company_id; ({ error } = await supabase.from('conversation_messages').insert(row)); }
       if (error && error.code !== '23505') throw error;   // 23505 = already kept: success
     },
-  });
+  };
+  const firstVisit = !(sinceRow && sinceRow.value);
+  const r = await sentSweep.sweepSent({ ...common, since: sinceRow && sinceRow.value });
   await supabase.from('app_settings').upsert({ key: sinceKey, value: r.newest, updated_at: new Date() }, { onConflict: 'key' });
-  if (r.capped) console.warn(`[SentSweep] ${tokenRow.email_address}: more sent mail than one visit reads — the newest was kept`);
-  return r.stored;
+  // OLDER MAIL, A SLICE PER VISIT, back to 90 days (R-297): `sent_sweep_back_<id>` = how far back is covered; 'done' when finished.
+  const backKey = `sent_sweep_back_${tokenRow.user_email_id}`;
+  const { data: backRow } = await supabase.from('app_settings').select('value').eq('key', backKey).maybeSingle();
+  let stored = r.stored;
+  if (!backRow || backRow.value !== 'done') {
+    const back = (backRow && backRow.value) || (firstVisit ? r.oldest : null);
+    const b = await sentSweep.sweepSentBack({ ...common, back });
+    stored += b.stored;
+    await supabase.from('app_settings').upsert({ key: backKey, value: b.done ? 'done' : b.back, updated_at: new Date() }, { onConflict: 'key' });
+  }
+  return stored;
 }
 
 // A reply sent from PACE's own mailbox is learned within seconds, not at the next sweep: the Send button asks for one visit

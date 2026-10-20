@@ -67,7 +67,7 @@ function loadNextActions(force){
   }
   if(STATE.nextActions&&!force)return;
   STATE._naLoading=true;
-  apiGet('/next-actions').then(function(r){
+  apiGet(withTz('/next-actions')).then(function(r){   // ?tz= — "interview today / tomorrow" is the viewer's day (R-297)
     STATE._naLoading=false;
     if(STATE._naAgain){STATE._naAgain=false;loadNextActions(true);return;}
     STATE.nextActions=r||{items:[]};
@@ -129,6 +129,8 @@ window.naActItem=function(it){
   if(it.kind==='reminder_due'&&it.subtitle==='My Setup')return goPage('mysetup');
   // A lead's silent contacts are one row with no single address: open the lead, where each person is.
   if(it.entity_type==='lead')return naOpen(it.kind,'lead',it.entity_id,it.job_id);
+  // An interview / submission step (R-297): the work is on the candidate — their job, stage and interview details.
+  if(it.kind==='pipeline_step')return naOpen(it.kind,'candidate',it.entity_id,it.job_id);
   if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
   var isCand=it.entity_type==='candidate';
   // A reply owed, or a follow-up on a lead's contact: answered INSIDE the conversation — the exact email opens in the person's mailbox
@@ -230,7 +232,7 @@ window.naComplete=function(chk,ev){
 // it was worked out from — with the old jump one button away (65-trace.js).
 window.naTrace=function(row){
   var it=naItemOf(row); if(!it||!window.traceOpen)return;
-  var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
+  var k=naKindOf(it);
   var meta={};
   var opts={
     title:(it.title||'')+(it.subtitle&&it.entity_type!=='lead'?' · '+it.subtitle:'')+(it.entity_type==='lead'&&it.subtitle?' · '+it.subtitle:''),
@@ -275,6 +277,12 @@ function naTaskFor(it){
     case 'reminder_due':
       text=it.reason||'A reminder has come due.';
       if(it.email) b.push({label:'Write the email',primary:true,fn:act}); break;
+    case 'pipeline_step':
+      text=it.reason||'This candidate needs your next step.';
+      stages={suggest:naNextStage(it),options:(window.ATS_STAGE_LIST||[]).slice(),fn:function(st){ naMoveStageItem(it,st); }};
+      b.push({label:'Open '+first,primary:true,fn:act});
+      if(it.email) b.push({label:'Write to '+first,fn:function(){ STATE.mailbox=STATE.mailbox||{};STATE.mailbox.q=it.email;goPage('mailbox'); }});
+      break;
     case 'stage_suggested':
       var nx=naNextStage(it);
       text='Their reply reads as interest. Decide whether to move '+(it.title||'them')+' forward'+(it.stage?' from "'+it.stage+'"':'')+'.';
@@ -324,11 +332,16 @@ var NA_KIND={
   nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569',
                     why:'Shown because you emailed and nobody has answered for 3 or more days, on a lead that is already talking to you. Not shown for leads still in the automatic follow-up.'},
   stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534',
-                    why:'Shown because their reply reads as interest, so it may be time to move them forward.'}
+                    why:'Shown because their reply reads as interest, so it may be time to move them forward.'},
+  pipeline_step:   {lbl:'Interview',         bg:'#fef9c3', fg:'#854d0e',
+                    why:'Shown because the interview is today or tomorrow, or it has passed and there is no outcome yet. Your admin sets how many days.'}
 };
 // A kind this file does not know says so neutrally. The old fallback was `nudge`,
 // which asserts something specific and false about every kind added later.
 var NA_KIND_UNKNOWN={lbl:'Needs a look',bg:'#f1f5f9',fg:'#475569'};
+// One kind, two short labels (R-297): a step on a submission waiting with the client reads "Submission", an interview step "Interview".
+var NA_KIND_SUBMISSION={lbl:'Submission',bg:'#fef9c3',fg:'#854d0e',why:'Shown because the candidate has sat at "Submitted to Client" with no movement. Your admin sets how many days.'};
+function naKindOf(it){ if(it&&it.kind==='pipeline_step'&&it.step==='client_silent')return NA_KIND_SUBMISSION; return NA_KIND[it&&it.kind]||NA_KIND_UNKNOWN; }
 
 // ── TODAY MEANS THE USER'S OWN DAY (R-097, D-0065) ───────────────────────────
 // "Needs you today" listed everything outstanding, which is the noise the owner
@@ -347,10 +360,15 @@ function naDayKey(v){
   if(isNaN(d.getTime()))return null;
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+// A REPLY YOU OWE, OR A CANDIDATE'S NEXT STEP, IS TODAY'S WORK UNTIL IT IS DONE (R-297, owner 20 Oct). A reply is only "owed" once
+// their email is days old (the admin's 2 / 4 days), so dating it by that email put EVERY owed reply under "older" — out of sight
+// exactly when it mattered. These kinds stay in today's list; reminders, promises and quiet leads keep the day rule.
+var NA_ALWAYS_TODAY={reply_due:1,pipeline_step:1};
 window.naSplitToday=function(items,now){
   var t=naLocalIso(now);
   var today=[],older=[];
   (items||[]).forEach(function(it){
+    if(NA_ALWAYS_TODAY[it.kind]){today.push(it);return;}
     var k=naDayKey(it.due_at||it.last_activity_at);
     (k&&t&&k<t?older:today).push(it);
   });
@@ -370,7 +388,7 @@ function naOlderLine(n){
 
 // One row of the to-do list — drawn the same wherever the list appears (Today's "Needs you", R-278).
 window.naRowHtml=function(it){
-    var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
+    var k=naKindOf(it);
     // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
     // Only reminders used to have a Done button, so reply_due, commitment_due,
     // nudge and stage_suggested could not be dismissed AT ALL — which is how a
@@ -385,12 +403,12 @@ window.naRowHtml=function(it){
     // message lands on the thread.
     // R-073 (owner: "no option to do the task … just information is mentioned"):
     // the row itself does the work — see naAct below for what each does.
-    var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write'}[it.kind]||'';
+    var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write',pipeline_step:'Open'}[it.kind]||'';
     // A reminder with nobody to write to (a task someone asked you to do, like "reconnect your mailbox") has no Write — a button that can only say "no address" is worse than none.
     if(it.kind==='reminder_due'&&!it.email)doLbl='';
     if(it.kind==='reminder_due'&&it.subtitle==='My Setup')doLbl='Open My Setup';
     if(it.kind==='nudge'&&it.entity_type==='lead')doLbl='Open lead';
-    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:(it.entity_type==='lead'?'Open the lead to see who you have emailed':'Write a follow-up'),reminder_due:'Write the email this reminder is for'}[it.kind])+'">'+doLbl+'</button>'
+    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:(it.entity_type==='lead'?'Open the lead to see who you have emailed':'Write a follow-up'),reminder_due:'Write the email this reminder is for',pipeline_step:'Open the candidate — their job, stage and interview'}[it.kind])+'">'+doLbl+'</button>'
       :(it.kind==='stage_suggested'?naMoveStageSelect():'');
     var acts=doAct+(it.reminder_id
       ?'<button class="na-act" onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done">Done</button>'
@@ -493,6 +511,7 @@ function renderNextActionsCard(){
           chip(bk.reminder_due,bk.reminder_due===1?'reminder':'reminders','#3730a3')+
           chip(bk.nudge,'to chase','#475569')+
           chip(bk.stage_suggested,'interested','#166534')+
+          chip(bk.pipeline_step,bk.pipeline_step===1?'interview / submission':'interviews / submissions','#854d0e')+
         '</div>'+
       '</div>'+
       '<button onclick="refreshNextActions()" class="fs-12_5 c-text2" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">Refresh</button>'+

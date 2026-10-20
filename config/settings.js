@@ -180,6 +180,22 @@ const SETTINGS_SCHEMA = [
     description: 'We wrote and heard nothing. For this many days it is an ordinary chase; after that it is shown lower down as "chase or drop?". 0 keeps every silence as an ordinary chase.',
     default: 45, min: 0, max: 365,
   },
+  // R-297 (owner 20 Oct, D-0168): a POSITIVE reply is owed sooner, and the three interview / submission steps.
+  {
+    key: 'needs_reply_positive_after_days', label: 'A positive reply goes to the top after', unit: 'days', group: 'Needs you today',
+    description: 'A client or candidate replied positively (interested, wants to talk, asked about rates, asked us to send something) and nobody has answered. After this many days it is shown at the very top of "Needs you today". 0 shows it at once.',
+    default: 2, min: 0, max: 30,
+  },
+  {
+    key: 'pipeline_client_silent_days', label: 'Chase the client on a submission after', unit: 'days', group: 'Needs you today',
+    description: 'A candidate has sat at "Submitted to Client" with no movement for this many days: the recruiter is asked to chase the client for feedback.',
+    default: 3, min: 1, max: 60,
+  },
+  {
+    key: 'pipeline_interview_outcome_days', label: 'Ask for the interview outcome after', unit: 'days', group: 'Needs you today',
+    description: 'The interview date has passed (or the stage says "Interview Completed") and nothing has moved for this many days: the recruiter is asked to get the feedback and move them on.',
+    default: 1, min: 0, max: 30,
+  },
   {
     key: 'client_intel_ai_per_user_daily', label: 'AI summaries per person per day', unit: 'summaries', group: 'Client intelligence',
     description: "Each person's own daily allowance, so one busy user cannot use up the team's. Set 0 for none. Re-set this after two weeks of real use from what people actually used.",

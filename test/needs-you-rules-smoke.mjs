@@ -21,7 +21,7 @@ const DAY = 86400000;
 const at = (daysAgo) => new Date(NOW - daysAgo * DAY).toISOString();
 const msg = (direction, daysAgo, body) => ({ direction, sent_at: at(daysAgo), body });
 const lead = (id, messages, extra = {}) => ({ entity_type: 'contact', entity_id: id, name: 'Person ' + id, company: 'Co ' + id, stage: 'Connected', job_id: 'job-' + id, owner_id: 'u1', messages, ...extra });
-const replyThread = (id, theirDaysAgo) => lead(id, [msg('outbound', theirDaysAgo + 3, 'Hello, we have candidates'), msg('inbound', theirDaysAgo, 'Yes, please send resumes')]);
+const replyThread = (id, theirDaysAgo) => lead(id, [msg('outbound', theirDaysAgo + 3, 'Hello, we have candidates'), msg('inbound', theirDaysAgo, 'Thanks for this. Who else is on the team?')]);   // an ORDINARY reply (a positive one is owed after 2 days — R-297, needs-you-order-smoke)
 const run = (threads, o = {}) => buildNextActions(Object.assign({ threads, now: NOW }, o));
 
 // ── Reply due: owed after 4 days ────────────────────────────────────────────
