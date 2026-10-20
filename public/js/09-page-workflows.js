@@ -626,11 +626,13 @@ window.wfDoEnroll=function(workflowId,contactId,jobId){
 
 function renderSequenceBody(){
   var u=STATE.user;
-  if(!userHasAnyRole(u,'admin','bd_lead','ra_lead','bd'))return '<div class="c-text3" style="padding:14px">Forbidden</div>';
+  if(!userHasAnyRole(u,'admin','bd_lead','ra_lead','bd','recruiter'))return '<div class="c-text3" style="padding:14px">Forbidden</div>';
   if(STATE.wf===undefined&&!STATE._wfLoading){loadWorkflows();}
   var canDesign=userHasAnyRole(u,'admin','ra_lead','bd_lead');
   // A BD makes and changes sequences of their OWN (owner, 8 Oct): the New sequence button for them, Edit / Activate on the ones they made.
-  var canDesignOwn=!canDesign&&userHasAnyRole(u,'bd');
+  var canDesignOwn=!canDesign&&userHasAnyRole(u,'bd','recruiter');
+  // A recruiter (who is not also a manager or BD) works with candidates: only candidate sequences are listed for them here.
+  var candOnly=userHasAnyRole(u,'recruiter')&&!userHasAnyRole(u,'admin','bd_lead','ra_lead','bd');
   var canTick=userHasAnyRole(u,'admin','bd_lead');
   var wf=STATE.wf;
   if(!wf)return '<div class="c-text3" style="padding:14px">Loading sequence…</div>';
@@ -643,7 +645,7 @@ function renderSequenceBody(){
         '<div class="fs-12 c-text3">Goes to every lead you are given, by itself. Written in My Setup.</div></div>'+
         '<div class="wf-seq-acts"><button class="btn btn-sm btn-outline" onclick="openSequenceSetup()">Edit</button></div></div></div>'
     :'';
-  var defCards=(wf.defs||[]).map(function(d){
+  var defCards=(wf.defs||[]).filter(function(d){ return !candOnly||d.entity_type==='submission'||d.entity_type==='candidate'; }).map(function(d){
     var st=(wf.stats.by_workflow||{})[d.id]||{};
     var mine=canDesign||(canDesignOwn&&d.created_by===u.id), v2=wfIsV2(d);
     var who=(d.entity_type==='submission'||d.entity_type==='candidate')?'Candidates':'Leads';
@@ -667,7 +669,7 @@ function renderSequenceBody(){
 
   var f=STATE.wfFilter||{};
   var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });
-  var wfOpts='<option value="">All workflows</option>'+(wf.defs||[]).map(function(d){return '<option value="'+d.id+'"'+(f.workflow===d.id?' selected':'')+'>'+htmlEsc(d.name)+'</option>';}).join('');
+  var wfOpts='<option value="">All workflows</option>'+(wf.defs||[]).filter(function(d){ return !candOnly||d.entity_type==='submission'||d.entity_type==='candidate'; }).map(function(d){return '<option value="'+d.id+'"'+(f.workflow===d.id?' selected':'')+'>'+htmlEsc(d.name)+'</option>';}).join('');
   var stOpts='<option value="">All statuses</option>'+['active','paused','completed','exited','failed'].map(function(s){return '<option value="'+s+'"'+(f.status===s?' selected':'')+'>'+s+'</option>';}).join('');
   var enrRows=enr.map(function(e){
     var def=(wf.defs||[]).find(function(d){return d.id===e.workflow_id;});
