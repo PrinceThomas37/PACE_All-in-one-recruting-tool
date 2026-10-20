@@ -67,9 +67,9 @@ module.exports = (ctx) => {
   // Why the AI did not write this one. complete() records the provider's own
   // sentence under ai_last_error; "the AI writer was unavailable" is not a
   // diagnosis anybody can act on.
-  async function lastAiError(sb) {
+  async function lastAiError(sb, orgId) {
     try {
-      const { data } = await sb.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
+      const { data } = await sb.from('app_settings').select('value').eq('key', aiProvider.orgKey('ai_last_error', orgId)).maybeSingle();
       const rec = data && JSON.parse(data.value);
       const f = rec && rec.feature === 'outreach_draft' && (rec.failures || [])[0];
       return f ? `${f.provider}/${f.model}: ${f.error}` : null;
@@ -308,7 +308,7 @@ module.exports = (ctx) => {
         // identical. complete() already recorded WHY under ai_last_error, so
         // read it back and put the provider's own sentence on the page.
         return res.json({ ...built.variants[0], ...base, ai_available: true,
-          ai_error: aiErr.message, ai_error_detail: await lastAiError(supabase) });
+          ai_error: aiErr.message, ai_error_detail: await lastAiError(supabase, req.orgId) });
       }
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -375,7 +375,7 @@ module.exports = (ctx) => {
       // very nearly the same email and the button looks broken.
       const payload = gen.buildUserPayload(forAi);
       const out = await askAi(previous.length ? gen.buildRewritePrompt(payload, previous, angleId) : payload);
-      if (!out) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unavailable', ai_error_detail: await lastAiError(supabase) });
+      if (!out) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unavailable', ai_error_detail: await lastAiError(supabase, req.orgId) });
       let parsed = gen.parseAiDraft(out.text);
       if (!parsed) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unparseable' });
 

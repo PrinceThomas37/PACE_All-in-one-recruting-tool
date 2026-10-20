@@ -114,9 +114,9 @@ module.exports = (ctx) => {
     return { hook: b.hook, detail: b.detail, engine: b.engine || 'rules' };
   }
 
-  async function lastAiError(feature) {
+  async function lastAiError(feature, orgId) {
     try {
-      const { data } = await supabase.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
+      const { data } = await supabase.from('app_settings').select('value').eq('key', aiProvider.orgKey('ai_last_error', orgId)).maybeSingle();
       const rec = data && JSON.parse(data.value);
       const f = rec && rec.feature === feature && (rec.failures || [])[0];
       return f ? `${f.provider}/${f.model}: ${f.error}` : null;
@@ -627,7 +627,7 @@ module.exports = (ctx) => {
       // One home for writing and caching the brief (services/candidate-brief.js) — a candidate sequence uses it too (R-270).
       const w = await candidateBrief.writeBrief({ supabase, aiProvider, job, orgId: req.orgId });
       const out = { hook: w.brief.hook, detail: w.brief.detail, engine: w.brief.engine, ai_available: w.ai_available };
-      if (w.ai_error) { out.ai_error = w.ai_error; if (w.ai_error === 'ai_unavailable') out.ai_error_detail = await lastAiError('candidate_brief'); }
+      if (w.ai_error) { out.ai_error = w.ai_error; if (w.ai_error === 'ai_unavailable') out.ai_error_detail = await lastAiError('candidate_brief', req.orgId); }
       if (w.violations) out.violations = w.violations;
       if (w.model) { out.engine_model = w.model; out.engine_provider = w.provider; }
       res.json(Object.assign({}, w.brief, out));
