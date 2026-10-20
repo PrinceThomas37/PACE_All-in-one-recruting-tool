@@ -2,24 +2,30 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-20 (Session 50 closing). **Highest ids:** decision **D-0164** · contract C-0038 · roadmap **R-287** (next `R-288`) · next migration **068** (067 `scheduled_sends` APPLIED 20 Oct by the owner in the SQL editor; read back: 14 columns, row security on).
+**Updated**: 2026-10-20 (Session 52 closing). **Highest ids:** decision **D-0169** · contract C-0038 · roadmap **R-300** (next `R-301`) · next migration **068** (none added this session).
 
-## START HERE (Session 50, 19–20 Oct) — the owner's "Changes to be done next" doc
+## START HERE (Session 52, 20 Oct) — the crashes are fixed; "Needs you today" reworked
 
-**Releases.**
-- **#348 MERGED and LIVE** (`e7c2979`, Render live 21:14 UTC 19 Oct): Batches 1–2 — settings crash (R-284), NUL in resumes (R-267), our replies seen by the digest / Needs you (R-268), inline images (R-274), Leads strip follows filters + per-person page size (R-279/R-280), dismissed reminders 7 days (R-281), Finder for everyone (R-276/R-283 card text), fresh manager sees only "Finish your setup" (R-283).
-- **#351 = Batches 3 + 4, owner approved (D-0164: "Nothing [is off]. Push it live", "Merge it after the check").** Set to merge once the Node 22 and Node 26 full runs pass on the final head. **First thing next window: check `main` contains #351's merge commit and Render (`list_deploys`, service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) deployed it; if not, finish it (merge if green; `trigger_deploy` if Render got no event).** The work lives on branch `claude/busy-darwin-fbkb3b` (built in worktree branch `batch3-wip`).
+**The owner's report:** "PACE did not answer properly — the server may be waking up" appearing mid-use, then "very very slow". **Root cause (found with a watcher, not guessed):** a new `Intl.DateTimeFormat` per row (native memory, never freed) — `/insights/bd` alone took the server 170 → 542 MB. Fixed in **#360** (`services/date-format.js`, one formatter per kind; `test/date-format-smoke.mjs` bans the old pattern). Owner after release: "its working fine right now"; memory ~155 MB after Today (was 464–549 MB). **RULE: never `new Intl.DateTimeFormat` / `toLocale*String({timeZone})` in server code.**
 
-**What #351 holds (all on screen and tested; screenshots were shown to the owner):**
-- **Batch 3:** the new sequence builder is the one door for every sequence (named sequences for leads and candidates, AI on/off for candidates — R-269/R-270, D-0158/D-0159); candidate drawer opened from a job shows that job + stage-move notes under Notes (R-275); lead split equal by default and never above an email ID's daily limit (R-277); manager Today and Outreach Insights as drawn (R-278, D-0160 — morning briefing kept, it was never removed); "My wording" / "AI style" moved into the builder (R-285, D-0161) with nothing lost: per follow-up same thread / new email, Rewrite with AI, spam check (R-286).
-- **Batch 4 (inbox):** conversations by default + switch saved per person (R-271); All inboxes with each row labelled (R-272); full formatting bar, Reply all on every message, Schedule send (date + time in the person's zone; free server can send late overnight — D-0163), Scheduled tab (+ reminders) and Draft tab (R-273). The three mailbox sends live in `services/mailbox-send.js` (one path, shared with Schedule send); engine job `scheduled_sends` (`services/scheduled-sends.js`).
-- New suites: `mailbox-threads-smoke`, `mailbox-threads-ui-smoke`, `schedule-send-smoke`, `sequence-builder-wording-ui-smoke`, `batch3-screens-smoke`, `outreach-insights-smoke`, `sequence-v2-smoke`.
+**Released this session (all MERGED and LIVE, Node 22 + 26 full runs green before each):**
+- **#357** (409925d) R-296 / D-0167 — "did we reply?" learned in the background: the reply sweep reads each Gmail/Outlook Sent folder (`services/sent-sweep.js`) and keeps our replies to people who wrote to us as outbound `conversation_messages`; no list asks a mailbox while it loads.
+- **#358** (60a68ea) R-297 / D-0168 — owner's order on Needs you today (group first), positive replies owed after 2 days, Interview / Submission rows, owed replies kept in today's list, sent mail back to 90 days a slice per visit.
+- **#359** (6429803) R-298 — memory watcher (`services/memory-watch.js`): `[MemWatch]` lines in Render logs name the requests / engine jobs running above 380 MB and any request growing memory 60+ MB. Read with `list_logs` text `*MemWatch*`. Leave it on.
+- **#360** (fc69dc8) R-298 — the fix above.
+- **#361** (b13d76d) R-299 + R-300 / D-0169 — the app asks once for everyone's mailboxes (`GET /users-emails`, was once per person); **Needs you today holds only what is owed**: replies we owe, interview / submission steps, reminders a PERSON set, promises that came due. No "No reply yet" tiles, no sequence-made reminders (`reminder-source.isSequenceMade`), the "move them forward?" row folded into the candidate's reply row; `nudge_quiet_after_days` removed. Also fixed: a pipeline row's snooze keyed per candidate (payload lacked `submission_id` / `step`).
 
-**Owed by the owner (say it plainly, once):**
-1. Try #351 on the live app (Ctrl+Shift+R; free server takes ~30 s to wake): a real conversation reply, All inboxes, one Schedule send to themselves (it may go late if PACE is asleep), a new named sequence.
-2. **R-205:** a fresh 64-hex `MAILBOX_SECRET_KEY` on Render, then one live Zoho app-password test.
-3. Earlier, still owed: `WEBSITE_LEADS_ORG_ID` = `92cf97db-d216-483a-8cc4-7ecae575415b` on Render (website booking form → PACE lead); a real labelled send (R-244) on the live app; a first real AI-written email seen and checked.
-4. **Paid always-on server before other customers use PACE** (owner, D-0163).
+**FIRST THING NEXT WINDOW:** `list_events` (service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) since 2026-10-20T22:15Z for `server_failed` / `oomKilled`, and `list_logs` text `*MemWatch*` — tell the owner plainly whether any crash came back. A two-day crash watch is scheduled in this session (owner: "keep it on for 2 days and see if there is any crash. If not close it"): day 1 on 21 Oct 10:40 UTC (`trig_01YMqGj17MV3vSaUL6dZG3G7`), final on 22 Oct 10:40 UTC (`trig_01UBp12zL5oHbvPtWRd5zTUF`) — no crash → say "sorted" and stop; a crash → name the cause from the watcher and propose the fix. If you are a NEW session, do the check yourself anyway.
+
+**Still slow, offered (owner's go needed):** `/jobs` and `/emails` each add ~100 MB and take ~10 s (the whole company's leads with research text in one load) — the next memory risk as data grows; the database in Seoul (R-292, decided: after the current outreach). Not covered by the sent sweep: Zoho / IMAP mailboxes.
+
+**Owed by the owner (say it plainly, once):** a paid always-on server before other customers use PACE (D-0163/D-0165; the $25 Render "Pro" WORKSPACE adds no memory — the Standard INSTANCE, $25/mo, 2 GB, does); R-205 `MAILBOX_SECRET_KEY`; `WEBSITE_LEADS_ORG_ID` on Render.
+
+## Process lessons from Session 52 (read before building)
+- **Measure inside the process before naming a culprit.** Hours went on R-268 because crashes followed its bursts in time; one watcher line (heap 50 MB, rss 540 MB → native memory) found the real cause in minutes. Render keeps no request log for this service — the watcher is the only way to see what ran.
+- **Never `git reset --hard origin/main` over a pushed notes-only commit.** Notes written after a merge and pushed to the dev branch were overwritten three times this session by the next reset; they had to be rewritten at the close. Put notes in the PR before it merges, or merge a notes PR.
+- **When the owner says "don't screw up", ask which tiles stay before building** — the answer (D-0169) changed what was removed.
+- A row's serialized copy of an item (`data-na-item`) is a whitelist: a new field the buttons need must be added there, or the window and the snooze silently lose it.
 
 ## THE TO-DO LIST (owner asked for it; read `docs/ROADMAP.md` for the full rows)
 
