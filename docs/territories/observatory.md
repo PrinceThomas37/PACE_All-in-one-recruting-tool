@@ -727,3 +727,5 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 - R-278 (Session 50): `services/outreach-insights.js` reuses bd-insights' CONVERTED/invalid/tracked definitions — one meaning of interested/bounced/opened. Candidate sequence runs carry `detail.token`.
 
 - Session 51 (R-067): `services/ai-provider.js` `resolveChain/isAvailable/availability/complete/diagnose` take `orgId` and read THAT company's keys only (`config/integrations.js`). A new AI caller must pass `orgId` (without one, once there are two companies, it gets no provider and writes with the rules). `ai_last_*` diagnostic records are still deployment-wide (R-288).
+
+- Session 51 (20 Oct, R-290): next-action.js (the next-action queue, conversation-intel family) — the ranking now takes `replyDueAfterDays` and `nudgeMaxAgeDays`; quiet nudges (`stale:true`) rank last. Pure; the admin numbers are read in routes/next-actions.js.
