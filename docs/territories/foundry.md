@@ -1331,3 +1331,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 2026-10-20 (Session 52, R-297): new `needs-you-order-smoke` (22: the 7 groups, 2/4-day waits, the three pipeline steps on the viewer's day, per-submission snooze, settings defaults; removing the tier sort fails 2). `needs-you-today-day-smoke` now uses `commitment_due` for the day rule and pins that owed replies / steps stay today (D-0168 supersedes D-0065 for those). `needs-you-rules-smoke` fixture reply made ordinary (a positive one is owed at 2 days); `next-action-smoke` turns both waits off. `sent-sweep-smoke` +4 backfill steps; `next-actions-answered-smoke` +1 route step for an interview today.
 
 - 2026-10-20 (Session 52, R-291): `test/memory-watch-smoke.mjs` (11: silent below the line, one snapshot with requests oldest-first + jobs, quiet period, heavy request named once, token masked, engine `running()`).
+
+- 2026-10-20 (Session 52, R-298): `test/date-format-smoke.mjs` (8: same answers; 50,000 conversions grow rss < 40 MB and < 3 s; formatter cache small; static scan bans per-call formatters in server code). Reintroducing the old localDay: +1,155 MB, 3 fails.

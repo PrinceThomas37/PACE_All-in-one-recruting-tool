@@ -1,4 +1,5 @@
 'use strict';
+const { formatter: dtf, isZone } = require('../services/date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // ============================================================================
 // CANDIDATE OUTREACH — the API behind the Email page's Compose → Candidates side.
 //
@@ -130,7 +131,7 @@ module.exports = (ctx) => {
   function localPartsFor(place, when) {
     const tz = getTimezoneFromLocation(place || '');
     const iana = (LEAD_TZ_IANA && LEAD_TZ_IANA[tz]) || 'America/New_York';
-    const parts = new Intl.DateTimeFormat('en-US', {
+    const parts = dtf('en-US', {
       timeZone: iana, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
     }).formatToParts(when || new Date());
     const get = (t) => (parts.find(p => p.type === t) || {}).value;

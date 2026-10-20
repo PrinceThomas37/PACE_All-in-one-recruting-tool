@@ -1,4 +1,5 @@
 'use strict';
+const { formatter: dtf, isZone } = require('./date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 // LEAD INSIGHTS — ONE DEFINITION OF EVERY NUMBER (owner, 2026-09-30).
 //
 // The owner found Lead Insights saying "0 emails sent" beside 311 on the Email page, and a
@@ -31,12 +32,12 @@ const OOO = ['Out of Office'];
 // India and a manager in California looking at the same lead each see their own calendar.
 function validZone(tz) {
   if (!tz || typeof tz !== 'string' || tz.length > 64) return 'UTC';
-  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); return tz; } catch (_) { return 'UTC'; }
+  return isZone(tz) ? tz : 'UTC';
 }
 function localDay(t, tz) {
   const d = new Date(t);
   if (isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('en-CA', { timeZone: validZone(tz), year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  return dtf('en-CA', { timeZone: validZone(tz), year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 // A column holding a plain date ("2026-10-01") is already a day; a timestamp is cut at the viewer's midnight.
 const dayOf = (v, tz) => (!v ? '' : (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v) : localDay(v, tz)));
