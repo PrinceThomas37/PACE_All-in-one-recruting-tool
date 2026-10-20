@@ -198,6 +198,8 @@
     outsideClick: function(){
       var h = typeof STATE.modal === 'string' && hooks.park[kindOf(STATE.modal)];
       if (h && parkable(STATE.modal)) { Dock.minimise(); return; }
+      // A window that holds paid-for or hand-picked work (the Lead Finder's Accept window) is only closed by its own buttons.
+      if (typeof STATE.modal === 'string' && STATE.modal.indexOf('data-keep-open') >= 0) return;
       closeModal();
     },
     // The parked windows of one kind, each with the draft it holds.

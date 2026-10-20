@@ -17,7 +17,7 @@
     tab:'cards', access:null, accessFor:null, accessLoading:false,
     cards:null, waiting:0, daily:0, today:0, loading:false,
     searches:null, form:null, nowForm:null, nowNote:'', running:false, histOpen:{},
-    hist:null, histStatus:'accepted', histSearch:'', histQ:'', histAll:false,
+    hist:null, histStatus:'accepted', histSearch:'', histQ:'', histAll:false, cardQ:'', cardDays:0,
     admin:null, diag:null, diagBusy:false, moreOpen:null,
     acc:null
   };
@@ -69,7 +69,7 @@
     F.loading = true; paint();
     apiGet('/finder/cards').then(function(r){
       F.loading=false; F.cards=((r&&r.cards)||[]).map(function(c){ c._base=(c.chips||[]).slice(); return c; });
-      F.waiting=(r&&r.waiting)||0; F.daily=(r&&r.daily)||0; F.today=(r&&r.today)||0; paint();
+      F.waiting=(r&&r.waiting)||0; F.daily=(r&&r.daily)||0; F.today=(r&&r.today)||0; F.cardDays=(r&&r.card_days)||0; paint();
     }).catch(function(e){ F.loading=false; F.cards=F.cards||[]; showToast('Could not load cards: '+e.message,'error'); paint(); });
   }
   function loadSearches(){
@@ -347,7 +347,7 @@
 
     var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && (!goes || !!a.mailboxId) && !(c.decision&&c.decision.blocked);
 
-    return '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
+    return '<div class="modal modal-w720" data-keep-open onclick="event.stopPropagation()">'+
       '<div class="fs-16 fd-mhead">Add '+esc(c.company_name)+' as a lead</div>'+
       '<div class="fd-mbody">'+decisionBox(c.decision)+jobPart+peoplePart+
         (a.err?'<div class="ld-box is-stop" role="alert">'+esc(a.err)+'</div>':'')+where+
@@ -760,11 +760,22 @@
         keys.map(function(k){ return '<button class="fd-pill'+(sel===k?' on':'')+'" onclick="fdFilterCards(\''+esc(k)+'\')">'+esc(names[k]||'Earlier search')+' · '+counts[k]+'</button>'; }).join('')+'</div>'
       : '';
     var shown=list.filter(function(c){ return !sel || (c.search_id||'')===sel; });
+    // Search the cards by company (owner, 20 Oct: "no search option … to search for that lead by company name"): the name, the
+    // website and the place. Typing narrows what is on screen; nothing is decided or removed by it.
+    var q=String(F.cardQ||'').trim().toLowerCase();
+    var cardSearch='<div class="fd-row fd-between"><div class="fd-grow fs-12 c-text3">'+(F.cardDays?'A card you have not accepted, waited or rejected goes after '+plural(F.cardDays,'day')+' — decide it, or it is removed. Decided ones are in History.':'')+'</div>'+
+      '<input id="fd-cq" class="inp" placeholder="Search these cards by company name" value="'+esc(F.cardQ||'')+'" oninput="fdCardQ(this.value)"></div>';
+    if (q){
+      shown=shown.filter(function(c){
+        return [c.company_name, c.domain, c.website, c.city, c.state].join(' ').toLowerCase().indexOf(q)>=0;
+      });
+      if (!shown.length) return cardSearch+bar+'<div class="card fd-empty">No card here matches “'+esc(F.cardQ)+'”.<br>If you decided it (accepted, parked or turned it down) it is in <button class="btn btn-sm btn-outline" onclick="fdTab(\'history\')">History</button>; a card nobody decided is removed after '+(F.cardDays?plural(F.cardDays,'day'):'a few days')+'.</div>';
+    }
     // NEW CARDS FIRST (owner, 8 Oct): the server already puts the newest run on top; when older cards exist too, a line says
     // where the new ones end. With only one run there is nothing to divide, so nothing is drawn.
     var fresh=shown.filter(function(c){ return c.is_new; }), older=shown.filter(function(c){ return !c.is_new; });
-    if (!fresh.length || !older.length) return bar+shown.map(renderCard).join('');
-    return bar+'<div class="fd-label fd-group">New · found '+esc(foundAgo(fresh[0].found_at))+' · '+fresh.length+'</div>'+fresh.map(renderCard).join('')+
+    if (!fresh.length || !older.length) return cardSearch+bar+shown.map(renderCard).join('');
+    return cardSearch+bar+'<div class="fd-label fd-group">New · found '+esc(foundAgo(fresh[0].found_at))+' · '+fresh.length+'</div>'+fresh.map(renderCard).join('')+
       '<div class="fd-label fd-group">Earlier cards · '+older.length+'</div>'+older.map(renderCard).join('');
   }
   // "5 min ago", "3 h ago", "yesterday" — for the line above the newest cards.
@@ -777,6 +788,7 @@
     var d=Math.round(m/1440); return d===1?'yesterday':d+' days ago';
   }
   window.fdFilterCards = function(id){ F.cardSearch=id||''; paint(); };
+  window.fdCardQ = function(v){ F.cardQ=String(v||''); paint(); };
 
   // ── history: what my searches found before ─────────────────────────────
   window.fdHistStatus = function(st){ F.histStatus=st; paint(); };

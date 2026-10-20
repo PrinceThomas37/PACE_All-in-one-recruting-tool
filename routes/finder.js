@@ -636,7 +636,7 @@ module.exports = (ctx) => {
         out.push(Object.assign(present(c, d), { found_at: c.created_at || null, is_new: runOf(c) === newestRun }));
       }
       const made = await scoped.from('finder_cards').select('id,search_id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
-      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).filter((c) => c.search_id).length });
+      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, card_days: await num('finder_card_days'), today: (made.data || []).filter((c) => c.search_id).length });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
