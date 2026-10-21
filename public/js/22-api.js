@@ -94,10 +94,38 @@ function normaliseJob(j){
     timezone:j.timezone||'',freshness:j.freshness||'',industry:j.industry||'',
     bdm_assigned_name:j.bdm_assigned_name||'',
     sending_email_id:j.sending_email_id||null,sending_email:sa.email_address||'',sending_display:sa.display_name||'',
-    research:(function(){var r=parseResearchObject(j.research);return Object.keys(r).length?r:null;})(),
+    research:(function(){var r=listResearch(j);return Object.keys(r).length?r:null;})(),
+    posting:j.posting||null,
     auto_replied_at:j.auto_replied_at||null,
     created_date:j.created_date,created_at:j.created_at};
 }
+// THE LEAD LIST CARRIES NO POSTING TEXT (R-301): the server sends `research.jd_raw_omitted` and a `posting` summary instead of the
+// pasted job description. The text is loaded for ONE lead when a screen needs it (loadLeadPosting) and kept here, so the
+// 3-minute list refresh does not take it away again. A copy whose length no longer matches the server's summary is dropped
+// (someone else changed the posting) and loads fresh next time.
+function jobPostings(){return STATE.jobPostings||(STATE.jobPostings={});}
+function postingBodyLen(text){return String(text||'').trim().replace(/^Title:[^\n]*\n*/i,'').trim().length;}
+function listResearch(j){
+  var r=parseResearchObject(j.research);
+  if(!r.jd_raw_omitted)return r;
+  var kept=jobPostings()[j.id];
+  if(kept===undefined)return r;
+  if(j.posting&&postingBodyLen(kept)!==j.posting.chars){delete jobPostings()[j.id];return r;}
+  var out=Object.assign({},r,{jd_raw:kept});delete out.jd_raw_omitted;return out;
+}
+window.leadPostingLoaded=function(j){var r=j&&parseResearchObject(j.research);return !(r&&r.jd_raw_omitted);};
+window.leadPostingKeep=function(id,text){jobPostings()[id]=String(text||'');};
+window.loadLeadPosting=function(id){
+  var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
+  if(j&&leadPostingLoaded(j))return Promise.resolve(j);
+  return apiGet('/jobs/'+encodeURIComponent(id)).then(function(full){
+    var text=parseResearchObject(full&&full.research).jd_raw||'';
+    jobPostings()[id]=text;
+    var cur=(STATE.jobs||[]).find(function(x){return x.id===id;});
+    if(cur){var r=Object.assign({},parseResearchObject(cur.research),{jd_raw:text});delete r.jd_raw_omitted;cur.research=r;}
+    return cur;
+  });
+};
 function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||[]).forEach(function(c){out.push({id:c.id,job_id:c.job_id,first_name:c.first_name,last_name:c.last_name||'',designation:c.designation||'',email:c.email||'',phone:c.phone||'',extra_emails:Array.isArray(c.extra_emails)?c.extra_emails:[],extra_phones:Array.isArray(c.extra_phones)?c.extra_phones:[],linkedin:c.linkedin||'',is_primary:!!c.is_primary,email_status:c.email_status||'valid',ooo_until:c.ooo_until||null});});});return out;}
 
 function loadAppData(){

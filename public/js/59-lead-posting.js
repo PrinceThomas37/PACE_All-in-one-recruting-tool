@@ -14,7 +14,7 @@
 (function(){
   'use strict';
   var THIN = 300, MAX = 8000;
-  var editing = {}, viewing = {};
+  var editing = {}, viewing = {}, loading = {};
   function esc(s){ return htmlEsc(s); }
   function job(id){ return (STATE.jobs||[]).find(function(x){ return x.id===id; }); }
   function research(j){
@@ -23,10 +23,16 @@
     return (r&&typeof r==='object')?r:{};
   }
   function body(j){ return String(research(j).jd_raw||'').trim().replace(/^Title:[^\n]*\n*/i,'').trim(); }
+  // R-301: the list copy of a lead has no posting text, only the server's summary of it (`j.posting`); the text loads when
+  // someone opens it (loadLeadPosting, 22-api.js).
+  function omitted(j){ return !!research(j).jd_raw_omitted; }
   function hasPosting(j){
+    if(omitted(j)) return !!(j.posting&&j.posting.has_posting);
     var all=String(research(j).jd_raw||'').trim() || (j.position?'Title: '+j.position:'');
     return all.length>=THIN;
   }
+  function words(j,b){ return omitted(j) ? ((j.posting&&j.posting.words)||0) : (b?b.split(/\s+/).length:0); }
+  function attached(j,b){ return omitted(j) ? !!(j.posting&&j.posting.chars) : !!b; }
   function canEdit(j){
     var u=STATE.user||{};
     if(userHasAnyRole(u,'admin','ra_lead')) return true;
@@ -39,7 +45,10 @@
   function paint(id){ var el=document.getElementById('lx-post-'+id), j=job(id); if(el&&j) el.innerHTML=inner(j); }
 
   function inner(j){
-    var id=j.id, b=body(j), ok=hasPosting(j), mine=canEdit(j);
+    var id=j.id, b=body(j), ok=hasPosting(j), mine=canEdit(j), has=attached(j,b);
+    if(loading[id]){
+      return '<div class="lx-head">Job posting</div><div class="lxp-card lxp-row"><div class="lxp-status lxp-meta">Loading the job description…</div></div>';
+    }
     if(editing[id]){
       return '<div class="lx-head">Job posting</div>'+
         '<div class="lxp-card">'+
@@ -64,9 +73,9 @@
         '</div>';
     }
     var status = ok
-      ? '<span class="lxp-ok">✓ The AI has the job posting</span> <span class="lxp-meta">· '+(b.split(/\s+/).length)+' words</span>'
+      ? '<span class="lxp-ok">✓ The AI has the job posting</span> <span class="lxp-meta">· '+words(j,b)+' words</span>'
       : '<span class="lxp-miss">The AI only knows the job title</span>';
-    var action = b
+    var action = has
       ? '<button type="button" class="lxi-link" onclick="event.stopPropagation();leadPostingShow(\''+id+'\',true)">Show job description</button>'
       : (mine ? '<button type="button" class="lxi-link" onclick="event.stopPropagation();leadPostingEdit(\''+id+'\',true)">Paste the job posting</button>' : '');
     return '<div class="lx-head">Job posting</div>'+
@@ -77,15 +86,30 @@
       '</div>';
   }
 
-  window.leadPostingShow=function(id,on){ viewing[id]=!!on; paint(id); };
+  // Opening the text loads it first when the list copy does not carry it. A failed load says so and opens nothing — an empty
+  // edit box would look like "no posting" and saving it would clear the real one.
+  function withText(id, then){
+    var j=job(id);
+    if(!j||!omitted(j)){ then(); return; }
+    loading[id]=true; paint(id);
+    loadLeadPosting(id).then(function(){ loading[id]=false; then(); })
+      .catch(function(e){ loading[id]=false; paint(id); showToast('Could not load the job description: '+(e.message||e),'error'); });
+  }
+  window.leadPostingShow=function(id,on){
+    if(!on){ viewing[id]=false; paint(id); return; }
+    withText(id,function(){ viewing[id]=true; paint(id); });
+  };
   window.leadPostingEdit=function(id,on){
-    editing[id]=!!on; if(on) viewing[id]=false; paint(id);
-    if(on){ var t=document.getElementById('lxp-text-'+id); if(t) t.focus(); }
+    if(!on){ editing[id]=false; paint(id); return; }
+    withText(id,function(){
+      editing[id]=true; viewing[id]=false; paint(id);
+      var t=document.getElementById('lxp-text-'+id); if(t) t.focus();
+    });
   };
   window.leadPostingSave=function(id){
     var t=document.getElementById('lxp-text-'+id); if(!t) return;
     apiPost('/jobs/'+encodeURIComponent(id)+'/posting',{text:t.value}).then(function(r){
-      var j=job(id); if(j&&r&&r.research) j.research=r.research;
+      var j=job(id); if(j&&r&&r.research){ j.research=r.research; if(r.posting) j.posting=r.posting; leadPostingKeep(id,(r.research&&r.research.jd_raw)||''); }
       editing[id]=false; viewing[id]=false; paint(id);
       showToast(r&&r.posting&&r.posting.has_posting?'Posting saved — the AI will use it for this lead\'s first email':'Saved. That is still short — the AI treats it as title-only.', r&&r.posting&&r.posting.has_posting?'success':'info');
     }).catch(function(e){ showToast('Could not save: '+(e.message||e),'error'); });

@@ -143,7 +143,7 @@ function renderResearchSection(j, canEdit){
   if(!canEdit){
     // BD read-only view
     var hasReq=req.skill_1||req.skill_2||req.skill_3||(req.skills||[]).length||req.salary_display||req.location||req.local_hint||req.travel;
-    var hasData=company.headcount||company.hiring_volume||company.notes||outreach.angle||outreach.avoid||hasReq||jdRaw;
+    var hasData=company.headcount||company.hiring_volume||company.notes||outreach.angle||outreach.avoid||hasReq||jdRaw||r.jd_raw_omitted;   // R-301: the list copy marks a posting it does not carry
     if(!hasData&&!contactIntel.trim())return '';
     return '<div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;margin-top:14px">'+
       '<div class="fs-12 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">\ud83d\udd2c RA Research</div>'+

@@ -53,4 +53,35 @@ function withPosting(research, position, text) {
   return out;
 }
 
-module.exports = { POSTING_MAX_CHARS, postingBody, postingState, withPosting };
+// THE LEAD LIST CARRIES NO POSTING TEXT (R-301, 21 Oct). The pasted job description was 7.7 MB of the 8.7 MB of research on
+// 1,479 leads, and every Jobs load (each tab, every 3 minutes) read, parsed and re-sent all of it: the watcher saw GET /jobs grow
+// the server 65-110 MB each time. The list needs only to KNOW whether the AI has a posting, so a list copy keeps every other
+// research field, drops `jd_raw`, marks that it did (`jd_raw_omitted`) and carries the same `posting` state the posting box shows.
+// The text itself loads with the one lead (GET /jobs/:id) when someone opens it.
+function forList(job) {
+  if (!job || typeof job !== 'object') return job;
+  const r = parseResearch(job.research);
+  const posting = postingState(job);
+  if (!txt(r.jd_raw)) return Object.assign({}, job, { posting });
+  const research = Object.assign({}, r);
+  delete research.jd_raw;
+  research.jd_raw_omitted = true;
+  return Object.assign({}, job, { research, posting });
+}
+
+// A research object written back from a list copy must never wipe the posting it never had: when `jd_raw` is absent, or marked
+// omitted, the stored text is kept. An explicit value (including an empty one with no mark) is the person's edit and wins.
+function keepStoredPosting(incoming, stored) {
+  if (incoming == null) return incoming;
+  const out = Object.assign({}, parseResearch(incoming));
+  const omitted = out.jd_raw_omitted === true;
+  delete out.jd_raw_omitted;
+  const untouched = omitted ? !txt(out.jd_raw) : !Object.prototype.hasOwnProperty.call(out, 'jd_raw');
+  if (untouched) {
+    const prev = parseResearch(stored).jd_raw;
+    if (prev !== undefined) out.jd_raw = prev; else delete out.jd_raw;
+  }
+  return out;
+}
+
+module.exports = { POSTING_MAX_CHARS, postingBody, postingState, withPosting, forList, keepStoredPosting };

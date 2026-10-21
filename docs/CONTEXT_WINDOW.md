@@ -2,7 +2,7 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-20 (Session 52 closing). **Highest ids:** decision **D-0169** · contract C-0038 · roadmap **R-300** (next `R-301`) · next migration **068** (none added this session).
+**Updated**: 2026-10-20 (Session 52 closing). **Highest ids:** decision **D-0169** · contract C-0038 · roadmap **R-301** (next `R-302`) · next migration **068** (none added this session).
 
 ## START HERE (Session 52, 20 Oct) — the crashes are fixed; "Needs you today" reworked
 
@@ -17,7 +17,7 @@
 
 **FIRST THING NEXT WINDOW:** `list_events` (service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) since 2026-10-20T22:15Z for `server_failed` / `oomKilled`, and `list_logs` text `*MemWatch*` — tell the owner plainly whether any crash came back. A two-day crash watch is scheduled in this session (owner: "keep it on for 2 days and see if there is any crash. If not close it"): day 1 on 21 Oct 10:40 UTC (`trig_01YMqGj17MV3vSaUL6dZG3G7`), final on 22 Oct 10:40 UTC (`trig_01UBp12zL5oHbvPtWRd5zTUF`) — no crash → say "sorted" and stop; a crash → name the cause from the watcher and propose the fix. If you are a NEW session, do the check yourself anyway.
 
-**Still slow, offered (owner's go needed):** `/jobs` and `/emails` each add ~100 MB and take ~10 s (the whole company's leads with research text in one load) — the next memory risk as data grows; the database in Seoul (R-292, decided: after the current outreach). Not covered by the sent sweep: Zoho / IMAP mailboxes.
+**21 Oct — R-301:** the Jobs list no longer carries each lead's pasted job description (7.7 MB of 8.7 MB of research text; GET /jobs had grown the server 65-110 MB per load). Read in pages, text loaded per lead on demand (`services/lead-list.js`, `22-api loadLeadPosting`). `/emails` was measured — 2.9 MB in total, not heavy; it only appeared in MemWatch alongside /jobs. **Still open:** the database in Seoul (R-292, decided: after the current outreach). Not covered by the sent sweep: Zoho / IMAP mailboxes.
 
 **Owed by the owner (say it plainly, once):** a paid always-on server before other customers use PACE (D-0163/D-0165; the $25 Render "Pro" WORKSPACE adds no memory — the Standard INSTANCE, $25/mo, 2 GB, does); R-205 `MAILBOX_SECRET_KEY`; `WEBSITE_LEADS_ORG_ID` on Render.
 

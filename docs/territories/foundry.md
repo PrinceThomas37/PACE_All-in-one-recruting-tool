@@ -1335,3 +1335,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 2026-10-20 (Session 52, R-298): `test/date-format-smoke.mjs` (8: same answers; 50,000 conversions grow rss < 40 MB and < 3 s; formatter cache small; static scan bans per-call formatters in server code). Reintroducing the old localDay: +1,155 MB, 3 fails.
 
 - 2026-10-20 (Session 52): new `users-emails-bulk-smoke` (13: org-scoped bulk route, same description as the single route, app asks once — old 22-api.js fails 4). D-0169 rewrites: next-action-smoke (50), needs-you-rules-smoke (20), next-action-dismiss-smoke (32), needs-you-order-smoke (23), needs-you-today-does-smoke (14, + payload carries submission_id/step — removing them fails 1), trace-smoke (30).
+
+- 2026-10-21 (Session 52, R-301): `test/lead-list-posting-smoke.mjs` (25) — list copy has no posting text, paged read returns every lead with a tie-breaker, PATCH research / PUT job from a list copy keep the stored text (routes RUN on an in-memory table), the browser merge run via `new Function` on the real 22-api source. Each guard proven by reintroducing its bug.
