@@ -2,7 +2,15 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-20 (Session 52 closing). **Highest ids:** decision **D-0169** · contract C-0038 · roadmap **R-301** (next `R-302`) · next migration **068** (none added this session).
+**Updated**: 2026-10-21 (Session 52, day 2). **Highest ids:** decision **D-0171** · contract C-0038 · roadmap **R-303** (next `R-304`) · next migration **068** (none added this session).
+
+## START HERE (21 Oct) — speed work released; WAITING ONE DAY FOR MEASUREMENTS (D-0171)
+
+**Released 21 Oct (both after Node 22 + 26 full runs, owner: "merge once the test is passed"):**
+- **#363** (2d54c6b) R-301 — the Jobs list carries no pasted job description (7.7 MB of 8.7 MB of research text; GET /jobs had grown the server 65-110 MB per load). Read in pages (`services/lead-list.js`), `posting` summary instead, text loaded per lead on demand (`22-api loadLeadPosting`), saves from a list copy keep the stored text (`lead-posting.keepStoredPosting`).
+- **#364** R-302 / D-0170 — sign-in no longer downloads every SENT email (4,421, read by no screen); GET /emails look-ups in parallel; GET /jobs answers 304 "not changed" (`services/list-tag.js`, `22-api apiGetJobsList`); `[SlowReq]` log for any request ≥3 s; list batch 500.
+
+**THE OWNER'S CALL (D-0171): wait one day, read what is slow, then decide.** Build nothing more for speed until then. The scheduled check `trig_01UBp12zL5oHbvPtWRd5zTUF` (22 Oct 10:40 UTC, fires into this session) does the final crash verdict AND ranks `[SlowReq]` / `[MemWatch]` lines (`list_logs` text `*SlowReq*`, `*MemWatch*`) with one recommended next step. A NEW session: do that reading yourself. Candidates it will choose between: R-303 (server-paged lead list — the lasting answer to a very big database), R-292 (database out of Seoul), or whatever the numbers show. Day-1 crash check (21 Oct) was clean: no restart, peak 242 MB.
 
 ## START HERE (Session 52, 20 Oct) — the crashes are fixed; "Needs you today" reworked
 

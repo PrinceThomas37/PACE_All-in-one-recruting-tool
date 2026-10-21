@@ -110,7 +110,9 @@ const resolveFor = (p) => {
   return [];
 };
 const sandbox = { STATE: { user: { id: 'adm', role: 'admin', roles: ['admin'] } }, render() {}, scheduleRender() {}, showToast() {}, sessionStorage: { removeItem() {} },
-  apiGet: (p) => { asked.push(p); return Promise.resolve(resolveFor(p)); }, normaliseUser: (u) => u, normaliseJob: (j) => j, flattenContacts: () => [],
+  apiGet: (p) => { asked.push(p); return Promise.resolve(resolveFor(p)); },
+  apiGetJobsList: () => { asked.push('/jobs'); return Promise.resolve({ data: [], keep() {} }); },   // R-302: the lead list's own call
+  normaliseUser: (u) => u, normaliseJob: (j) => j, flattenContacts: () => [],
   userHasAnyRole: (u, ...roles) => roles.some(x => (u.roles || []).includes(x)), loadMailboxSignature() {}, startProgressPoll() {}, startBackgroundPoll() {}, window: {} };
 vm.createContext(sandbox);
 vm.runInContext(api.slice(start, endAt) + '\nloadAppData();', sandbox);

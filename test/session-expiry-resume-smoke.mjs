@@ -111,7 +111,7 @@ try{
   await page.waitForTimeout(150);
   step('coming back to a tab whose sign-in has run out says so at once (no failed click needed)', await onLogin() && /expired/.test(await notice()));
   step('…and that took no request at all', seen.filter(s=>/\/jobs|\/users/.test(s)).length===0, seen.join(','));
-  await enterApp(page,'bd'); await ev(()=>{ window.__polls=0; window.apiGet=function(u){ if(u==='/jobs') window.__polls++; return Promise.resolve([]); }; });
+  await enterApp(page,'bd'); await ev(()=>{ window.__polls=0; window.apiGet=function(u){ if(u==='/jobs') window.__polls++; return Promise.resolve([]); }; window.apiGetJobsList=function(){ window.__polls++; return Promise.resolve(null); }; });   // R-302: the lead list is refreshed through apiGetJobsList
   await ev(()=>{ window._hiddenAt=Date.now()-60*1000; document.dispatchEvent(new Event('visibilitychange')); });
   const quick=await ev(()=>window.__polls);
   await ev(()=>{ window._hiddenAt=Date.now()-6*60*1000; document.dispatchEvent(new Event('visibilitychange')); });
