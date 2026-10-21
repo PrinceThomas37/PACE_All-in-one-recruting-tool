@@ -558,7 +558,8 @@ router.put('/jobs/:id', auth, async (req, res) => {
     if (salary_range !== undefined) updates.salary_range = salary_range || null;
     if (job_created_date !== undefined) updates.job_created_date = job_created_date || null;
     if (jobIndustry !== undefined) updates.industry = jobIndustry || null;
-    if (research !== undefined) updates.research = research;
+    // R-301: a research object built from a list copy has no posting text — the stored one is kept (services/lead-posting.js).
+    if (research !== undefined) updates.research = leadPosting.keepStoredPosting(research, existing.research);
     const { data, error } = await supabase.from('jobs').update(updates).eq('id', req.params.id).select().single();
     if (error) throw error;
     if (stage !== undefined && stage !== existing.stage) {
@@ -595,11 +596,12 @@ router.delete('/jobs/:id', auth, async (req, res) => {
 // another org read (and, worse, wrote) its research by guessing the id.
 router.patch('/jobs/:id/research', auth, async (req, res) => {
   try {
-    const { research } = req.body;
-    if (!research) return res.status(400).json({ error: 'research object required' });
-    const { data: job } = await withOrg(supabase.from('jobs').select('created_by,industry').eq('id', req.params.id), req).maybeSingle();
+    if (!req.body.research) return res.status(400).json({ error: 'research object required' });
+    const { data: job } = await withOrg(supabase.from('jobs').select('created_by,industry,research').eq('id', req.params.id), req).maybeSingle();
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (!hasRole(req, 'admin', 'ra_lead') && job.created_by !== req.user.id) return res.status(403).json({ error: 'Only the RA who created this lead can add research' });
+    // R-301: the Research panel saves from the list copy, which carries no posting text — keep the stored one.
+    const research = leadPosting.keepStoredPosting(req.body.research, job.research);
     const { data, error } = await withOrg(supabase.from('jobs').update({ research, updated_at: new Date() }).eq('id', req.params.id), req).select('id,research,industry').maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Job not found' });

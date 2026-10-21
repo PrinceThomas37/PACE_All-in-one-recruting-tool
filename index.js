@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { formatter: dtf, isZone } = require('./services/date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
+const { loadLeadList } = require('./services/lead-list');   // the lead list carries no posting text (R-301)
 const sequenceTemplates = require('./services/sequence-templates');
 const sequenceV2 = require('./services/sequence-v2');
 const express = require('express');
@@ -818,17 +819,15 @@ const JOB_SELECT = `*, research, company:companies(id,name,website,industry,loca
 // tenant's cache entry once a second org exists.
 let jobsCacheByOrg = new Map();
 const JOBS_CACHE_TTL_MS = 60 * 1000;
+const JOBS_PAGE = 300;   // rows per read while loading the list (a technical batch size, not a customer limit)
 function invalidateJobsCache() { jobsCacheByOrg.clear(); }
 
 async function loadAllJobs(orgId) {
   const key = orgId || '__all__';
   const cached = jobsCacheByOrg.get(key);
   if (cached && (Date.now() - cached.at) < JOBS_CACHE_TTL_MS) return cached.data;
-  let query = supabase.from('jobs').select(JOB_SELECT).is('deleted_at', null);
-  if (orgId) query = query.eq('org_id', orgId);
-  const { data, error } = await query.order('created_at', { ascending: false });
-  if (error) throw error;
-  const rows = data || [];
+  // R-301: read in pages, each lead's posting text dropped as its page arrives (services/lead-list.js).
+  const rows = await loadLeadList({ supabase, select: JOB_SELECT, orgId, pageSize: JOBS_PAGE });
   jobsCacheByOrg.set(key, { data: rows, at: Date.now() });
   return rows;
 }

@@ -364,7 +364,19 @@ window.raFormDetectTimezone=function(location){
   if(el)el.value=tz;
 };
 
+// R-301: the list copy of a lead has no job description text; the edit form shows and re-saves it, so it is loaded first.
+// A failed load opens nothing — an empty box would read as "no description" and saving it would clear the real one.
 window.raFormEdit=function(jobId){
+  var j=STATE.jobs.find(function(x){return x.id===jobId;});
+  if(!j)return;
+  if(window.leadPostingLoaded&&!leadPostingLoaded(j)){
+    loadLeadPosting(jobId).then(function(){raFormEditLoaded(jobId);})
+      .catch(function(e){showToast('Could not load this lead: '+(e.message||e),'error');});
+    return;
+  }
+  raFormEditLoaded(jobId);
+};
+function raFormEditLoaded(jobId){
   var j=STATE.jobs.find(function(x){return x.id===jobId;});
   if(!j)return;
   var cs=STATE.contacts.filter(function(c){return c.job_id===jobId;})
@@ -390,7 +402,7 @@ window.raFormEdit=function(jobId){
   // Scroll to top of page
   window.scrollTo(0,0);
   render();
-};
+}
 
 // ── Autocomplete DOM patchers — update only the dropdown, never the whole page ──
 function _patchZipSuggestions(){
