@@ -67,6 +67,8 @@ try {
       if (u === '/jobs') return Promise.resolve(JSON.parse(JSON.stringify(window.__raw)));
       return Promise.reject(new Error('not stubbed: ' + u));   // the POC finder's answer never arrives → the plain contact list shows
     };
+    // R-302: the lead list is refreshed through its own call (apiGetJobsList → {data, keep}); answered from the same fake table.
+    window.apiGetJobsList = () => { window.__calls.push(['GET', '/jobs']); return Promise.resolve({ data: JSON.parse(JSON.stringify(window.__raw)), keep() {} }); };
     window.apiPut = (u, b) => {
       window.__calls.push(['PUT', u, JSON.parse(JSON.stringify(b || {}))]);
       if (window.__putError) { const e = window.__putError; window.__putError = null; return Promise.reject(new Error(e)); }

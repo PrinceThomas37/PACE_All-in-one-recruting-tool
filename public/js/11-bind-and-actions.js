@@ -314,18 +314,16 @@ function loadEmailsForCurrentUser(){
       // users' emails", just whatever the RA Lead's own scope legitimately
       // holds. The per-BD picker and drill-down read COUNTS from
       // /emails/sender-summary instead (C-0026 #2).
-      apiGet('/emails').then(function(d){
-        var all=d||[];
-        STATE.pendingEmails=all.filter(function(e){return e.status==='pending';});
-        STATE.sentEmails=all.filter(function(e){return e.status==='sent';});
-        STATE.failedEmails=all.filter(function(e){return e.status==='failed';});
+      // R-302: this asked for EVERY email (all sent mail included) and kept only the waiting and failed ones; it asks for those two.
+      Promise.all([apiGet('/emails?status=pending'),apiGet('/emails?status=failed')]).then(function(r){
+        STATE.pendingEmails=r[0]||[];
+        STATE.failedEmails=r[1]||[];
         scheduleRender();
       }).catch(function(){});
       loadSenderSummary();
       loadPendingSummary();
     } else {
       apiGet('/emails?status=pending').then(function(d){STATE.pendingEmails=d||[];loadPendingSummary();scheduleRender();}).catch(function(){});
-      apiGet('/emails?status=sent').then(function(d){STATE.sentEmails=d||[];scheduleRender();}).catch(function(){});
       apiGet('/emails?status=failed').then(function(d){STATE.failedEmails=d||[];scheduleRender();}).catch(function(){});
     }
   }

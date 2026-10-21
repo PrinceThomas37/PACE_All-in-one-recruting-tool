@@ -1337,3 +1337,7 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 2026-10-20 (Session 52): new `users-emails-bulk-smoke` (13: org-scoped bulk route, same description as the single route, app asks once — old 22-api.js fails 4). D-0169 rewrites: next-action-smoke (50), needs-you-rules-smoke (20), next-action-dismiss-smoke (32), needs-you-order-smoke (23), needs-you-today-does-smoke (14, + payload carries submission_id/step — removing them fails 1), trace-smoke (30).
 
 - 2026-10-21 (Session 52, R-301): `test/lead-list-posting-smoke.mjs` (25) — list copy has no posting text, paged read returns every lead with a tie-breaker, PATCH research / PUT job from a list copy keep the stored text (routes RUN on an in-memory table), the browser merge run via `new Function` on the real 22-api source. Each guard proven by reintroducing its bug.
+
+- 2026-10-21 (Session 52, R-302): `test/list-changed-smoke.mjs` (21) — tag rules, the GET /jobs route RUN (304 with nothing scoped), the browser side RUN from the real 22-api.js slice with a fake fetch, and no `/emails?status=sent` anywhere. `memory-watch-smoke` +4 for `[SlowReq]`.
+
+- 2026-10-21 (Session 52, R-302): three suites stubbed `apiGet("/jobs")` to fake the lead list (users-emails-bulk, session-expiry-resume, lead-contact-cp-ui); the list now arrives through `apiGetJobsList()` → `{data, keep}` (or null = not changed), so those stubs now fake that call too. A browser test that fakes the lead list must stub `apiGetJobsList`.

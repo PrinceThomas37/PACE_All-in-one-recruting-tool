@@ -133,7 +133,7 @@ app.set('trust proxy', 1);
 const memoryWatch = require('./services/memory-watch').createMemoryWatch({ jobs: () => engineRunner.running() });
 app.use(memoryWatch.middleware);
 memoryWatch.start();
-app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
+app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization','If-None-Match'], exposedHeaders: ['ETag'] }));   // If-None-Match / ETag: the lead list's "not changed" answer (R-302)
 // `verify` keeps the raw bytes on the request. Stripe signs the exact body it
 // sent, so a re-serialised object cannot be verified — see routes/plans.js.
 app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
@@ -819,7 +819,7 @@ const JOB_SELECT = `*, research, company:companies(id,name,website,industry,loca
 // tenant's cache entry once a second org exists.
 let jobsCacheByOrg = new Map();
 const JOBS_CACHE_TTL_MS = 60 * 1000;
-const JOBS_PAGE = 300;   // rows per read while loading the list (a technical batch size, not a customer limit)
+const JOBS_PAGE = 500;   // rows per read while loading the list — 3 trips to the database for today's leads, each page cut before the next (a technical batch size, not a customer limit)
 function invalidateJobsCache() { jobsCacheByOrg.clear(); }
 
 async function loadAllJobs(orgId) {

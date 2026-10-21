@@ -7,7 +7,9 @@
 //   • every few seconds, if memory is above WARN_MB: each request still in flight (method, path with ids masked, how long it has
 //     been running, who asked) and each engine job running;
 //   • when a request finishes having grown memory by GROW_MB or more: that request, its time and the growth.
-// It changes nothing anyone sees and stores nothing — it only logs, and only when something is heavy.
+//   • (R-302) when a request finishes having taken SLOW_MS or longer: `[SlowReq]` with the path, the time and the status, so a
+//     day of normal use ranks what makes PACE slow by measurement, not by reading code.
+// It changes nothing anyone sees and stores nothing — it only logs, and only when something is heavy or slow.
 //
 // The numbers are technical thresholds for a diagnostic, not limits on a customer (D-0123 does not apply).
 //
@@ -17,6 +19,7 @@ const WARN_MB = 380;         // a snapshot of what is running once memory passes
 const GROW_MB = 60;          // a single request that grows memory this much is named when it ends
 const EVERY_MS = 2000;       // how often memory is looked at
 const QUIET_MS = 10000;      // at most one snapshot per this long, so a slow climb is not a flood
+const SLOW_MS = 3000;        // R-302: a request that takes this long or longer is named when it ends (owner 21 Oct: "Okay do that too")
 const MB = 1024 * 1024;
 
 // A path with anything that could be a secret or an id masked: public token pages (/i/:token, /apply/:token) carry the secret
@@ -28,7 +31,7 @@ function maskPath(url) {
 }
 
 function createMemoryWatch({ log = console.warn, rss = () => process.memoryUsage().rss, heap = () => process.memoryUsage().heapUsed,
-  now = () => Date.now(), jobs = () => [], warnMb = WARN_MB, growMb = GROW_MB, quietMs = QUIET_MS } = {}) {
+  now = () => Date.now(), jobs = () => [], warnMb = WARN_MB, growMb = GROW_MB, quietMs = QUIET_MS, slowMs = SLOW_MS } = {}) {
   const inFlight = new Map();   // id -> { method, path, at, startRss, req }
   let seq = 0, lastSnapshot = 0;
 
@@ -42,6 +45,10 @@ function createMemoryWatch({ log = console.warn, rss = () => process.memoryUsage
       if (done) return; done = true;
       inFlight.delete(id);
       const grew = (rss() - entry.startRss) / MB;
+      const took = now() - entry.at;
+      if (took >= slowMs) {
+        log(`[SlowReq] ${entry.method} ${entry.path} took ${took} ms (status ${res.statusCode}${res.writableFinished === false ? ', closed early' : ''}, memory ${grew >= 0 ? '+' : ''}${Math.round(grew)} MB, user ${who(req)})`);
+      }
       if (grew >= growMb) {
         log(`[MemWatch] ${entry.method} ${entry.path} grew memory +${Math.round(grew)} MB in ${now() - entry.at} ms (now ${Math.round(rss() / MB)} MB, status ${res.statusCode}, user ${who(req)})`);
       }
@@ -81,4 +88,4 @@ function who(req) {
   return (u && (u.id || u.email)) ? String(u.id || u.email).slice(0, 8) : '-';
 }
 
-module.exports = { createMemoryWatch, maskPath, WARN_MB, GROW_MB };
+module.exports = { createMemoryWatch, maskPath, WARN_MB, GROW_MB, SLOW_MS };

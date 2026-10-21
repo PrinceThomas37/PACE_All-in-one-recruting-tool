@@ -8,7 +8,7 @@
 // Ordered newest first with the id as a tie-breaker, so a page boundary cannot repeat or skip a lead.
 const leadPosting = require('./lead-posting');
 
-async function loadLeadList({ supabase, select, orgId, pageSize = 300 }) {
+async function loadLeadList({ supabase, select, orgId, pageSize = 500 }) {
   const rows = [];
   for (let from = 0; ; from += pageSize) {
     let query = supabase.from('jobs').select(select).is('deleted_at', null);
