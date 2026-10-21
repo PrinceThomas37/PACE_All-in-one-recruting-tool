@@ -64,6 +64,15 @@ module.exports = (ctx) => {
     return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
   }
 
+  // Runs fn over every item, at most four at a time (a technical bound so one screen cannot flood the database), results in order.
+  async function fourAtATime(items, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+    await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker));
+    return out;
+  }
+
   // Every page of a query. `build` must return a FRESH builder that is already
   // ORDERED — .range() without an ORDER BY repeats or skips rows between pages.
   async function allPages(build) {
@@ -91,22 +100,22 @@ module.exports = (ctx) => {
       .select('id').in('assigned_to_bd', ownerIds).order('id', { ascending: true }));
     if (!owned.length) return [];
     const inside = new Set(ownerIds);
-    const want = [];
-    for (const jobIds of chunk(owned.map(j => j.id), 100)) {
+    // R-302: the slices are independent, so up to FOUR are asked at once instead of one after another (the caller sorts the result).
+    const want = new Set();
+    await fourAtATime(chunk(owned.map(j => j.id), 100), async (jobIds) => {
       const rows = await allPages(() => {
         let q = db.forRequest(req).from('emails').select('id,sent_by').in('job_id', jobIds);
         if (status) q = q.eq('status', status);
         return q.order('id', { ascending: true });
       });
-      rows.forEach(r => { if (!have.has(r.id) && !inside.has(r.sent_by)) want.push(r.id); });
-    }
-    let out = [];
-    for (const ids of chunk(want, 100)) {
+      rows.forEach(r => { if (!have.has(r.id) && !inside.has(r.sent_by)) want.add(r.id); });
+    });
+    const parts = await fourAtATime(chunk([...want], 100), async (ids) => {
       const { data, error } = await emailRows(req).in('id', ids);
       if (error) throw error;
-      out = out.concat(data || []);
-    }
-    return out;
+      return data || [];
+    });
+    return [].concat(...parts);
   }
 
 router.get('/emails', auth, async (req, res) => {
@@ -143,30 +152,36 @@ router.get('/emails', auth, async (req, res) => {
     // Which mailbox, in the same order the send loop picks it: the row's pinned
     // mailbox (a sequence rotating its "from"), else the lead's, else the row's
     // from_email supplies the name.
+    // R-302: the three look-ups below do not depend on each other, so they are asked at the same time (each was a round trip to
+    // the database, one after another). Same answers, same failure handling: the AI-choice ones still fall back to "off".
     const pinnedIds = [...new Set(allData.map(e => e.sending_email_id).filter(Boolean))];
     const pinnedById = {};
-    for (const ids of chunk(pinnedIds, 100)) {
+    const loadPinned = Promise.all(chunk(pinnedIds, 100).map(async (ids) => {
       const { data: pinned } = await db.forRequest(req).from('user_emails')
         .select('id,email_address,display_name').in('id', ids);
       (pinned || []).forEach(m => { pinnedById[m.id] = m; });
-    }
+    }));
     // D-0032: the engine's first email is written by AI at send time, so a
     // queued one still shows the template. Say so on the row rather than let
     // the preview pass for the final text.
-    let aiFirstOn = false;
-    try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', orgOf(req))) === 1; } catch (_) {}
+    const loadAiFirstOn = (async () => {
+      try { return Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', orgOf(req))) === 1; } catch (_) { return false; }
+    })();
     // D-0117: the badge follows the person's own choice (and, when wording is per email ID, that email ID's).
-    let aiChoiceMap = {};
-    try {
-      const owners = [...new Set(allData.map(e => e.sent_by).filter(Boolean))];
-      const mids = [...new Set(allData.map(e => e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id)).filter(Boolean))];
-      const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id), aiTeach.key(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
-      for (const part of chunk(keys, 60)) {
-        if (!part.length) continue;
-        const { data } = await supabase.from('app_settings').select('key,value').in('key', part);
-        (data || []).forEach(r => { aiChoiceMap[r.key] = r.value; });
-      }
-    } catch (_) { aiChoiceMap = {}; }
+    const loadAiChoices = (async () => {
+      try {
+        const owners = [...new Set(allData.map(e => e.sent_by).filter(Boolean))];
+        const mids = [...new Set(allData.map(e => e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id)).filter(Boolean))];
+        const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id), aiTeach.key(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
+        const map = {};
+        await Promise.all(chunk(keys, 60).filter(part => part.length).map(async (part) => {
+          const { data } = await supabase.from('app_settings').select('key,value').in('key', part);
+          (data || []).forEach(r => { map[r.key] = r.value; });
+        }));
+        return map;
+      } catch (_) { return {}; }
+    })();
+    const [, aiFirstOn, aiChoiceMap] = await Promise.all([loadPinned, loadAiFirstOn, loadAiChoices]);
     const isAdmin = hasRole(req, 'admin');
     // {{sendercompany}} is filled from the mailbox's own "sends as" — so the preview shows the real company (services/sender-company.js).
     const companyOf = await senderCompany.companiesFor(supabase, allData.map(e => (e.sending_email_id && pinnedById[e.sending_email_id] && e.sending_email_id) || e.job?.sending_email?.id));

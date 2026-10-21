@@ -5,7 +5,8 @@
 //   • at most one snapshot per quiet period (a slow climb is not a flood);
 //   • a request that grew memory by GROW_MB is named when it ends, a light one is not;
 //   • a secret in the path (/i/:token, /apply/:token) and ids are masked — the log never carries a token;
-//   • the engine runner reports what is running.
+//   • the engine runner reports what is running;
+//   • (R-302) a request taking 3 s or more is named with its time ([SlowReq]); a quicker one is not.
 // Usage: node test/memory-watch-smoke.mjs
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
@@ -49,6 +50,15 @@ const r3 = fakeReq('GET', '/jobs', { id: 'u2' }), s3 = fakeRes(); w.middleware(r
 ok('a light request is not named', lines.length === before);
 s2.emit('close');
 ok('finished requests leave the in-flight list', w.inFlightCount() === 0);
+
+// R-302: a slow request is named when it ends; a quick one is not; the token stays masked.
+ok('a request that took 3 s or more is named with its time and status', lines.some(l => /^\[SlowReq\] GET \/client-intel\/digest took \d+ ms \(status 200/.test(l)), lines.filter(l => /SlowReq/.test(l)).join(' | '));
+ok('…a public token in a slow request\'s path is masked too', lines.some(l => /^\[SlowReq\] GET \/i\/:id took/.test(l)) && !lines.some(l => /9f8e7d6c5b4a/.test(l)));
+const quickBefore = lines.length;
+const r4 = fakeReq('GET', '/companies', { id: 'u3' }), s4 = fakeRes(); w.middleware(r4, s4, () => {}); t += 2999; s4.emit('finish');
+ok('a request under 3 s is not named', lines.length === quickBefore);
+const r5 = fakeReq('GET', '/emails', { id: 'u4' }), s5 = fakeRes(); w.middleware(r5, s5, () => {}); t += 3000; s5.emit('finish'); s5.emit('close');
+ok('exactly 3 s is named, once', lines.filter(l => /SlowReq\] GET \/emails took 3000 ms/.test(l)).length === 1, lines.slice(-1)[0]);
 
 ok('ids and long segments are masked', maskPath('/apply/abcdefghijklmnopqrstuvwxyz/x') === '/apply/:id/x' && maskPath('/clients/3f2a1b4c-1111-2222-3333-444455556666/intel') === '/clients/:id/intel' && maskPath('/leads/123') === '/leads/:id');
 

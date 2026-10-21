@@ -27,6 +27,7 @@ const leadDistribution = require('../services/lead-distribution');
 const own = require('../services/ownership');
 const leadPosting = require('../services/lead-posting');
 const leadCheck = require('../services/lead-check');
+const listTag = require('../services/list-tag');   // "has anything changed since my last load?" (R-302)
 const { createDb } = require('../models');
 
 // Lead stage permission matrix for PUT /jobs/:id — pulled out to a pure
@@ -149,6 +150,11 @@ router.get('/jobs', auth, async (req, res) => {
   try {
     const all = await loadAllJobs(orgIdFor(req));
     const scope = await scopeFor(req);
+    // R-302: nothing changed since this caller's last load → "not changed", no body (services/list-tag.js).
+    const tag = listTag.tagFor(all, { user: req.user.id, scope });
+    res.set('ETag', tag);
+    res.set('Cache-Control', 'private, no-cache');
+    if (listTag.stillFresh(req, tag)) return res.status(304).end();
     res.json(own.scopeLeads(all, scope));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

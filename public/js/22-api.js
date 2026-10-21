@@ -15,14 +15,17 @@ var SESSION_EXPIRED_MSG='Your session expired — please sign in again.';
 function isExpiredAnswer(status,msg){return status===401&&/^(Invalid token|No token|Your session is out of date)/i.test(String(msg||''));}
 // Moves on every deliberate end of a session (sign out, a new sign-in) — see apiFetch.
 var _sessGen=0;
-window.endSessionCalls=function(){_sessGen++;};
+window.endSessionCalls=function(){_sessGen++;_jobsTag=null;};   // R-302: a new session never reuses the last one's "not changed" tag
 var NOT_JSON_MSG='PACE did not answer properly — the server may be waking up (it sleeps when nobody has used it for a while). Please try again in a few seconds.';
-function apiFetch(method,path,body,retried){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token,sentGen=_sessGen;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
+function apiFetch(method,path,body,retried,opts){opts=opts||{};var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;if(opts.ifTag)headers['If-None-Match']=opts.ifTag;var hadSession=!!STATE.token,sentGen=_sessGen;var init={method:method,headers:headers,body:body?JSON.stringify(body):undefined};if(opts.ifTag||opts.onTag)init.cache='no-store';return fetch(API_URL+path,init).then(function(r){
   // AN ANSWER FOR A SESSION THAT WAS ENDED ON PURPOSE IS NEVER DELIVERED. Somebody signed out, or signed in as a different person
   // (`_sessGen` moves on both), while this call was in flight: its .then() would repaint the login screen over what the next
   // person is typing, write the LAST person's data into the new session, and a late 401 would sign the NEW person out. The call
   // simply never answers. A session that merely RAN OUT is not this: every call that failed with it still gets the plain sentence.
   if(sentGen!==_sessGen)return new Promise(function(){});
+  // R-302: "not changed since your last load" — only ever for a call that sent its tag (apiGetJobsList); there is no body to read.
+  if(r.status===304&&opts.ifTag)return {__notModified:true};
+  if(opts.onTag&&r.ok)opts.onTag(r.headers.get('ETag'));
   // AN ANSWER THAT IS NOT JSON IS NOT A BROKEN SCREEN (20 Oct, owner: opening a "Needs you today" card showed the browser's own
   // "Failed to execute 'json' on 'Response': Unexpected end of JSON input"). The free server sleeps when idle; a request that
   // lands while it wakes, restarts or drops the connection comes back EMPTY (or as a gateway page). A read (GET) is safe to ask
@@ -35,7 +38,7 @@ function apiFetch(method,path,body,retried){var headers={'Content-Type':'applica
       if(method==='GET'&&!retried){
         return new Promise(function(res){setTimeout(res,3000);}).then(function(){
           if(sentGen!==_sessGen)return new Promise(function(){});     // the session ended while we waited: same rule as above
-          return apiFetch(method,path,body,true);
+          return apiFetch(method,path,body,true,opts);
         });
       }
       var u=new Error(NOT_JSON_MSG);u.status=r.status;u.unreachable=true;throw u;
@@ -45,6 +48,20 @@ function apiFetch(method,path,body,retried){var headers={'Content-Type':'applica
   });
 });}
 function apiGet(p){return apiFetch('GET',p);}
+// THE LEAD LIST, ASKED "HAS ANYTHING CHANGED?" (R-302). The server tags each answer (services/list-tag.js); the tag is sent back
+// only while STATE.jobs is still exactly the list that tag came with, for the same person — so a sign-out, another person, or any
+// code that replaced the list always gets the full answer. Resolves null when nothing changed (keep what is on screen, no redraw),
+// else {data, keep} — call keep() once STATE.jobs holds the new list.
+var _jobsTag=null;
+function apiGetJobsList(){
+  var me=STATE.user&&STATE.user.id;
+  var send=(_jobsTag&&me&&_jobsTag.user===me&&_jobsTag.jobs===STATE.jobs&&STATE.jobs&&STATE.jobs.length)?_jobsTag.tag:null;
+  var got=null;
+  return apiFetch('GET','/jobs',undefined,false,{ifTag:send,onTag:function(t){got=t;}}).then(function(res){
+    if(res&&res.__notModified)return null;
+    return {data:res,keep:function(){_jobsTag=got?{tag:got,user:me,jobs:STATE.jobs}:null;}};
+  });
+}
 function apiPost(p,b){return apiFetch('POST',p,b);}
 function apiPut(p,b){return apiFetch('PUT',p,b);}
 function apiPatch(p,b){return apiFetch('PATCH',p,b);}
@@ -130,15 +147,18 @@ function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||
 
 function loadAppData(){
   STATE.loading=true;render();
-  var calls=[apiGet('/users'),apiGet('/jobs'),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
+  _jobsTag=null;   // a full load: never answered "not changed"
+  var calls=[apiGet('/users'),apiGetJobsList(),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
   var u=STATE.user;
   var isBD=(u&&(u.role==='bd'||u.role==='bd_lead'||u.role==='admin'||u.role==='ra_lead'));
   if(isBD)calls.push(apiGet('/emails?status=pending'));
   if(isBD)calls.push(apiGet('/emails?status=queued'));
   return Promise.all(calls).then(function(r){
     STATE.users=r[0].map(normaliseUser);
-    STATE.jobs=r[1].map(normaliseJob);
-    STATE.contacts=flattenContacts(r[1]);
+    var jl=r[1]||{data:[],keep:function(){}};
+    STATE.jobs=(jl.data||[]).map(normaliseJob);
+    STATE.contacts=flattenContacts(jl.data||[]);
+    jl.keep();
     STATE.companies=r[2].map(function(c){return{id:c.id,name:c.name,web:c.website,ind:c.industry,loc:c.location};});
     STATE.reminders=r[3]||[];
     STATE.industriesList=r[4]||[];
@@ -150,7 +170,8 @@ function loadAppData(){
     if(isBD){
       STATE.pendingEmails=(r[5]||[]);
       STATE.emails=(r[6]||[]);
-      apiGet('/emails?status=sent').then(function(d){STATE.sentEmails=d||[];render();}).catch(function(){STATE.sentEmails=[];});
+      // R-302: every SENT email was downloaded here (4,421 with bodies) and no screen read it — the Sent tab became All mail
+      // (50-all-mail.js, its own 90-day view). Not asked for any more.
     }
     // Load app settings (global send times)
     apiGet('/app-settings').then(function(s){
@@ -219,7 +240,16 @@ function loadAppData(){
     showToast('Could not connect: '+err.message,'error');render();
   });
 }
-function refreshJobs(){return apiGet('/jobs').then(function(raw){var p=STATE._pendingStageChanges||{};STATE.jobs=raw.map(normaliseJob).map(function(j){if(p[j.id])j.stage=p[j.id];return j;});STATE.contacts=flattenContacts(raw);scheduleRender();});}
+function applyJobsList(jl){
+  if(!jl)return false;   // R-302: nothing changed — what is on screen stays, and nothing is redrawn
+  var raw=jl.data||[],p=STATE._pendingStageChanges||{};
+  STATE.jobs=raw.map(normaliseJob).map(function(j){if(p[j.id])j.stage=p[j.id];return j;});
+  STATE.contacts=flattenContacts(raw);
+  jl.keep();
+  scheduleRender();
+  return true;
+}
+function refreshJobs(){return apiGetJobsList().then(applyJobsList);}
 
 // ── Background polling — keeps UI in sync ──────
 var _bgPollTimer=null;
@@ -232,12 +262,7 @@ function backgroundPollTick(){
     if(document.hidden)return; // no point refreshing a tab nobody is looking at
     var pg=STATE.page;
     // Always refresh jobs (stage changes, new leads, assignments)
-    apiGet('/jobs').then(function(raw){
-      var p=STATE._pendingStageChanges||{};
-      STATE.jobs=raw.map(normaliseJob).map(function(j){if(p[j.id])j.stage=p[j.id];return j;});
-      STATE.contacts=flattenContacts(raw);
-      scheduleRender();
-    }).catch(function(){});
+    apiGetJobsList().then(applyJobsList).catch(function(){});
     // Always refresh users — STATE.users otherwise only loads once at login, so a
     // name/role change made by someone else (or in another tab) never showed up
     // anywhere that reads from it (avatars, assignee labels, pickers) until a
