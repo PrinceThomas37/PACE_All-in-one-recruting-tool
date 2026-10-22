@@ -2235,3 +2235,7 @@ Owner, on the list of what slows loading: "1. load the last 90 days … okay do 
 ### D-0171 — Wait one day and measure before more speed work (21 Oct 2026)
 
 Owner, after R-301 and R-302: "Okay merge once the test is passed and update the context. We will wait for a day and see what's causing high traffic and then see what else to do." So: no further speed or load work until a day of `[SlowReq]` / `[MemWatch]` lines is read and ranked (scheduled check 22 Oct 10:40 UTC); the next step (R-303, R-292 or other) is chosen from the numbers, by the owner.
+
+### D-0172 — R-304 (undo the Jobs-list slowdown) is next, in a new chat (22 Oct 2026)
+
+After the one-day [SlowReq] reading showed GET /jobs slower since R-301/R-302 (13-20 s vs 7-10 s; the 304 check still rebuilds the list), the owner: "Okay update that to the next to-do list for the app and update the context, I will ask in the next chat to do so." Nothing built in this session; R-304 waits for their ask.

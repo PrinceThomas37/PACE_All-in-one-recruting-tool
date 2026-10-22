@@ -2,7 +2,13 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-21 (Session 52, day 2). **Highest ids:** decision **D-0171** · contract C-0038 · roadmap **R-303** (next `R-304`) · next migration **068** (none added this session).
+**Updated**: 2026-10-22 (Session 52 closed). **Highest ids:** decision **D-0172** · contract C-0038 · roadmap **R-304** (next `R-305`) · next migration **068** (none added this session).
+
+## START HERE (22 Oct) — DO R-304 FIRST when the owner asks
+
+**The one-day measurement (D-0171) is in.** Crash watch CLOSED: no server_failed/restart since 20 Oct 22:15 UTC, peak 302 MB. But **[Certain] GET /jobs got SLOWER after R-301/R-302**: 7-10 s before → 13-20 s typical, worst 57 s; memory per load unchanged (+60-150 MB, so the job-description trim did NOT save memory as predicted); and a 304 "not changed" still costs 15-20 s because the server cache (60 s) is older than the 3-min poll, so every check rebuilds the list (3 sequential trips to Seoul from the 500-row batching + a sha1 of the whole list on 0.1 CPU). **R-304 is the fix** (one read again + 5-min server cache; see ROADMAP). Then re-read `[SlowReq]` (`list_logs` text `*SlowReq*`).
+
+**Top slow things (21-22 Oct):** 1 GET /jobs (every tab every 3 min, 13-20 s); 2 GET /mailbox/unread-count (the most frequent, 3-8 s, worst 44 s); 3 the sign-in burst (~15 small requests at once — /next-actions, /ai/morning-briefing, /client-intel/digest, /insights/bd/:id — each 8-13 s): CPU starvation on the free 0.1-CPU server. After R-304 the owner's choice is R-303 (paged lead list, free, big) or the $25/mo Standard instance (10x CPU). Be plain: code alone will not fix #3 on the free server.
 
 ## START HERE (21 Oct) — speed work released; WAITING ONE DAY FOR MEASUREMENTS (D-0171)
 
