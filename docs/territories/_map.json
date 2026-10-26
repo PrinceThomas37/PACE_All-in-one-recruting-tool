@@ -176,7 +176,6 @@
         "services/company-daily-cap.js",
         "services/mailbox-alerts.js",
         "services/mailbox-reassign.js",
-        "services/lead-recycle.js",
         "services/gmail-delivery.js",
         "services/interrupted-sends.js",
         "services/followup-sender.js",

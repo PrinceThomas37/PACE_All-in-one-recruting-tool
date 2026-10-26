@@ -4,6 +4,10 @@
 
 **Updated**: 2026-10-22 (Session 52 closed). **Highest ids:** decision **D-0172** · contract C-0038 · roadmap **R-304** (next `R-305`) · next migration **068** (none added this session).
 
+## START HERE (26 Oct, Session 53) — assigned leads never come back; 95-vs-78 import is OPEN
+
+**D-0173:** the owner ruled "once a lead is assigned it's assigned" — the 30-day auto-return sweep is removed (dev branch, not merged until the full run is green). 76 leads it had already returned (23/25 Sep) were soft-deleted in the live DB at the owner's word (undo in `docs/territories/deep.md`). **R-306 OPEN:** the owner imported "78" but 95 landed in ONE insert today; asked for the 78 companies / the file. Do not delete any of the 95 without that answer. Owner's word: "very dangerous" — find the cause, do not guess.
+
 ## START HERE (22 Oct) — DO R-304 FIRST when the owner asks
 
 **The one-day measurement (D-0171) is in.** Crash watch CLOSED: no server_failed/restart since 20 Oct 22:15 UTC, peak 302 MB. But **[Certain] GET /jobs got SLOWER after R-301/R-302**: 7-10 s before → 13-20 s typical, worst 57 s; memory per load unchanged (+60-150 MB, so the job-description trim did NOT save memory as predicted); and a 304 "not changed" still costs 15-20 s because the server cache (60 s) is older than the 3-min poll, so every check rebuilds the list (3 sequential trips to Seoul from the 500-row batching + a sha1 of the whole list on 0.1 CPU). **R-304 is the fix** (one read again + 5-min server cache; see ROADMAP). Then re-read `[SlowReq]` (`list_logs` text `*SlowReq*`).
