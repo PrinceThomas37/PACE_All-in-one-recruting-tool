@@ -1343,3 +1343,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 2026-10-21 (Session 52, R-302): three suites stubbed `apiGet("/jobs")` to fake the lead list (users-emails-bulk, session-expiry-resume, lead-contact-cp-ui); the list now arrives through `apiGetJobsList()` → `{data, keep}` (or null = not changed), so those stubs now fake that call too. A browser test that fakes the lead list must stub `apiGetJobsList`.
 
 - 2026-10-22 (Session 52): [SlowReq] showed GET /jobs slower after R-301/R-302 (see R-304 in ROADMAP — one read again + 5-min cache). Do R-304 first when asked.
+
+- 2026-10-26 (Session 53): removed `test/lead-recycle-smoke.mjs` (its subject is gone, D-0173); added `test/assigned-stays-assigned-smoke.mjs` (4 checks, proved to fail when a `lead_recycle` job is re-registered). Sandbox note: run `npm install` before `node test/run-all.mjs` — without `node_modules` ~70 Playwright suites fail in ~60 ms for a reason unrelated to the change. A full run takes over 10 minutes: run it in the background and read the count.

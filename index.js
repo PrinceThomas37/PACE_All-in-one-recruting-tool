@@ -205,7 +205,6 @@ let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 // hours, and every one of them a window in which an org-less session silently
 // resolves to the FIRST org's data.
 require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; require('./config/integrations').noteOrgCreated(); });
-const { isRecyclable } = require('./services/lead-recycle');
 const oooReturn = require('./services/ooo-return');
 const autoReply = require('./services/auto-reply');
 const replyDecline = require('./services/reply-decline');
@@ -2812,42 +2811,13 @@ async function runFollowupEngine() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// LEAD RECYCLING — 'Assigned' leads with no reply for too long, returned to
-// Unassigned for redistribution instead of sitting there forever. See
-// services/lead-recycle.js for the (pure, tested) decision logic; this is
-// just the I/O wrapper, mirroring runFollowupEngine's shape.
+// ONCE A LEAD IS ASSIGNED, IT STAYS ASSIGNED (owner, 26 Oct 2026, D-0173).
+// There used to be a daily sweep here that returned 'Assigned' leads with no
+// reply after 30 days to the Unassigned pool. It is gone, on purpose: nothing
+// moves an owned lead back by itself. Only a person releases a lead
+// (bulk stage change to Unassigned). What to do with old leads is a later
+// decision. test/assigned-stays-assigned-smoke.mjs fails if a sweep returns.
 // ══════════════════════════════════════════════════════════════
-async function runLeadRecycleSweep() {
-  const log = { checked: 0, recycled: 0 };
-  try {
-    const { data: settingRow } = await supabase.from('app_settings').select('value').eq('key', 'lead_recycle_days').maybeSingle();
-    const thresholdDays = parseInt(settingRow?.value || '30', 10) || 30;
-    const cutoffIso = new Date(Date.now() - thresholdDays * 24 * 60 * 60 * 1000).toISOString();
-
-    const { data: candidates, error } = await supabase.from('jobs')
-      .select('id,stage,assigned_at,recycled_count,contacts(replied_at)')
-      .eq('stage', 'Assigned').is('deleted_at', null).lte('assigned_at', cutoffIso);
-    if (error) throw error;
-    log.checked = (candidates || []).length;
-
-    const now = Date.now();
-    for (const job of (candidates || [])) {
-      if (!isRecyclable(job, job.contacts, now, thresholdDays)) continue;
-      const nowTs = new Date();
-      await supabase.from('jobs').update({
-        ...releaseToPoolUpdate(nowTs),
-        freshness: 'Old', recycled_count: (job.recycled_count || 0) + 1,
-      }).eq('id', job.id);
-      await supabase.from('follow_ups').update({ status: 'expired' }).eq('job_id', job.id).eq('status', 'active');
-      // Anything still queued was addressed to the assignment that just ended.
-      await supabase.from('emails').delete().eq('job_id', job.id).eq('status', 'pending');
-      await logActivity(job.id, null, null, 'lead_recycled', `Recycled to Unassigned pool after ${thresholdDays} days with no reply`);
-      log.recycled++;
-    }
-    console.log(`[LeadRecycle] Checked: ${log.checked}, recycled: ${log.recycled} (threshold ${thresholdDays}d)`);
-    return log;
-  } catch (err) { console.error('[LeadRecycle] Error:', err.message); return { ...log, error: err.message }; }
-}
 
 // ══════════════════════════════════════════════════════════════
 // OUT OF OFFICE ENDS ON THE RETURN DATE (R-080, D-0066) — a contact marked
@@ -2862,14 +2832,6 @@ async function runOooReturnSweep() {
   else console.log(`[OooReturn] Checked: ${log.checked}, switched back to Valid: ${log.switched}`);
   return log;
 }
-
-app.post('/leads/recycle/run', auth, async (req, res) => {
-  try {
-    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'Admin only' });
-    const result = await runLeadRecycleSweep();
-    res.json({ success: true, ...result });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 function toIST(date) { const utc = date.getTime() + date.getTimezoneOffset() * 60000; return new Date(utc + 5.5 * 3600000); }
 
@@ -3764,12 +3726,6 @@ engineRunner.register('reply_sweep', {
   everyMs: 30 * 60 * 1000,
   description: 'Detect prospect replies and opt-outs, and stop their sequences',
   run: () => runReplySweep()
-});
-
-engineRunner.register('lead_recycle', {
-  everyMs: 24 * 60 * 60 * 1000,
-  description: 'Return Assigned leads with no reply after the configured threshold (default 30 days) to Unassigned for redistribution',
-  run: () => runLeadRecycleSweep()
 });
 
 engineRunner.register('ooo_return', {

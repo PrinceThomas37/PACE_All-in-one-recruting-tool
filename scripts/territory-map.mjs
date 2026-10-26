@@ -66,7 +66,7 @@ const TERRITORIES = [
           // The double-send rule. Sits with the send loop that enforces it —
           // routes/reminders.js only READS it to decide what to offer.
           'services/outreach-dedup.js', 'services/company-daily-cap.js', 'services/mailbox-alerts.js',
-          'services/mailbox-reassign.js', 'services/lead-recycle.js',
+          'services/mailbox-reassign.js',
           // How a Gmail email leaves (a follow-up whose thread is in another
           // mailbox goes fresh), and the boot sweep for sends cut off mid-flight.
           'services/gmail-delivery.js', 'services/interrupted-sends.js',
