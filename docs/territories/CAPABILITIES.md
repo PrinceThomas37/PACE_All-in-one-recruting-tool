@@ -298,6 +298,10 @@ customer-facing text.**
 Leads: 08:00–16:00 in the lead's timezone. Candidates: **no window** since
 D-0010 (switch off by default). One resolver, `getTimezoneFromLocation`.
 
+### A sign-in survives a slow server
+**Status:** BUILT (dev branch, R-323) · owner `surface`
+When the password is right but the first load fails (a busy server), PACE keeps the person signed in, tries once more by itself, then says "Your sign-in worked, but PACE could not load your data" with Try again / Sign out — it never drops them back on the login page. A sign-in that has truly run out still goes to the login page with its own sentence (R-118).
+
 ### Signing up and landing in the right organisation
 **Status:** DORMANT · owner `rampart` · see `DECISIONS.md` D-0002
 `services/provisioning.js`. **Off until the open tenancy contracts close.**

@@ -266,12 +266,28 @@ function render(){
   // Loading comes FIRST: pressing Log In sets loading while there is still no user, and that used to repaint the login form
   // blank (and restart its background) for the whole wait. It shows the spinner, as it does once the person is known.
   if(STATE.loading){
-    if(root.firstElementChild&&root.firstElementChild.id==='app-loading')return;   // already showing it: rewriting only restarts the spinner
+    var _ln=STATE.loadNote||'Loading your data...';
+    var _lw=root.firstElementChild&&root.firstElementChild.id==='app-loading'?root.firstElementChild:null;
+    if(_lw){   // already showing it: rewriting only restarts the spinner — change the words only
+      var _lt=_lw.querySelector('.app-loading-note');if(_lt&&_lt.textContent!==_ln)_lt.textContent=_ln;
+      return;
+    }
     _resetShell();
     root.innerHTML='<div id="app-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg)">'+
       '<div style="width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>'+
-      '<div class="fs-13_5 c-text3">Loading your data...</div>'+
+      '<div class="fs-13_5 c-text3 app-loading-note">'+htmlEsc(_ln)+'</div>'+
       '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'+
+    '</div>';
+    return;
+  }
+  // Signed in, but the first load failed twice (R-323): say so, and keep the session — never the login page.
+  if(STATE.loadFailed&&STATE.user&&STATE.token){
+    _resetShell();
+    root.innerHTML='<div id="app-loadfail" role="alert" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg);padding:0 16px;text-align:center">'+
+      '<div class="fs-15 c-text">Signed in as '+htmlEsc(STATE.user.name||STATE.user.email||'you')+'</div>'+
+      '<div class="fs-13_5 c-text3" style="max-width:440px">'+htmlEsc(STATE.loadFailed)+'</div>'+
+      '<div style="display:flex;gap:10px"><button class="btn btn-primary" onclick="loadAppDataRetry()">Try again</button>'+
+      '<button class="btn" onclick="doLogout()">Sign out</button></div>'+
     '</div>';
     return;
   }

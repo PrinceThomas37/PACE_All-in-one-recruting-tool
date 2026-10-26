@@ -2,7 +2,11 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0175** · contract C-0038 · roadmap **R-321** (next `R-322`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0176** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+
+## START HERE (26 Oct, Session 53, late night) — sign-in bounce fixed on the branch (R-323); server load is R-324
+
+D-0176: admin's part in clients is control, not opening jobs — D-0174 stands for admins (managers same, as built). Ash's "Log In sends me back to login" = a busy server failing one first-load call and PACE signing her out; fixed on #369 (keep sign-in, retry once, Try again screen). The root cause — GET /jobs 17–32 s, +100 MB per call, a listener leak warning — is R-324, plan first. #369 still waits on the owner's "merge". R-309 (Martin): the "Add as a lead" idea was mine; owner asked where it came from.
 
 ## START HERE (26 Oct, Session 53, evening) — P0 LIVE (#368), P1 built on the dev branch (R-315)
 

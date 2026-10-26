@@ -145,7 +145,9 @@ window.loadLeadPosting=function(id){
 };
 function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||[]).forEach(function(c){out.push({id:c.id,job_id:c.job_id,first_name:c.first_name,last_name:c.last_name||'',designation:c.designation||'',email:c.email||'',phone:c.phone||'',extra_emails:Array.isArray(c.extra_emails)?c.extra_emails:[],extra_phones:Array.isArray(c.extra_phones)?c.extra_phones:[],linkedin:c.linkedin||'',is_primary:!!c.is_primary,email_status:c.email_status||'valid',ooo_until:c.ooo_until||null});});});return out;}
 
-function loadAppData(){
+function loadAppData(opts){
+  opts=opts||{};
+  STATE.loadFailed=null;
   STATE.loading=true;render();
   _jobsTag=null;   // a full load: never answered "not changed"
   var calls=[apiGet('/users'),apiGetJobsList(),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
@@ -227,7 +229,7 @@ function loadAppData(){
         scheduleRender();
       }).catch(function(){});
     }
-    STATE.loading=false;render();
+    STATE.loading=false;STATE.loadNote=null;render();
     // Somebody whose sign-in ran out comes back to the place they were in (R-118, 23-auth.js).
     if(window.resumeWhereLeftOff)resumeWhereLeftOff();
     // Auto-start progress poll for BD/BD_Lead so bar appears without any button click
@@ -235,11 +237,27 @@ function loadAppData(){
     // Start background polling to keep UI in sync (every 30s)
     startBackgroundPoll();
   }).catch(function(err){
-    STATE.loading=false;STATE.user=null;STATE.token=null;
-    sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');
-    showToast('Could not connect: '+err.message,'error');render();
+    // A FIRST LOAD THAT FAILS NEVER THROWS AWAY A GOOD SIGN-IN (R-323, 26 Oct: Ash pressed Log In and landed back on the login
+    // page; another browser worked). The password was right — what failed was one of the calls above, on a server busy enough
+    // that the lead list took 30 seconds. This used to sign the person out and say why in a toast that vanished, so it looked
+    // like the password had been refused. Now: a sign-in that really ran out goes through sessionExpired as before; anything
+    // else keeps the session, tries once more on its own, and then says plainly what happened with Try again / Sign out.
+    if(err&&err.expired)return;
+    if(!STATE.token)return;
+    if(!opts.retried){
+      STATE.loadNote='PACE is busy — trying again…';render();
+      return new Promise(function(res){setTimeout(res,LOAD_RETRY_MS);}).then(function(){
+        if(!STATE.token)return;   // signed out while we waited
+        return loadAppData({retried:true});
+      });
+    }
+    STATE.loading=false;STATE.loadNote=null;
+    STATE.loadFailed='Your sign-in worked, but PACE could not load your data'+(err&&err.message?' ('+err.message+')':'')+'. This is usually the server being busy — press Try again in a moment.';
+    render();
   });
 }
+var LOAD_RETRY_MS=4000;
+window.loadAppDataRetry=function(){STATE.loadFailed=null;loadAppData();};
 function applyJobsList(jl){
   if(!jl)return false;   // R-302: nothing changed — what is on screen stays, and nothing is redrawn
   var raw=jl.data||[],p=STATE._pendingStageChanges||{};

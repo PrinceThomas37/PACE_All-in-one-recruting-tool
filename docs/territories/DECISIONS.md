@@ -2251,3 +2251,8 @@ Asked whether the company cooldown (R-311) was meant only to stop two different 
 ### D-0175 — No contact-data vendor is hard-wired: every company brings its own (26 Oct 2026)
 
 On the Apollo compose redesign (R-320), the owner: "every company brings in their own apollo or zoominfo or any extension that pulls contact leads, don't code it only for apollo, what if not everyone has apollo, make sure that none of the codes anywhere in the system is being coded only for apollo. it should be for any application with api key that can pull contact information from its database, different companies use different applications." So: one contact-data layer (search companies, search people, reveal an email/phone) with an adapter per vendor and a per-organisation choice + key (D-0055); screens say what the organisation's provider can do, never "Apollo". Measured 26 Oct: ~370 Apollo references in 17 files (routes/poc.js, routes/finder.js, services/people-apollo.js, services/lead-finder.js, the Find Leads and POC finder screens, admin integrations). R-321; R-320 waits for it.
+
+### D-0176 — An admin's part in clients is control, not opening jobs (26 Oct 2026)
+
+Asked whether an admin (or manager) who does not own a client should also be refused when opening a job for it under D-0174, the owner: "the admin job is just control not creation of any job." So D-0174 stands as built: only the client's owner opens jobs for that client; an admin who is not the owner is refused like anyone else. The admin's tools are control — reassigning the client or its jobs, reviewing, the "take over" flow — and those are untouched. Managers were not named separately; they are treated the same as built (refused unless they own the client) until the owner says otherwise.
+
