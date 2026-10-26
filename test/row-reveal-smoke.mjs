@@ -214,6 +214,10 @@ try{
   await page.waitForTimeout(300);
   await page.evaluate(()=>{ const sel=document.querySelector('#content tr.row-exp select[aria-label="Status"]');
     if(sel){ sel.value='On Hold'; sel.dispatchEvent(new Event('change',{bubbles:true})); } });
+  await page.waitForTimeout(300);
+  // R-315: choosing a status opens a note window first; Save makes the change (with no note here).
+  step('Jobs: choosing a status asks for a note before saving (nothing sent yet)', await page.evaluate(()=>!!document.getElementById('bd-status-note')) && !calls.some(c=>c.m==='PUT' && c.p==='/job-orders/jo1'));
+  await page.evaluate(()=>bdStatusSave());
   await page.waitForTimeout(500);
   const put = calls.filter(c=>c.m==='PUT' && c.p==='/job-orders/jo1').pop();
   const afterPut = await panelInfo('jo1');
