@@ -413,7 +413,7 @@
     if(m.threadId===tid && m.thread) return;   // already have it
     m.threadId=tid;
     var th=_tc[acct+':'+tid];
-    if(th){ m.thread=th; paint(); return; }
+    if(th){ m.thread=th; paint(); loadThreadFiles(acct, th); return; }
     m.thread=null;
     apiGet('/mailbox/'+enc(acct)+'/threads/'+enc(tid))
       .then(function(list){
@@ -421,6 +421,7 @@
         if(m.threadId!==tid)return;
         m.thread=list||[];
         paint();
+        loadThreadFiles(acct, m.thread);
       })
       .catch(function(){
         // No thread is not an error — a one-message conversation is the common
@@ -429,6 +430,23 @@
       });
   }
 
+  // R-315 (owner: "I still don't get to see the documents the clients shared in the thread, like Gmail or Outlook"):
+  // the other messages of a conversation are summaries, so a client's attachment on an EARLIER message never showed —
+  // only the open message's files did. The summary already says which messages carry files (has_attachments); for those
+  // (at most THREAD_FILE_MAX per conversation, so a long thread does not become many reads on the free server) the
+  // message is read once — which does NOT mark it read — and its file names are kept here, by mailbox and message.
+  var _tf={}, THREAD_FILE_MAX=6;
+  function loadThreadFiles(acct, list){
+    if(!Array.isArray(list)) return;
+    var m=M(), want=list.filter(function(t){ return t.has_attachments&&t.id!==m.selectedId&&_tf[acct+':'+t.id]===undefined; }).slice(0,THREAD_FILE_MAX);
+    want.forEach(function(t){
+      var k=acct+':'+t.id; _tf[k]=null;                  // asked; null = on its way
+      apiGet('/mailbox/'+enc(acct)+'/messages/'+enc(t.id))
+        .then(function(full){ _tf[k]=((full&&full.attachments)||[]).filter(function(a){ return !a.inline; }); paint(); })
+        .catch(function(){ _tf[k]=[]; });
+    });
+  }
+  function threadFiles(t){ return _tf[M().activeId+':'+t.id]; }
   function markRead(id, read, quiet){
     var m=M(), acct=acctOf(id);
     // A conversation row is unread while ANY of its messages is: opening it reads them all (below); this message
@@ -1661,6 +1679,26 @@
       return d.toLocaleDateString([], {day:'numeric',month:'short',year:'2-digit'});
     }catch(e){ return ''; }
   }
+  // R-315 (owner: "match Outlook — Today, Yesterday, last week, 2 weeks ago"): which day-group a message falls in, on the
+  // viewer's own calendar. Weeks start on Monday; beyond three weeks back it is "Last month", then "Older".
+  function dayGroup(s, now){
+    var d=new Date(s); if(!s||isNaN(d)) return 'Older';
+    now=now||new Date();
+    var day=function(x){ return new Date(x.getFullYear(),x.getMonth(),x.getDate()); };
+    var today=day(now), that=day(d), diff=Math.round((today-that)/86400000);
+    if(diff<=0) return 'Today';
+    if(diff===1) return 'Yesterday';
+    var weekStart=new Date(today); weekStart.setDate(today.getDate()-((today.getDay()+6)%7));   // this week's Monday
+    if(that>=weekStart) return 'Earlier this week';
+    var weeksBack=Math.ceil((weekStart-that)/(7*86400000));
+    if(weeksBack===1) return 'Last week';
+    if(weeksBack===2) return 'Two weeks ago';
+    if(weeksBack===3) return 'Three weeks ago';
+    var lastMonth=new Date(today.getFullYear(),today.getMonth()-1,1);
+    if(that>=lastMonth) return that.getMonth()===today.getMonth()?'Earlier this month':'Last month';
+    return 'Older';
+  }
+  window.mbDayGroup=dayGroup;
   function fmtFull(s){ if(!s)return ''; try{ return new Date(s).toLocaleString([], {dateStyle:'medium',timeStyle:'short'}); }catch(e){ return ''; } }
   function who(a){ return (a&&(a.name||a.email))||'(unknown)'; }
   function fmtSize(n){
@@ -2073,7 +2111,15 @@
     if(m.listLoading&&m.messages===null) body='<div class="dt-empty">Loading messages…</div>';
     else if(m.error&&!all.length)        body='<div class="dt-empty" style="color:var(--red)">'+esc(m.error)+'</div>';
     else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'” in any folder':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
-    else body=selectHead(rows)+rows.map(function(x){ return renderRow(x, m.selectedId===x.id||!!(x.message_ids&&x.message_ids.indexOf(m.selectedId)>=0)); }).join('');
+    else {
+      // A day heading wherever the group changes (R-315). The rows stay in the order the mailbox gave them.
+      var now=new Date(), last=null;
+      body=selectHead(rows)+rows.map(function(x){
+        var g=dayGroup(x.date, now), head=(g!==last)?'<div class="mb-day" role="heading" aria-level="3">'+esc(g)+'</div>':'';
+        last=g;
+        return head+renderRow(x, m.selectedId===x.id||!!(x.message_ids&&x.message_ids.indexOf(m.selectedId)>=0));
+      }).join('');
+    }
     // An email ID All inboxes could not read is said, never silently left out.
     if(m.all&&(m.skipped||[]).length) body='<div class="mb-skipped">Not shown: '+m.skipped.map(function(k){ return '<b>'+esc(k.email)+'</b> ('+esc(k.reason)+')'; }).join(' · ')+'</div>'+body;
 
@@ -2305,6 +2351,7 @@
         '<div class="mb-msg-b">'+
           '<div class="mb-from fs-13">'+esc(who(t.from))+'</div>'+
           '<div class="mb-collapsed">'+esc(t.preview||'(no preview)')+'</div>'+
+          renderThreadFiles(t)+
         '</div>'+
         '<div class="mb-msg-when">'+esc(fmtWhen(t.date))+'</div>'+
         // Answer THIS message of the conversation, not only the open one.
@@ -2315,6 +2362,20 @@
         '</div>'+
       '</div>'+
     '</div>';
+  }
+
+  // The files an earlier message carries, as download buttons on its summary (a click downloads; it does not open the message).
+  function renderThreadFiles(t){
+    if(!t.has_attachments) return '';
+    var files=threadFiles(t), m=M();
+    if(!files) return '<div class="mb-att mb-att-thread"><span class="fs-12 c-text3">📎 Attachments — '+(files===null?'loading…':'open this message to see them')+'</span></div>';
+    if(!files.length) return '';
+    return '<div class="mb-att mb-att-thread">'+files.map(function(a){
+      var url=API_URL+'/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(t.id)+
+        '/attachments/'+encodeURIComponent(a.id)+'?name='+encodeURIComponent(a.name||'attachment');
+      return '<button class="btn btn-xs btn-outline" onclick="event.stopPropagation();mbDownload(\''+escAttr(url)+'\',\''+escAttr(a.name||'attachment')+'\')">'+
+        '📎 '+esc(a.name||'attachment')+' <span class="c-text3">'+fmtSize(a.size)+'</span></button>';
+    }).join('')+'</div>';
   }
 
   function renderBlockedImagesBar(x){
@@ -2359,6 +2420,37 @@
   // means the body cannot run code and cannot reach this origin even if the
   // server-side sanitiser missed something. allow-popups is the one grant, so
   // that clicking a link in an email still works.
+  // R-315 (owner: "when I click on the email ID, Outlook opens up — I want compose in PACE"): a mailto: link in an email
+  // becomes a link to THIS page with #pace-compose=<address>, and PACE's New message window opens on it (the hashchange
+  // listener below). It is the one link allowed to change the top page, and it can only point here: the body is parsed
+  // INERT (DOMParser runs nothing) and every other link is forced to a new tab, whatever target the email gave it — the
+  // frame gets only allow-top-navigation-by-user-activation, so even our own link needs the person's click.
+  function routeMailtoLinks(html){
+    if(!html||typeof DOMParser==='undefined') return html||'';
+    var here=location.origin+location.pathname+location.search;
+    var d=new DOMParser().parseFromString('<!doctype html><body>'+html+'</body>','text/html');
+    Array.prototype.forEach.call(d.querySelectorAll('a,area'),function(el){
+      var href=String(el.getAttribute('href')||'');
+      var m=/^\s*mailto:([^?#]*)/i.exec(href), addr='';
+      if(m){ try{ addr=decodeURIComponent(m[1]).split(/[,;]/)[0].trim(); }catch(_){ addr=''; } }
+      if(addr&&/^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']+$/.test(addr)){
+        el.setAttribute('href',here+'#pace-compose='+encodeURIComponent(addr));
+        el.setAttribute('target','_top');
+        el.setAttribute('title','Write to '+addr+' in PACE');
+      } else {
+        el.setAttribute('target','_blank');
+        el.setAttribute('rel','noopener noreferrer nofollow');
+      }
+    });
+    return d.body.innerHTML;
+  }
+  window.addEventListener('hashchange',function(){
+    var h=String(location.hash||'');
+    if(h.indexOf('#pace-compose=')!==0) return;
+    var to=''; try{ to=decodeURIComponent(h.slice('#pace-compose='.length)); }catch(_){}
+    try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
+    if(to) mbComposeTo(to);
+  });
   function renderBody(x){
     var doc='<!doctype html><html><head><meta charset="utf-8">'+
       '<style>'+
@@ -2369,7 +2461,7 @@
         'blockquote{border-left:2px solid #E2E8F0;margin:8px 0;padding-left:12px;color:#475569}'+
         'a{color:#1E7A3C}'+
         'pre{white-space:pre-wrap;word-wrap:break-word}'+
-      '</style></head><body>'+(x.body_html||'<i>(no content)</i>')+'</body></html>';
+      '</style></head><body>'+(routeMailtoLinks(x.body_html)||'<i>(no content)</i>')+'</body></html>';
     // The height is FIXED and the body scrolls inside itself. Auto-sizing to
     // the content would mean measuring the iframe from the parent, which needs
     // allow-same-origin — the very grant that keeps a hostile email boxed in.
@@ -2377,7 +2469,7 @@
     // string: if it were, the thread arriving would rewrite the iframe — the
     // very thing that made the reading pane blink and lose its scroll.
     return '<div class="mb-body">'+
-      '<iframe title="Message body" sandbox="allow-popups allow-popups-to-escape-sandbox" '+
+      '<iframe title="Message body" sandbox="allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation" '+
         'srcdoc="'+escAttr(doc)+'"></iframe>'+
     '</div>';
   }

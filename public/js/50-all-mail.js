@@ -68,6 +68,59 @@ window.amFull = function (id, jobId, ev) {
     a.full[id] = { error: (e && e.message) || 'Could not open it', open: true }; scheduleRender();
   });
 };
+// ── WHAT WENT OUT, COUNTED (R-315) ─────────────────────────────────────────
+// The owner's colleague read "Sent 400" as a total; it was the list's page limit. On the Sent view this card gives the
+// real numbers for a range of days — first emails, each follow-up, one-offs, candidate batches — from
+// GET /email/sent-summary. The range is the viewer's OWN days (local midnight to midnight).
+function amDayStart(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function amRange(preset, fromStr, toStr) {
+  var today = amDayStart(new Date()), day = 86400000;
+  if (preset === 'yesterday') return { from: new Date(today - day), to: today };
+  if (preset === 'week') return { from: new Date(today - 6 * day), to: new Date(+today + day) };
+  if (preset === 'month') return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(+today + day) };
+  if (preset === 'custom') {
+    var f = fromStr ? new Date(fromStr + 'T00:00:00') : null, t = toStr ? new Date(toStr + 'T00:00:00') : null;
+    if (f && t && !isNaN(f) && !isNaN(t)) return { from: f, to: new Date(+t + day) };
+    return null;
+  }
+  return { from: today, to: new Date(+today + day) };
+}
+function amSum() { var a = amState(); if (!a.sum) a.sum = { preset: 'today', from: '', to: '', data: null, loading: false, error: null }; return a.sum; }
+window.amSumLoad = function () {
+  var s = amSum(), r = amRange(s.preset, s.from, s.to);
+  if (!r) { s.data = null; s.error = 'Pick both dates.'; scheduleRender(); return; }
+  s.loading = true; s.error = null; var ask = s.ask = Date.now();
+  apiGet('/email/sent-summary?from=' + encodeURIComponent(r.from.toISOString()) + '&to=' + encodeURIComponent(r.to.toISOString())).then(function (d) {
+    if (s.ask !== ask) return; s.data = d; s.loading = false; scheduleRender();
+  }).catch(function (e) { if (s.ask !== ask) return; s.loading = false; s.error = (e && e.message) || String(e); scheduleRender(); });
+};
+window.amSumPreset = function (p) { var s = amSum(); s.preset = p; if (p !== 'custom') amSumLoad(); else scheduleRender(); };
+window.amSumDate = function (k, v) { var s = amSum(); s[k] = v; s.preset = 'custom'; if (s.from && s.to) amSumLoad(); };
+function amSumCard() {
+  var s = amSum();
+  if (!s.data && !s.loading && !s.error) amSumLoad();
+  var presets = [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'Last 7 days'], ['month', 'This month'], ['custom', 'Pick dates']];
+  var chips = presets.map(function (p) {
+    return '<button class="am-src' + (s.preset === p[0] ? ' is-on' : '') + '" onclick="amSumPreset(\'' + p[0] + '\')">' + p[1] + '</button>';
+  }).join('');
+  var dates = s.preset === 'custom'
+    ? '<span class="am-sum-dates"><input type="date" class="inp" aria-label="From" value="' + htmlEsc(s.from) + '" onchange="amSumDate(\'from\',this.value)"> to ' +
+      '<input type="date" class="inp" aria-label="To" value="' + htmlEsc(s.to) + '" onchange="amSumDate(\'to\',this.value)"></span>' : '';
+  var body;
+  if (s.error) body = '<div class="fs-12_5 c-red">' + htmlEsc(s.error) + '</div>';
+  else if (s.loading && !s.data) body = '<div class="fs-12_5 c-text3">Counting…</div>';
+  else if (s.data && !s.data.total) body = '<div class="fs-12_5 c-text3">Nothing went out in this range.</div>';
+  else if (s.data) body = '<div class="am-sum-steps">' + s.data.steps.map(function (x) {
+      return '<div class="am-sum-step"><b>' + x.count + '</b><span>' + htmlEsc(x.label) + '</span></div>';
+    }).join('') + '<div class="am-sum-step am-sum-total"><b>' + s.data.total + '</b><span>Total sent</span></div></div>';
+  else body = '';
+  return '<div class="card am-sum">' +
+    '<div class="am-sum-head"><span class="fw6 fs-13">What went out</span><span class="am-srcs am-sum-presets">' + chips + '</span>' + dates + '</div>' +
+    body +
+    '<div class="fs-11_5 c-text3 am-sum-note">Counted in full for the days chosen. The list below shows the latest emails (up to 400 of each kind), so its numbers are what is loaded, not totals.</div>' +
+  '</div>';
+}
+
 window.amSource = function (s) { var a = amState(); a.source = s; a.page = 0; a.data = null; loadAllMail(true); };
 window.amShowAll = function () { var a = amState(); a.showAll = true; a.page = 0; a.data = null; loadAllMail(true); };
 window.amToggle = function (id) {
@@ -122,6 +175,8 @@ window.renderAllMailBody = function () {
         srcBtn('candidates', AM_SOURCES.candidates.lbl, bs.candidates || 0) +
       '</div>'
     : '');
+
+  if (a.direction === 'out') filters = amSumCard() + filters;
 
   var rows = items.map(function (it) {
     var s = AM_SOURCES[it.source] || AM_SOURCES.leads;

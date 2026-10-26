@@ -168,6 +168,11 @@ function renderReminders(){
           // button disappears instead of composing a whole email and then being
           // refused at the last step. The reason is printed below, not hidden.
           (r.reminder_type==='setup'?'<button class="btn btn-primary btn-sm" onclick="goPage(\'mysetup\')">Open My Setup</button>':'')+
+          // R-315: a "Reconnect your mailbox" reminder carries the button itself (owner: "reconnect option should be shown
+          // there only") — no trip to Today's warning. It is only for the mailbox's owner, which is who the reminder is for.
+          (isReconnectReminder(r)?'<button class="btn btn-primary btn-sm" data-email="'+escAttr(r.company_name)+'" onclick="reminderReconnect(\''+r.id+'\',this.dataset.email,this)">Reconnect</button>':'')+
+          // R-309 / D-0178: a reminder about someone PACE does not know can become a lead — yours.
+          (canAddReminderAsLead(r)?'<button class="btn btn-outline btn-sm" onclick="reminderAddLead(\''+r.id+'\')">'+ico('plus',12)+' Add as lead</button>':'')+
           (toEmail&&cmp.can_send!==false?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+
@@ -205,7 +210,8 @@ function renderReminders(){
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.return_date||'')+'</td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+'</td>'+
       '<td class="fs-12" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.note||'')+'</td>'+
-      '<td><button class="btn btn-outline btn-xs" onclick="dismissReminder(\''+r.id+'\')">Remove</button></td>'+
+      '<td style="white-space:nowrap">'+(canAddReminderAsLead(r)?'<button class="btn btn-outline btn-xs" onclick="reminderAddLead(\''+r.id+'\')">Add as lead</button> ':'')+
+        '<button class="btn btn-outline btn-xs" onclick="dismissReminder(\''+r.id+'\')">Remove</button></td>'+
     '</tr>';
   }).join('');
 
@@ -274,6 +280,60 @@ function renderReminders(){
 
 // ── Add reminder ──────────────────────────────
 function remField(lbl,inner){return '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em">'+lbl+'</label>'+inner+'</div>';}
+// A reminder that asks the person to reconnect a mailbox: the title the manager's prompt uses (routes/mailbox-alerts.js
+// askedTitle) and the mailbox's address in company_name.
+// R-309 / D-0178 (owner 26 Oct: "show a button of add it as new lead … with the user who creates the email as owner").
+// The SAME test the server makes before saving (services/reminder-lead.js reminderLeadOffer): not on a lead yet, about a person,
+// with an email address — and only for someone who works leads.
+function canAddReminderAsLead(r){
+  if(!r||r.job_id||r.contact_id||r.reminder_type==='setup'||isReconnectReminder(r))return false;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(r.email||'').trim()))return false;
+  return !!(STATE.user&&userHasAnyRole(STATE.user,'bd','bd_lead','associate_director','director','admin'));
+}
+// Opens the ordinary Add Lead window, filled in from the reminder: the person, their email, the company (yours if PACE has it,
+// else a new one by that name). The position is the one thing the reminder does not know.
+window.reminderAddLead=function(id){
+  var r=(STATE.reminders||[]).find(function(x){return x.id===id;});
+  if(!r)return;
+  var a=window.addLeadFresh();
+  var name=String(r.contact_name||'').trim().split(/\s+/);
+  a.contacts[0].first_name=name[0]||'';
+  a.contacts[0].last_name=name.slice(1).join(' ');
+  a.contacts[0].email=String(r.email||'').trim();
+  var coName=String(r.company_name||'').trim();
+  var co=coName&&(STATE.companies||[]).find(function(c){return String(c.name||'').trim().toLowerCase()===coName.toLowerCase();});
+  if(co){a.mode='existing';a.company={id:co.id,name:co.name,industry:co.ind||'',location:co.loc||''};a.coText=co.name;}
+  else{a.mode=coName?'new':'existing';a.newCo.name=coName;}
+  a.src='Other';
+  a.fromReminder={id:r.id,who:String(r.contact_name||r.email||'').trim()};
+  STATE.addLead=a;STATE.modal={type:'addJob'};render();
+  setTimeout(function(){var p=document.getElementById('al-pos');if(p)p.focus();},50);
+};
+function isReconnectReminder(r){ return !!(r&&r.contact_name==='Reconnect your mailbox'&&/@/.test(String(r.company_name||''))); }
+// Find THIS person's mailbox with that address, open its provider's sign-in, and close the reminder once it succeeds.
+window.reminderReconnect=function(reminderId,email,btn){
+  var uid=STATE.user&&STATE.user.id; if(!uid) return;
+  var addr=String(email||'').trim().toLowerCase();
+  if(btn){ btn.disabled=true; btn.textContent='Opening…'; }
+  var reset=function(){ if(btn){ btn.disabled=false; btn.textContent='Reconnect'; } };
+  apiGet('/users/'+uid+'/emails').then(function(list){
+    var mb=(list||[]).filter(function(m){ return String(m.email_address||'').toLowerCase()===addr; })[0];
+    if(!mb){ reset(); showToast('That mailbox is not connected to your account any more — nothing to reconnect.','warning'); return; }
+    var done=function(e){
+      if(e.data&&(e.data.type==='ms_oauth_success'||e.data.type==='google_oauth_success')){
+        window.removeEventListener('message',done);
+        showToast(mb.email_address+' is connected again','success');
+        dismissReminder(reminderId);
+        if(typeof loadMailboxAlerts==='function') loadMailboxAlerts(true);
+      }
+    };
+    reset();
+    // An app-password mailbox has no sign-in window: its password is re-entered in My Setup.
+    if(String(mb.platform||'').toLowerCase()==='smtp'){ goPage('mysetup'); return; }
+    window.addEventListener('message',done);
+    if(String(mb.platform||'').toLowerCase()==='gmail') connectGmailUserEmail(uid,mb.id); else connectMicrosoftUserEmail(uid,mb.id);
+  }).catch(function(e){ reset(); showToast('Could not open the sign-in: '+((e&&e.message)||e),'error'); });
+};
 window.remOpenAdd=function(){
   var t=todayIST();
   STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">'+

@@ -33,6 +33,7 @@ try{
         const dir=(u.match(/direction=(\w+)/)||[])[1]||'';
         const items=dir==='in'?[GOT,GOT2]:dir==='out'?[SENT]:[GOT,SENT,GOT2];
         return Promise.resolve({items,counts:{hidden:0},page:0,page_size:25,pages:1,horizon_days:90,by_source:{leads:1,individual:0,candidates:0,replies:2}}); }
+      if(/^\/email\/sent-summary/.test(u)) return Promise.resolve({total:1693,steps:[{step:'first',label:'First email',count:1302},{step:'fu1',label:'Follow-up 1',count:250},{step:'fu2',label:'Follow-up 2',count:120},{step:'oneoff',label:'One-off',count:21}]});
       if(/\/intel\/messages\/.*\/full/.test(u)) return Promise.resolve({text:'FULL TEXT of the reply, with the whole thread'});
       return Promise.resolve([]); };
     STATE.allMail=null; STATE.pendingEmails=[]; STATE.page='email'; STATE.emailTab='sent'; render();
@@ -54,6 +55,15 @@ try{
   await ev(()=>amDirection('out')); await page.waitForTimeout(300);
   x=await txt();
   step('Sent shows only what went out, and now offers the kind-of-send buttons', (await ev(()=>document.querySelectorAll('.am-row').length))===1 && /Every kind/.test(x) && /Lead outreach/.test(x));
+  // R-315: "Sent 400" was the list's page limit; the Sent view now counts what really went out, by step, for chosen days.
+  await page.waitForTimeout(300); x=await txt();
+  const sumAsk=await ev(()=>__calls.filter(c=>/^\/email\/sent-summary/.test(c)));
+  step('R-315: Sent shows "What went out" — real counts by step (First email 1302, Follow-up 1 250, Follow-up 2 120) and the total', /What went out/.test(x) && /1302\s*First email/.test(x) && /250\s*Follow-up 1/.test(x) && /120\s*Follow-up 2/.test(x) && /1693\s*Total sent/.test(x), x.slice(0,400));
+  step('R-315: …for TODAY by default: the viewer\'s own midnight to the next', sumAsk.length>=1 && await ev((u)=>{ const p=new URL('http://x'+u).searchParams; const f=new Date(p.get('from')), t=new Date(p.get('to')); return f.getHours()===0 && f.getMinutes()===0 && (t-f)===86400000 && f.toDateString()===new Date().toDateString(); }, sumAsk[sumAsk.length-1]), JSON.stringify(sumAsk));
+  await ev(()=>amSumPreset('yesterday')); await page.waitForTimeout(200);
+  step('R-315: "Yesterday" asks for yesterday', await ev(()=>{ const u=__calls.filter(c=>/sent-summary/.test(c)).pop(); const f=new Date(new URL('http://x'+u).searchParams.get('from')); const y=new Date(); y.setDate(y.getDate()-1); return f.toDateString()===y.toDateString(); }));
+  step('R-315: …and the card says the list below is what is loaded, not a total', /not totals/.test(await txt()));
+  if(SHOTS){ fs.mkdirSync(SHOTS,{recursive:true}); await page.screenshot({path:path.join(SHOTS,'all-email-sent-summary.png'),clip:{x:0,y:0,width:1280,height:520}}); }
   await ev(()=>amDirection('in')); await page.waitForTimeout(300);
 
   await ev(()=>document.querySelector('.am-head').click()); await page.waitForTimeout(150);

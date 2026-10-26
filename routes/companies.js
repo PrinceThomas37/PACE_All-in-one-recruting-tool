@@ -10,6 +10,7 @@ const companyCooldown = require('../services/company-cooldown');
 const companyMerge = require('../services/company-merge');
 const { getSetting } = require('../config/settings');
 const own = require('../services/ownership');
+const clientJobRule = require('../services/client-job-rule');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -39,18 +40,7 @@ module.exports = (ctx) => {
   // already filtered to live rows that actually have an owner, capped at 1 —
   // there is nothing after the first row that could change the ladder's answer.
   async function clientOwnerId(req, companyId) {
-    const { data: co } = await withOrg(supabase.from('companies')
-      .select('id,created_by').eq('id', companyId), req).maybeSingle();
-    if (!co) return null;
-    const { data: jos } = await withOrg(supabase.from('job_orders')
-      .select('bd_manager_id,created_at,company_id,deleted_at').eq('company_id', companyId)
-      .is('deleted_at', null).not('bd_manager_id', 'is', null)
-      .order('created_at', { ascending: false }).limit(1), req);
-    const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('assigned_to_bd,created_at,company_id,deleted_at').eq('company_id', companyId)
-      .is('deleted_at', null).not('assigned_to_bd', 'is', null)
-      .order('created_at', { ascending: false }).limit(1), req);
-    return own.clientOwnerFrom({ company: co, jobOrders: jos || [], leads: leads || [] });
+    return clientJobRule.loadClientOwnerId({ supabase, withOrg, req, companyId });
   }
 
   // Loads the company (org-scoped, 404 if foreign/missing) and, unless the
@@ -364,12 +354,20 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
     const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
 
-    // Your own client is not a re-add (R-311) — the same exemption POST /job-orders applies, so the form never warns
-    // about a block the save would not make.
-    const days = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
-    const state = companyCooldown.ownClientExempt(last, scope) ? null : companyCooldown.cooldownState({
-      lastLeadAt: last && last.created_at, now: new Date(), days,
-    });
+    // D-0174 — the same rule POST /job-orders applies (services/client-job-rule.js), so the form never warns about a block
+    // the save would not make, and never stays quiet about one it would: the owner always may; anyone else is told whose
+    // client it is; only a client nobody owns runs the cooldown.
+    const ownerId = await clientOwnerId(req, company.id);
+    let ownerName = null;
+    if (ownerId && ownerId !== req.user.id) {
+      const { data: u } = await supabase.from('users').select('name').eq('id', ownerId).maybeSingle();
+      ownerName = u && u.name;
+    }
+    const days = ownerId ? 0 : await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
+    const state = ownerId ? null : companyCooldown.cooldownState({ lastLeadAt: last && last.created_at, now: new Date(), days });
+    const callerManagesOwner = clientJobRule.callerManages({ ownerId, callerId: req.user.id, roles: req.user.roles || [req.user.role],
+      chainIds: chain || (ownerId && ownerId !== req.user.id ? await reportingChainIds(req.user.id, orgIdFor(req)) : []) });
+    const verdict = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: company.name, cooldownBlocked: !!state, callerManagesOwner });
     const visibleRows = rows.filter(r => own.canSeeLead(r, scope));
 
     // The POCs already known at this client, across the leads the viewer may
@@ -404,8 +402,12 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
       address,
       lead_count: rows.length,
       contacts,
+      // D-0177: a manager opening a job for a team member's client is told whose pipeline it goes into.
+      for_owner: verdict.why === 'manager' ? { id: ownerId, name: ownerName || null } : null,
       // `blocked` is the answer the form acts on; the sentence is what it shows.
-      cooldown: state
+      cooldown: verdict.why === 'not_owner'
+        ? { blocked: true, reason: 'client_owner', sentence: verdict.sentence }
+        : state
         ? {
             blocked: true, days_left: state.daysLeft, days_ago: state.daysAgo,
             sentence: companyCooldown.cooldownSentence(state, {

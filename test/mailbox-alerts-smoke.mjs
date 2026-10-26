@@ -176,7 +176,7 @@ step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
   let x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-rep' } });
   step('the manager\'s "Remind Raj" puts a task on RAJ\'s list, naming who asked', x.code === 201 && written.reminders.length === 1 && written.reminders[0].user_id === 'u-rep' &&
     /Mona asked you to pick this up/.test(written.reminders[0].note) && /raj@a.com/.test(written.reminders[0].note) && written.reminders[0].reminder_type === 'manager_prompt', JSON.stringify(written.reminders[0]));
-  step('…carrying the plain-words reason and what to do', /withdrew PACE's permission/.test(written.reminders[0].note) && /press Reconnect/.test(written.reminders[0].note));
+  step('…carrying the plain-words reason and what to do', /withdrew PACE's permission/.test(written.reminders[0].note) && /Press Reconnect on this reminder/.test(written.reminders[0].note));
   x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-rep' } });
   step('asking twice does not pile a second task on Raj', x.out.already === true && written.reminders.length === 1);
   const list = await run('get', '/mailboxes/alerts', mgr);

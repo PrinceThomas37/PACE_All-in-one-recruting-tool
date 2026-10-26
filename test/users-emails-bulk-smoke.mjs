@@ -100,7 +100,7 @@ step('signed out → refused', (await call('GET', '/users-emails', null)).code =
 const fs = await import('node:fs');
 const vm = await import('node:vm');
 const api = fs.readFileSync(new URL('../public/js/22-api.js', import.meta.url), 'utf8');
-const start = api.indexOf('function loadAppData(){'), endAt = api.indexOf('function refreshJobs(');
+const start = api.indexOf('function loadAppData('), endAt = api.indexOf('function refreshJobs(');   // anchored on the name, not the argument list (R-323 added one)
 const asked = [];
 const resolveFor = (p) => {
   if (p === '/users') return [{ id: 'adm', name: 'A' }, ...Array.from({ length: 9 }, (_, k) => ({ id: 'u' + k, name: 'U' + k }))];

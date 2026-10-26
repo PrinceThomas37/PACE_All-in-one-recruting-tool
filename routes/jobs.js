@@ -27,6 +27,7 @@ const leadDistribution = require('../services/lead-distribution');
 const own = require('../services/ownership');
 const leadPosting = require('../services/lead-posting');
 const leadCheck = require('../services/lead-check');
+const reminderLead = require('../services/reminder-lead');   // a reminder about someone PACE does not know → your lead (R-309, D-0178)
 const listTag = require('../services/list-tag');   // "has anything changed since my last load?" (R-302)
 const { createDb } = require('../models');
 
@@ -423,6 +424,27 @@ router.post('/jobs', auth, async (req, res) => {
   try {
     let { company_id, position, location, source, job_url, stage, notes, assigned_to, is_duplicate, duplicate_of, contacts, salary_range, job_created_date, job_opened_date, bdm_assigned_name, industry: jobIndustry, research } = req.body;
     if (!company_id || !position) return res.status(400).json({ error: 'company_id and position required' });
+    // FROM A REMINDER (R-309, D-0178): the reminder must be the caller's own and not on a lead yet; the lead it becomes is the
+    // caller's from the start (services/reminder-lead.js). Checked before anything is written.
+    let fromReminder = null, ownerPatch = null;
+    if (req.body.from_reminder_id) {
+      if (!hasRole(req, 'bd', 'bd_lead', 'associate_director', 'director', 'admin')) return res.status(403).json({ error: 'Only someone who works leads can make a reminder into a lead.' });
+      const { data: rem } = await withOrg(supabase.from('reminders').select('id,user_id,job_id,contact_id,contact_name,company_name,email,reminder_type')
+        .eq('id', req.body.from_reminder_id).eq('user_id', req.user.id), req).maybeSingle();
+      if (!rem) return res.status(404).json({ error: 'That reminder was not found.' });
+      const why = reminderLead.reminderLeadOffer(rem);
+      if (why) return res.status(409).json({ error: why });
+      // The same person already on a lead in this organisation: say where, rather than make a second copy of them.
+      const { data: dup } = await withOrg(supabase.from('contacts').select('id,job:jobs!inner(id,position,deleted_at,company:companies(name))')
+        .ilike('email', String(rem.email).trim().replace(/[\\%_]/g, (ch) => '\\' + ch)).is('job.deleted_at', null), req).limit(1);
+      if (dup && dup.length) {
+        const j = dup[0].job || {};
+        return res.status(409).json({ error: `${rem.email} is already a contact on a lead in PACE${j.position ? ` (${j.position}${j.company && j.company.name ? ' at ' + j.company.name : ''})` : ''}.`, reason: 'contact_exists' });
+      }
+      const { data: boxes } = await withOrg(supabase.from('user_emails').select('id,is_primary').eq('user_id', req.user.id), req);
+      fromReminder = rem;
+      ownerPatch = reminderLead.leadOwnerFields(req.user.id, reminderLead.mainMailboxId(boxes), new Date());
+    }
     // A paragraph in Found by, a link in Pay…: moved to where it belongs, kept word for word in Notes (services/lead-fields.js).
     const tidy = leadFields.tidyLeadFields({ source, job_url, salary_range, location, position, notes });
     ({ source, job_url, salary_range, location, position, notes } = tidy.fields);
@@ -469,15 +491,24 @@ router.post('/jobs', auth, async (req, res) => {
       job_created_date: job_created_date || null, job_opened_date: job_opened_date || null,
       timezone, freshness, bdm_assigned_name: bdm_assigned_name || null, industry: jobIndustry || null,
       research: researchObj,
+      ...(ownerPatch || {}),
       ...orgStamp(req)
     }).select().single();
     if (error) throw error;
+    let firstContactId = null;
     if (Array.isArray(contacts) && contacts.length) {
       const rows = contacts.map((raw, i) => { const c = contactPoints.tidyImportedContact(raw).contact; return { job_id: job.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email || null, phone: c.phone || null, extra_emails: c.extra_emails || [], extra_phones: c.extra_phones || [], linkedin: c.linkedin || null, is_primary: i === 0, ...orgStamp(req) }; });
       try { await annotateContactEmailStatus(rows); } catch (_) {}
-      await supabase.from('contacts').insert(rows);
+      const { data: made } = await supabase.from('contacts').insert(rows).select('id,email');
+      const want = fromReminder ? String(fromReminder.email).trim().toLowerCase() : '';
+      const hit = (made || []).find((c) => want && String(c.email || '').trim().toLowerCase() === want) || (made || [])[0];
+      firstContactId = hit ? hit.id : null;
     }
-    await logActivity(job.id, null, req.user.id, 'job_created', `Job created: ${position}`, null, { position, stage: job.stage });
+    // The reminder now belongs to the lead it became: it is no longer about "someone PACE does not know".
+    if (fromReminder) {
+      await supabase.from('reminders').update({ job_id: job.id, contact_id: firstContactId, updated_at: new Date() }).eq('id', fromReminder.id);
+    }
+    await logActivity(job.id, null, req.user.id, 'job_created', fromReminder ? `Lead made from a reminder: ${position}` : `Job created: ${position}`, null, { position, stage: job.stage });
     if (research) persistLearnedSkills(jobIndustry, research);
     res.status(201).json(tidy.moved.length ? Object.assign({}, job, { moved: tidy.moved, moved_sentence: leadFields.movedSentence(tidy.moved) }) : job);
   } catch (err) { res.status(500).json({ error: err.message }); }

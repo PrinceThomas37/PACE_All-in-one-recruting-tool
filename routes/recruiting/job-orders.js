@@ -10,6 +10,7 @@ const aiProvider = require('../../services/ai-provider');
 const createCandidateFields = require('../../services/candidate-fields');
 const clientResolve = require('../../services/client-resolve');
 const companyCooldown = require('../../services/company-cooldown');
+const clientJobRule = require('../../services/client-job-rule');
 const { getSetting } = require('../../config/settings');
 const { makeRecorder } = require('../../services/record-history-writer');
 const jobOrderVisibility = require('../../services/job-order-visibility');
@@ -240,25 +241,34 @@ ${text.slice(0, 12000)}`;
         }
       }
 
-      // THE COMPANY RE-ADD COOLDOWN, extended to BD job-order creation by the
-      // owner (Session 26) so one rule covers every way a company enters the
-      // system. A company created a moment ago has no history, so it is skipped
-      // rather than blocked by the lead this very request is about to make.
+      // WHO MAY OPEN A JOB FOR AN EXISTING CLIENT (D-0174, services/client-job-rule.js): the client's OWNER always may, any
+      // number of jobs, no waiting period; anyone else is refused, naming the owner. Only a client NOBODY owns still runs
+      // the company re-add cooldown (owner, Session 26). A company created a moment ago has no history, so it is skipped.
+      let jobOwnerId = null;   // D-0177: set when a manager opens a job for a client of someone under them
       if (!isNewCompany) {
-        const cooldownDays = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
-        const { data: recent } = await withOrg(supabase.from('jobs')
-          .select('position,created_at,created_by,assigned_to_bd,users:users!created_by(name)')
-          .eq('company_id', companyId).is('deleted_at', null), req)
-          .order('created_at', { ascending: false }).limit(1);
-        const last = recent && recent[0];
-        // A second job for YOUR OWN client is not a re-add (R-311): the cooldown stops two different people
-        // approaching one company, not its owner opening another job there.
-        const chain = hasRole(req, 'admin') ? null : await reportingChainIds(req.user.id, orgIdFor(req));
-        const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
-        const state = !companyCooldown.ownClientExempt(last, scope) && companyCooldown.cooldownState({
-          lastLeadAt: last && last.created_at, now: new Date(), days: cooldownDays,
-        });
-        if (state) {
+        const ownerId = await clientJobRule.loadClientOwnerId({ supabase, withOrg, req, companyId });
+        let ownerName = null;
+        if (ownerId && ownerId !== req.user.id) {
+          const { data: u } = await supabase.from('users').select('name').eq('id', ownerId).maybeSingle();
+          ownerName = u && u.name;
+        }
+        let state = null, last = null;
+        if (!ownerId) {
+          const cooldownDays = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
+          const { data: recent } = await withOrg(supabase.from('jobs')
+            .select('position,created_at,created_by,users:users!created_by(name)')
+            .eq('company_id', companyId).is('deleted_at', null), req)
+            .order('created_at', { ascending: false }).limit(1);
+          last = recent && recent[0];
+          state = companyCooldown.cooldownState({ lastLeadAt: last && last.created_at, now: new Date(), days: cooldownDays });
+        }
+        const callerManagesOwner = ownerId && ownerId !== req.user.id
+          ? clientJobRule.callerManages({ ownerId, callerId: req.user.id, roles: req.user.roles || [req.user.role], chainIds: await reportingChainIds(req.user.id, orgIdFor(req)) })
+          : false;
+        const d = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: lead.company_name, cooldownBlocked: !!state, callerManagesOwner });
+        if (d.why === 'not_owner') return res.status(409).json({ error: d.sentence, reason: 'client_owner' });
+        if (d.why === 'manager') jobOwnerId = d.jobOwnerId;
+        if (d.why === 'cooldown') {
           return res.status(409).json({
             error: companyCooldown.cooldownSentence(state, {
               company: lead.company_name || 'This client',
@@ -302,7 +312,9 @@ ${text.slice(0, 12000)}`;
           stage: 'Connected',
           notes: lead.notes || '',
           created_by: req.user.id,
-          assigned_to_bd: req.user.id,
+          // D-0177: a manager opening a job for their team member's client puts it in THAT person's pipeline — the client's
+          // owner is read from these two fields (services/ownership.js clientOwnerFrom), so it must not change hands.
+          assigned_to_bd: jobOwnerId || req.user.id,
           lead_code: leadCode
         }, orgStamp(req))).select().single();
       if (leadErr) throw leadErr;
@@ -330,7 +342,7 @@ ${text.slice(0, 12000)}`;
         job_title: leadRow.position,
         priority: 'Normal',
         status: 'Active',
-        bd_manager_id: job.bd_manager_id || req.user.id,
+        bd_manager_id: job.bd_manager_id || jobOwnerId || req.user.id,
         created_by: req.user.id
       }, pickJobFields(job), orgStamp(req));
       if (!jobRow.job_title) jobRow.job_title = leadRow.position;
@@ -490,7 +502,9 @@ ${text.slice(0, 12000)}`;
       // Record what actually moved, against the row as it was BEFORE the write.
       // Never awaited into the response path beyond this — but it IS awaited, so
       // a history row cannot lose a race with the next edit of the same record.
-      await history.recordFields(req, 'job_order', req.params.id, current || {}, data, JOB_ORDER_TRACKED);
+      // R-315: a note sent with a status change is kept on that change's history row ("why it moved").
+      const statusNote = typeof b.status_note === 'string' ? b.status_note.trim().slice(0, 1000) : '';
+      await history.recordFields(req, 'job_order', req.params.id, current || {}, data, JOB_ORDER_TRACKED, { notes: { status: statusNote || null } });
       // The job changed, so every cached score against it is stale.
       invalidateJobScores(req.params.id);
       res.json(data);

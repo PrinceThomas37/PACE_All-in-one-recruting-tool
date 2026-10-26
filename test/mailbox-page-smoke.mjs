@@ -96,7 +96,7 @@ const FIXTURES = {
     date: new Date(Date.now() - 40 * 60000).toISOString(),
     unread: true, has_attachments: false,
     body_html: '<p>Hi Priya,</p><p>Friday 3pm works for us. Can you share the two profiles before then?</p>'
-      + '<p>Also — is the second candidate open to a hybrid arrangement?</p><p>Thanks,<br>Ada</p>'
+      + '<p>Also — is the second candidate open to a hybrid arrangement?</p><p>Thanks,<br>Ada · <a href="mailto:ada.okafor@fidelity.com?subject=hi">ada.okafor@fidelity.com</a> · <a href="https://evil.test/" target="_top">site</a></p>'
       + '<img data-blocked-src="https://track.test/pixel.gif">',
     has_remote_images: true,
     attachments: [],
@@ -236,6 +236,24 @@ try {
   step('...and cannot reach this origin', !!frame && !/allow-same-origin/.test(frame.sandbox), frame && frame.sandbox);
   step('...but can still open links', !!frame && /allow-popups/.test(frame.sandbox), frame && frame.sandbox);
   step('The body content actually made it into the frame', !!frame && /Friday 3pm works for us/.test(frame.body));
+  // R-315: the list is grouped by day like Outlook (Today / Yesterday / Earlier this week / Last week / Two/Three weeks ago / Last month / Older).
+  const groups = await page.evaluate(() => {
+    const now = new Date(2026, 9, 29, 15, 0);   // Thursday 29 Oct 2026, 3 pm local
+    const at = (y, mo, d, h) => new Date(y, mo, d, h || 10).toISOString();
+    return [at(2026, 9, 29, 1), at(2026, 9, 28, 23), at(2026, 9, 26), at(2026, 9, 25), at(2026, 9, 19), at(2026, 9, 12), at(2026, 9, 5), at(2026, 9, 2), at(2026, 8, 20), at(2026, 7, 31)]
+      .map((d) => mbDayGroup(d, now));
+  });
+  step('R-315: day groups follow the calendar (Mon-start weeks)', groups.join('|') === 'Today|Yesterday|Earlier this week|Last week|Last week|Two weeks ago|Three weeks ago|Earlier this month|Last month|Older', groups.join('|'));
+  const heads = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#mb-list .mb-day')].map((h) => h.innerText.trim()), first: mbDayGroup(STATE.mailbox.messages[0].date) }));
+  step('R-315: the list shows a day heading above its messages', heads.heads.length >= 1 && heads.heads[0].toLowerCase() === heads.first.toLowerCase(), JSON.stringify(heads));
+  // R-315: a mailto: link opens PACE's New message (not Outlook) — the only link that may change the top page, and only by a click.
+  step('R-315: the frame may change the top page only on a click (by-user-activation), never freely', !!frame && /allow-top-navigation-by-user-activation/.test(frame.sandbox) && !/allow-top-navigation(?!-by-user-activation)/.test(frame.sandbox), frame && frame.sandbox);
+  step('R-315: an email address link points back into PACE (#pace-compose=…), opening in this page', !!frame && /href="[^"]*#pace-compose=ada\.okafor%40fidelity\.com"[^>]*target="_top"/.test(frame.body), (frame && frame.body.match(/<a[^>]*ada\.okafor[^>]*>/) || [''])[0]);
+  step('R-315: …and an email\'s OWN target="_top" link is forced to a new tab (no email can take the page over)', !!frame && /<a[^>]*href="https:\/\/evil\.test\/"[^>]*target="_blank"/.test(frame.body) && !/evil\.test\/"[^>]*_top/.test(frame.body));
+  await page.evaluate(() => { location.hash = '#pace-compose=' + encodeURIComponent('ada.okafor@fidelity.com'); });
+  await page.waitForTimeout(250);
+  step('R-315: following that link opens New message in PACE, addressed to them, and the address leaves the URL', await page.evaluate(() => !!(STATE.mailbox.compose && STATE.mailbox.compose.to === 'ada.okafor@fidelity.com') && !/pace-compose/.test(location.hash)));
+  await page.evaluate(() => mbCancelCompose());
   step('The message body is NOT written into the page itself',
     !html.includes('is the second candidate open to a hybrid') || /srcdoc=/.test(html));
 
@@ -534,6 +552,28 @@ try {
     !!sent && sent[2].to === 'ada.okafor@fidelity.com' && sent[2].body === 'Attaching both now.');
   step('Compose defaults to no signature too', !!sent && sent[2].include_signature === false);
 
+  // R-315: a client's attachment on an EARLIER message of the conversation is shown (owner: "I still don't get to see the documents").
+  await page.evaluate(() => {
+    const base = window.apiGet;
+    window.apiGet = function (p) {
+      if (/\/threads\/t9$/.test(p)) return Promise.resolve([
+        { id: 'm8', thread_id: 't9', subject: 'Service agreement', from: { name: 'Marimar Santos', email: 'marimar@treplar.test' }, date: new Date(Date.now() - 3600e3).toISOString(), preview: 'Please see attached is the service agreement.', has_attachments: true },
+        { id: 'm9', thread_id: 't9', subject: 'Re: Service agreement', from: { name: 'Priya', email: 'priya@futeglobal.com' }, date: new Date().toISOString(), preview: 'Thank you for returning it.', has_attachments: false }]);
+      if (/\/messages\/m9$/.test(p)) return Promise.resolve({ id: 'm9', thread_id: 't9', subject: 'Re: Service agreement', from: { name: 'Priya', email: 'priya@futeglobal.com' }, to: [{ email: 'marimar@treplar.test' }], date: new Date().toISOString(), body_html: '<p>Thank you for returning it.</p>', attachments: [] });
+      if (/\/messages\/m8$/.test(p)) { window.__m8 = (window.__m8 || 0) + 1; return Promise.resolve({ id: 'm8', attachments: [{ id: 'att-1', name: 'Fute Service Agreement.pdf', size: 245760 }, { id: 'att-2', name: 'logo.png', size: 900, inline: true }] }); }
+      return base(p);
+    };
+    STATE.mailbox.activeId = STATE.mailbox.activeId || 'mb1'; STATE.mailbox.filter = 'all';
+    STATE.mailbox.messages = STATE.mailbox.messages || []; STATE.mailbox.messages.unshift({ id: 'm9', thread_id: 't9', subject: 'Re: Service agreement', from: { name: 'Priya', email: 'priya@futeglobal.com' }, date: new Date().toISOString(), preview: 'Thank you', has_attachments: false });
+    mbOpen('m9');
+  });
+  await page.waitForTimeout(500);
+  const files = await page.evaluate(() => ({ chips: [...document.querySelectorAll('#mb-before .mb-att-thread button')].map((b) => b.innerText.replace(/\s+/g, ' ').trim()), reads: window.__m8 || 0 }));
+  step('R-315: the attachment on an EARLIER message in the conversation is shown, by name, on its summary', files.chips.length === 1 && /Fute Service Agreement\.pdf/.test(files.chips[0]), JSON.stringify(files));
+  step('R-315: …an inline picture (a signature logo) is not listed, and the message was read once, not per repaint', !files.chips.some((c) => /logo\.png/.test(c)) && files.reads === 1, 'reads=' + files.reads);
+  await page.evaluate(() => { document.querySelector('#mb-before .mb-att-thread button').click(); });
+  await page.waitForTimeout(150);
+  step('R-315: …clicking it downloads THAT file and does not open the message', await page.evaluate(() => STATE.mailbox.selectedId === 'm9'), 'selected=' + await page.evaluate(() => STATE.mailbox.selectedId));
   // ── the no-mailbox state is a setup screen, not an error ───────────────────
   await page.evaluate(() => {
     window.apiGet = function (p) {

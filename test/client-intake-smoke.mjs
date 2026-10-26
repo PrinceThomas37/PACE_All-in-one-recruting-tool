@@ -143,7 +143,7 @@ function makeDb(tables, writes) {
     const b = {
       _rows: (tables[table] || []).slice(), _ins: null,
       select() { return b; }, eq() { return b; }, is() { return b; }, in() { return b; },
-      ilike() { return b; }, limit() { return b; }, order() { return b; }, gte() { return b; },
+      ilike() { return b; }, limit() { return b; }, order() { return b; }, gte() { return b; }, not() { return b; },
       insert(p) { b._ins = p; writes.push({ table, payload: p }); return b; },
       update(p) { writes.push({ table, update: p }); return b; },
       single() { return Promise.resolve(b._one()); },
@@ -163,7 +163,7 @@ function makeDb(tables, writes) {
   return { from: mk };
 }
 
-async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', role = 'bd_lead' } = {}) {
+async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', role = 'bd_lead', chain = null } = {}) {
   const writes = [];
   const tables = { companies: companies.slice(), organizations: [], jobs: jobs.slice(), contacts: [], job_orders: [], app_settings: [] };
   const supabase = makeDb(tables, writes);
@@ -174,7 +174,7 @@ async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', ro
     persistScores: () => {}, invalidateJobScores: () => {},
     STAGES: [], STAGE_ALIASES: {}, normalizeStage: (x) => x, BDM_GATED_STAGE: '',
     isBDM: () => true, isRecruiter: () => false,
-    assignedJobOrderIds: async () => [], recruiterCanTouchJob: async () => true, reportingChainIds: async () => [],
+    assignedJobOrderIds: async () => [], recruiterCanTouchJob: async () => true, reportingChainIds: async () => (chain || ['u-1']),
     nextId: async (p) => p + '-001', logSubmissionActivity: async () => {},
     JOB_ORDER_SELECT: '*', JOB_FIELDS: ['job_title', 'client'], JOB_DATE_FIELDS: [],
     pickJobFields: (s) => ({ job_title: s.job_title, client: s.client }),
@@ -234,20 +234,62 @@ await ta('THE COOLDOWN BLOCKS an existing client added 6 days ago', async () => 
   assert.equal(r.writes.filter(w => w.table === 'job_orders').length, 0);
 });
 
-await ta('R-311: a second job for YOUR OWN client is not blocked (the latest lead there is yours)', async () => {
-  const recent = new Date(Date.now() - 6 * 86400000).toISOString();
-  const r = await callCreate(
-    { lead: { position: 'Welder', company_id: 'co-1', company_name: 'Treplar Inc', contacts: GOOD_POC }, job: {} },
-    { companies: [{ id: 'co-1', name: 'Treplar Inc' }], jobs: [{ id: 'ld-1', position: 'Electrician', created_at: recent, assigned_to_bd: 'u-1', created_by: 'ra-9', users: { name: 'Asha Rao' } }] });
-  assert.equal(r.status, 201, 'own client refused: ' + JSON.stringify(r.payload));
+// D-0174 (owner, 26 Oct): "if the client belongs to a user, they should be allowed to open another job — any number of jobs
+// with the same client, regardless of the timeline. Only the client owner can create multiple jobs with the same client."
+const daysAgoIso = (n) => new Date(Date.now() - n * 86400000).toISOString();
+const ownedBy = (owner, ageDays) => ({ companies: [{ id: 'co-1', name: 'Treplar Inc' }], jobs: [{ id: 'ld-1', position: 'Electrician', created_at: daysAgoIso(ageDays), assigned_to_bd: owner, created_by: 'ra-9', users: { name: 'Asha Rao' } }] });
+const NEXT_JOB = { lead: { position: 'Welder', company_id: 'co-1', company_name: 'Treplar Inc', contacts: GOOD_POC }, job: {} };
+
+await ta('D-0174: the client\'s OWNER opens another job at once — no waiting period (their last job is from today)', async () => {
+  const r = await callCreate(NEXT_JOB, ownedBy('u-1', 0));
+  assert.equal(r.status, 201, 'owner refused: ' + JSON.stringify(r.payload));
+});
+await ta('D-0174: …and again, and again: any number of jobs for their own client', async () => {
+  const r = await callCreate(NEXT_JOB, ownedBy('u-1', 1));
+  assert.equal(r.status, 201, 'owner refused: ' + JSON.stringify(r.payload));
+});
+await ta('D-0174: someone who is NOT the owner is refused, and told whose client it is', async () => {
+  const r = await callCreate(NEXT_JOB, ownedBy('u-other', 6));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
+  assert.match(r.payload.error, /Only the client's owner \(or their manager\) can open jobs/);
+  assert.equal(r.writes.filter(w => w.table === 'job_orders').length, 0);
+});
+await ta('D-0174: …regardless of the timeline — 200 days later it is still the owner\'s client', async () => {
+  const r = await callCreate(NEXT_JOB, ownedBy('u-other', 200));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
+});
+await ta('D-0174: …an admin who is not the owner is refused too (the client is reassigned first)', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-other', 200), { role: 'admin' }));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
 });
 
-await ta('R-311: …but a client whose latest lead is SOMEBODY ELSE\'s is still on cooldown', async () => {
-  const recent = new Date(Date.now() - 6 * 86400000).toISOString();
-  const r = await callCreate(
-    { lead: { position: 'Welder', company_id: 'co-1', company_name: 'Treplar Inc', contacts: GOOD_POC }, job: {} },
-    { companies: [{ id: 'co-1', name: 'Treplar Inc' }], jobs: [{ id: 'ld-1', position: 'Electrician', created_at: recent, assigned_to_bd: 'u-other', created_by: 'u-other', users: { name: 'Asha Rao' } }] });
+// D-0177 (owner, 26 Oct): "managers create jobs and follow business workflow" — the owner's manager may open a job for the
+// client; it goes into the OWNER's pipeline so the client does not change hands. An admin is still control only (D-0176).
+await ta('D-0177: the owner\'s MANAGER (the owner reports to them) opens a job for the client', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'bd_lead', chain: ['u-1', 'u-team'] }));
+  assert.equal(r.status, 201, 'manager refused: ' + JSON.stringify(r.payload));
+  const jo = r.tables.job_orders[0], ld = r.tables.jobs.find((j) => j.id !== 'ld-1');
+  assert.equal(jo.bd_manager_id, 'u-team', 'the job must go into the owner\'s pipeline, not the manager\'s');
+  assert.equal(ld.assigned_to_bd, 'u-team', 'the new lead row must stay the owner\'s, or the client changes hands');
+  assert.equal(jo.created_by, 'u-1', 'who opened it is still recorded');
+});
+await ta('D-0177: …a director higher up the same tree may too', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'director', chain: ['u-1', 'u-mid', 'u-team'] }));
+  assert.equal(r.status, 201, JSON.stringify(r.payload));
+});
+await ta('D-0177: a manager of ANOTHER team is refused (the owner is not under them)', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'bd_lead', chain: ['u-1', 'u-mine'] }));
   assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
+  assert.match(r.payload.error, /or their manager/);
+});
+await ta('D-0176: an admin is refused even when the owner is under them on the tree (admin = control, not creation)', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'admin', chain: ['u-1', 'u-team'] }));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
 });
 
 await ta('a BRAND NEW client is never blocked by the lead it is about to get', async () => {

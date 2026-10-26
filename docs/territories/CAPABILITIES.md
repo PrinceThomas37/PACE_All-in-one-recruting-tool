@@ -298,6 +298,18 @@ customer-facing text.**
 Leads: 08:00–16:00 in the lead's timezone. Candidates: **no window** since
 D-0010 (switch off by default). One resolver, `getTimezoneFromLocation`.
 
+### Turn a reminder into a lead
+**Status:** BUILT (dev branch, R-309 / D-0178) · owner `surface` + `gateway`
+A reminder about someone PACE does not know shows "Add as lead": the Add Lead window opens filled in from the reminder, the person adds the position, and the lead is theirs straight away (Assigned, from their main mailbox), with the reminder tied to it.
+
+### A manager opens a job for their team member's client
+**Status:** BUILT (dev branch, D-0177) · owner `guild`
+The client's owner — or anyone they report to — may open jobs for that client; a manager's job goes into the owner's pipeline so the client stays theirs. Admins and other teams' managers are refused (D-0174, D-0176).
+
+### A sign-in survives a slow server
+**Status:** BUILT (dev branch, R-323) · owner `surface`
+When the password is right but the first load fails (a busy server), PACE keeps the person signed in, tries once more by itself, then says "Your sign-in worked, but PACE could not load your data" with Try again / Sign out — it never drops them back on the login page. A sign-in that has truly run out still goes to the login page with its own sentence (R-118).
+
 ### Signing up and landing in the right organisation
 **Status:** DORMANT · owner `rampart` · see `DECISIONS.md` D-0002
 `services/provisioning.js`. **Off until the open tenancy contracts close.**
@@ -771,3 +783,9 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **A bounce marks the address Invalid by itself — Outlook, app-password AND Gmail mailboxes, Inbox and Spam/Junk** (Gmail added 26 Oct, R-314): every 30 minutes and before each follow-up run, bounce notices are read and the contact's email becomes Invalid, so its follow-ups stop; a mailbox with too many bounces in a day pauses itself. Only the mailbox's own company's contacts are touched.
 - **Filter the Leads list by industry, with a search box** (26 Oct, R-312): the Industry button lists the industries your leads actually carry, most common first with how many; type to narrow a long list.
 - **A second job for your own client** (26 Oct, R-311): the "company added recently" cooldown stops a different person approaching a company, not its owner opening another job there.
+- **Reconnect a mailbox straight from its reminder** (26 Oct, R-315): the "Reconnect your mailbox" reminder has a Reconnect button; the reminder closes itself once you are signed back in.
+- **Click an email address inside an email → PACE's New message opens**, addressed to them (not Outlook) (26 Oct, R-315).
+- **Inbox grouped by day like Outlook** — Today, Yesterday, Earlier this week, Last week, Two/Three weeks ago, Last month, Older (26 Oct, R-315).
+- **See the files a client attached anywhere in a conversation** — earlier messages show their attachments as download buttons (26 Oct, R-315).
+- **Add a note when changing a job's status** — from the list's "Set status" or the job row; the note is kept in the job's history with that change (26 Oct, R-315).
+- **"What went out" on All email → Sent** — real counts of first emails, each follow-up, one-offs and candidate batches for today, yesterday, last 7 days, this month or chosen dates (26 Oct, R-315).

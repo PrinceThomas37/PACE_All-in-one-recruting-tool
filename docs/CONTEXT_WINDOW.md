@@ -2,7 +2,19 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0173** · contract C-0038 · roadmap **R-320** (next `R-321`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0178** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+
+## START HERE (26 Oct, Session 53, last) — D-0177 managers open jobs (owner's pipeline); D-0178 reminder → your lead
+
+Both built on #369 with tests; #369 waits on the owner's "merge" (it now carries P1, D-0174/0176/0177, R-323, R-309/D-0178). Find Leads ownership left as D-0111 — owner told it is my reading; re-open if they meant ownership at save time.
+
+## START HERE (26 Oct, Session 53, late night) — sign-in bounce fixed on the branch (R-323); server load is R-324
+
+D-0176: admin's part in clients is control, not opening jobs — D-0174 stands for admins (managers same, as built). Ash's "Log In sends me back to login" = a busy server failing one first-load call and PACE signing her out; fixed on #369 (keep sign-in, retry once, Try again screen). The root cause — GET /jobs 17–32 s, +100 MB per call, a listener leak warning — is R-324, plan first. #369 still waits on the owner's "merge". R-309 (Martin): the "Add as a lead" idea was mine; owner asked where it came from.
+
+## START HERE (26 Oct, Session 53, evening) — P0 LIVE (#368), P1 built on the dev branch (R-315)
+
+**Owner's rulings 26 Oct:** D-0174 — only a client's owner opens jobs for that client, any number, any time (anyone else, admin included, refused; built on this branch, replaces #368's looser R-311). D-0175 — no contact-data vendor hard-wired; every company brings its own (R-321, plan first). Martin (R-309) explained; owner to answer. P0 merged and deployed (21:25 UTC). P1's six items are built with tests (see R-315 / surface.md 26 Oct): reminder Reconnect button, email-address links → PACE compose, inbox day headings, earlier-message attachments, job status note, "What went out" counts on Sent. **Next after P1 merges: P2 (R-316 Outreach Insights drill-down, R-317 interview emails, R-318 undo/pop-out/resize/star).** Owner still owes answers on: Martin's "Add as a lead" button (R-309), the own-client reading of the cooldown (R-311), and Apollo compose (R-320).
 
 ## START HERE (26 Oct, Session 53, later) — the owner's 28-note doc: P0 built, P1 next (R-308…R-320)
 

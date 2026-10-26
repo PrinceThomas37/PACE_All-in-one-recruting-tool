@@ -7,6 +7,7 @@
 //
 // Usage: node test/operator-routes-smoke.mjs
 
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
@@ -16,7 +17,9 @@ const require = createRequire(import.meta.url);
 const jwt = require('jsonwebtoken');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 20000 + Math.floor(Math.random() * 20000);
+// A port the system says is free right now — a random one could already be taken, and the server then exits before boot
+// (seen once in a full run: "0/1" in 0.7 s).
+const PORT = await new Promise((ok) => { const probe = net.createServer(); probe.listen(0, '127.0.0.1', () => { const p = probe.address().port; probe.close(() => ok(p)); }); });
 const F = '11111111-1111-1111-1111-111111111111';
 const S = '22222222-2222-2222-2222-222222222222';
 const env = { ...process.env, PORT: String(PORT), SUPABASE_URL: 'http://127.0.0.1:59999', SUPABASE_SERVICE_KEY: 'dummy', JWT_SECRET: 'test-secret', NODE_ENV: 'test', DEFAULT_ORG_ID: F };

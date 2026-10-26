@@ -89,11 +89,15 @@ window.submitAddJob=function(){
   // 2) the lead, with every contact in one go.
   ensureCompany.then(function(id){
     companyId=id;
-    return apiPost('/jobs',{company_id:companyId,position:pos,location:(a.loc||'').trim()||null,source:a.src||'LinkedIn',
-      job_url:(a.url||'').trim()||null,stage:'Active',notes:'',contacts:contacts});
+    var body={company_id:companyId,position:pos,location:(a.loc||'').trim()||null,source:a.src||'LinkedIn',
+      job_url:(a.url||'').trim()||null,stage:'Active',notes:'',contacts:contacts};
+    if(a.fromReminder)body.from_reminder_id=a.fromReminder.id;   // R-309 / D-0178: the server makes it yours and ties the reminder to it
+    return apiPost('/jobs',body);
   }).then(function(){
+    var fromRem=!!a.fromReminder;
     STATE.modal=null; STATE.addLead=null; render();     // the window goes first, whatever the refresh does
-    showToast('Lead added'+(contacts.length>1?' with '+contacts.length+' contacts':''),'success');
+    showToast((fromRem?'Lead added — it is yours':'Lead added')+(contacts.length>1?' with '+contacts.length+' contacts':''),'success');
+    if(fromRem)apiGet('/reminders').then(function(d){STATE.reminders=d||[];scheduleRender();}).catch(function(){});
     return refreshJobs();
   }).catch(fail);
 };

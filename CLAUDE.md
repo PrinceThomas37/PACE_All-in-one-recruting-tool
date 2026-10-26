@@ -151,6 +151,7 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
   no `feature` gets the tightest allowance. **Everything ships rules-first** (no funded key). **A hosted model name
   is expiring stock** — if AI goes quiet check the model name first (OpenRouter free models are looked up at
   runtime). A fallback that protects the user must be visible to the operator (`diagnose()`, `ai_last_error`).
+- **No contact-data vendor is hard-wired (D-0175, owner's rule):** every company brings its own provider (Apollo, ZoomInfo, Lusha, …) and key; new code talks to a provider-neutral layer and names no vendor on screen (the move off today's Apollo-only code is R-321).
 - **Apollo:** only `services/people-apollo.js` calls it (POC finder: people search free, one lookup = one
   credit, never retried, key in a header). The Sourcing page's Apollo/Indeed/Monster/Dice/LinkedIn rows are
   NOT integrated — **a screen must not advertise what does not exist** (`config/sourcing.js`: `built` vs
