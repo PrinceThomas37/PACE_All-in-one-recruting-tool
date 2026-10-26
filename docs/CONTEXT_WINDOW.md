@@ -2,7 +2,11 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-22 (Session 52 closed). **Highest ids:** decision **D-0172** · contract C-0038 · roadmap **R-304** (next `R-305`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0173** · contract C-0038 · roadmap **R-320** (next `R-321`) · next migration **068** (none added this session).
+
+## START HERE (26 Oct, Session 53, later) — the owner's 28-note doc: P0 built, P1 next (R-308…R-320)
+
+**The doc** ("In find leads", 28 notes) is on the ROADMAP as R-309…R-320 by priority. **P0 is built on the dev branch** (R-310…R-314: industry filter + search, Find Leads dropdown repaint, re-search guard, second job for own client, signature "Replace" box, Gmail bounces) with tests; R-309 (Martin) was a manual reminder, not lead generation — the owner's call. **Next: P1 (R-315)** — reconnect button on the reminder, email address → PACE compose, inbox grouped by day, client attachments in a thread, notes on stage change, Sent split into first/FU1/FU2. **Model team (R-308):** I build small things directly; a Sonnet agent only for a big feature AND only with the owner's yes (D-0060) — they asked about cost and were told agents save context, not money. New read-only Haiku `scout` agent. Surface memory trimmed to 38 KB (`surface-archive.md` holds the rest). **Owner to-do from P0:** re-open My Setup → their mailbox → Save once (the stored signature still has the old phone until rebuilt). Seen: prince.thomas@futeglobal.com is connected under THREE PACE users.
 
 ## START HERE (26 Oct, Session 53) — assigned leads never come back; 95-vs-78 import is OPEN
 
