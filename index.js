@@ -3051,20 +3051,31 @@ async function sweepMailboxBounces(tokenRow, ownAddresses) {
   return marked;
 }
 
+// Gmail mailboxes (R-314): they were never read for bounces — services/gmail-bounce.js.
+const gmailBounce = require('./services/gmail-bounce');
 async function runBounceSweep() {
   try {
     // org_id added so EMAIL_BOUNCED/CONTACT_INVALIDATED below can carry it —
     // see the C-0021 X4 note on emit() near events.js.
     const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
+    const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address,org_id');
+    const gm = gmTokens || [];
     const sm = (await smtpStore.listConnected()).filter(t => !t.refresh_failed);
-    if ((!tokens || !tokens.length) && !sm.length) return 0;
+    if ((!tokens || !tokens.length) && !gm.length && !sm.length) return 0;
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    [...(tokens || []), ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...(tokens || []), ...gm, ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
     let total = 0;
     for (const t of (tokens || [])) {
       try { total += await sweepMailboxBounces(t, ownAddresses); }
       catch (e) { console.error(`[BounceSweep] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of gm) {
+      try {
+        const r = await gmailBounce.sweepGmailBounces({ gmailProvider, supabase, tokenRow: t, ownAddresses, markBouncesFromMessages });
+        total += r.marked;
+        try { await maybeAutoPauseMailboxOnBounces(t.user_email_id, r.marked); } catch (_) {}
+      } catch (e) { console.error(`[BounceSweep/gmail] ${t.email_address}: ${e.message}`); }
     }
     for (const t of sm) {
       try { total += await sweepSmtpBounces(t, ownAddresses); }

@@ -18,7 +18,8 @@ function renderJobs(){
       return false;
     });
   }
-  if(f.industries&&f.industries.length)jobs=jobs.filter(function(j){return f.industries.indexOf(j.industry||j.company_ind||"")>-1;});
+  // R-312: matched on the industry the lead actually carries (its own, else its company's), ignoring case and spaces.
+  if(f.industries&&f.industries.length){var _inds=f.industries.map(function(x){return String(x).trim().toLowerCase();});jobs=jobs.filter(function(j){return _inds.indexOf(leadIndustryOf(j).toLowerCase())>-1;});}
   // "Assigned to" — one person's leads, or the ones nobody owns (owner, 8 Oct: the admin should see leads per assigned user).
   if(f.assignee)jobs=jobs.filter(function(j){return f.assignee==='none'?!j.assigned_to_bd:j.assigned_to_bd===f.assignee;});
   if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
@@ -167,7 +168,6 @@ function renderJobs(){
   }
 
   var allStagesList=['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'];
-  var allIndustriesList=getIndustriesList();
   var stageActive=f.stages&&f.stages.length>0;
   var indActive=f.industries&&f.industries.length>0;
   var dateActive=f.dateRange&&f.dateRange!=='all';
@@ -183,12 +183,25 @@ function renderJobs(){
         '<option value="none"'+(f.assignee==='none'?' selected':'')+'>Nobody — Unassigned ('+nobody+')</option>'+
         ownerIds.map(function(id){ return '<option value="'+escAttr(id)+'"'+(f.assignee===id?' selected':'')+'>'+escHtml(ownerName[id])+' ('+ownerCount[id]+')</option>'; }).join('')+
       '</select>' : '';
-  function mkChkDrop(name,key,items,selected,active){
+  // R-312: the Industry filter lists the industries YOUR leads carry (most common first, with how many), not the fixed
+  // category list — leads arrive with Apollo/LinkedIn names ("Construction", "Law Practice") that never matched it.
+  var indCount={}, indName={};
+  everyLead.forEach(function(j){ var v=leadIndustryOf(j); if(!v)return; var k=v.toLowerCase(); indCount[k]=(indCount[k]||0)+1; if(!indName[k])indName[k]=v; });
+  (f.industries||[]).forEach(function(v){ var k=String(v).trim().toLowerCase(); if(!indName[k]){ indName[k]=v; indCount[k]=0; } });
+  var allIndustriesList=Object.keys(indName).sort(function(a,b){ return (indCount[b]-indCount[a])||indName[a].localeCompare(indName[b]); }).map(function(k){ return indName[k]; });
+  function mkChkDrop(name,key,items,selected,active,counts){
     var btn='<button class="btn btn-sm btn-outline flt-btn'+(active?' is-on':'')+'" onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\''+name+'\' ?null:\''+name+'\';render()">'+(active?name+' ('+selected.length+')':name)+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>';
     var panel='';
     if(STATE.openDrop===name){
-      panel='<div class="flt-panel" style="min-width:190px;padding:6px 0" onclick="event.stopPropagation()">'+
-        items.map(function(v){var on=selected.indexOf(v)>-1;return '<label class="fs-13" style="display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+'"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleJobFilter(\''+key+'\',\''+v+'\',this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer"/>'+v+'</label>';}).join('')+
+      // A long list gets a search box (R-312). It hides rows in place — typing never repaints, so focus stays put.
+      var searchable=items.length>8;
+      var isOn=function(v){ var k=String(v).trim().toLowerCase(); return selected.some(function(x){ return String(x).trim().toLowerCase()===k; }); };
+      panel='<div class="flt-panel" style="min-width:230px;padding:6px 0" onclick="event.stopPropagation()">'+
+        (searchable?'<div style="padding:4px 10px 6px"><input type="search" class="inp" placeholder="Search '+escAttr(name.toLowerCase())+'…" aria-label="Search '+escAttr(name.toLowerCase())+'" oninput="fltDropSearch(this)" style="width:100%"/></div>':'')+
+        '<div class="flt-drop-list" style="max-height:320px;overflow-y:auto">'+
+        (items.length?'':'<div class="fs-12 c-text3" style="padding:7px 14px">None on your leads yet</div>')+
+        items.map(function(v){var on=isOn(v);var n=counts&&counts[String(v).trim().toLowerCase()];return '<label class="fs-13" data-flt="'+escAttr(String(v).toLowerCase())+'" style="display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+'"><input type="checkbox" '+(on?'checked':'')+' data-v="'+escAttr(v)+'" onchange="toggleJobFilter(\''+key+'\',this.dataset.v,this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer"/><span style="flex:1">'+escHtml(v)+'</span>'+(n!=null?'<span class="fs-11_5 c-text3">'+n+'</span>':'')+'</label>';}).join('')+
+        '</div>'+
         (selected.length?'<div style="border-top:1px solid var(--border);padding:6px 14px;margin-top:2px"><button onclick="STATE.jobsFilter.'+key+'=[];STATE.leadsPage=0;render()" class="fs-11_5 c-red" style="background:none;border:none;cursor:pointer;padding:0">Clear</button></div>':'')+
       '</div>';
     }
@@ -305,7 +318,7 @@ function renderJobs(){
       right:
         assigneeSel+
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+
-        mkChkDrop('Industry','industries',allIndustriesList,f.industries||[],indActive)+
+        mkChkDrop('Industry','industries',allIndustriesList,f.industries||[],indActive,indCount)+
         dateBtn+
         (userHasAnyRole(u,'ra_lead','admin')
           ? '<button class="btn btn-sm btn-outline" onclick="openExportLeads()">'+UI.ic('dl')+'Export</button>':'')+

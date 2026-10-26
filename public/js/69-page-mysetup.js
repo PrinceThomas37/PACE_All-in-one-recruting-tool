@@ -330,6 +330,10 @@
     if (f.sigEdited) return;
     var el=document.getElementById('sig-editor'); if(!el) return;
     el.innerHTML=editorHtml(f);
+    // R-310 (owner: "I changed my signature number, then it reverted"): a detail the signature shows was changed, so the
+    // signature below is now what the person expects to send — tick "Replace this mailbox's signature", or Save kept the
+    // OLD stored one and the compose window went on showing the old number. They can still untick it.
+    var rb=document.getElementById('ms-rebuild'); if (rb && !rb.checked){ rb.checked=true; f.rebuild=true; }
   };
   window.mySetupSigEdited = function(){ var f=M.form; if(!f) return; if(!f.sigEdited){ f.sigEdited=true; var n=document.querySelector('.ms-sig-note'); if(n) n.innerHTML='You have formatted this by hand, so changes above do not overwrite it. <button type="button" class="fd-pill" onclick="mySetupRebuildSig()">Rebuild it from the details above</button>'; } };
   window.mySetupRebuildSig = function(){ var f=M.form; if(!f) return; readForm(); f.sigEdited=false; f.sigHtml=''; f.logoNote=''; paintModal(); };

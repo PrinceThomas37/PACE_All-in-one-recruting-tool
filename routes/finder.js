@@ -547,7 +547,8 @@ module.exports = (ctx) => {
   router.post('/finder/searches/:id/run', auth, async (req, res) => { try { await runMine(req, res, req.params.id); } catch (err) { res.status(500).json({ error: err.message }); } });
 
   // "Find leads now" — a one-off search: criteria in, cards out, nothing saved and nothing scheduled. One press costs one
-  // Apollo credit (the organisation's daily limit still applies); a repeat press inside a minute is refused.
+  // Apollo credit (the organisation's daily limit still applies). Pressing it again with the SAME criteria inside a minute
+  // is a double-click and is refused (it would spend a credit on the same answer); a CHANGED search runs at once (R-313).
   const lastFind = new Map();
   router.post('/finder/find', auth, async (req, res) => {
     try {
@@ -555,9 +556,9 @@ module.exports = (ctx) => {
       const v = finder.normalizeSearch(Object.assign({}, req.body, { name: 'One-off search' }), await searchCaps(orgOf(req)));
       if (!v.ok) return res.status(400).json({ error: v.error });
       const now = clock(), orgId = orgOf(req), scoped = db.forRequest(req);
-      const prev = lastFind.get(req.user.id);
-      if (prev && now.getTime() - prev < RERUN_GAP_MS && !ctx.noRerunGap) return res.json({ results: [{ search_id: null, name: 'One-off search', cards: 0, note: 'You just searched. Give it a minute.', skipped: true }], new_cards: 0 });
-      lastFind.set(req.user.id, now.getTime());
+      const sig = JSON.stringify(v.value), prev = lastFind.get(req.user.id);
+      if (prev && prev.sig === sig && now.getTime() - prev.at < RERUN_GAP_MS && !ctx.noRerunGap) return res.json({ results: [{ search_id: null, name: 'One-off search', cards: 0, note: 'You just ran this exact search. Change something, or give it a minute.', skipped: true }], new_cards: 0 });
+      lastFind.set(req.user.id, { at: now.getTime(), sig });
       const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
       await housekeeping(scoped, req.user.id, now);
       const budget = await budgetFor(orgId, now);

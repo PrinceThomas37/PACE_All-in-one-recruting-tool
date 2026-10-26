@@ -767,3 +767,7 @@ The list now always goes: a client who replied positively → a candidate who re
 
 ## Needs you today: only what you owe (Session 52, D-0169 — on the branch)
 The card now shows a tile only when someone is waiting on you: a client or candidate replied and you have not answered, an interview / submission needs your step, a reminder you (or your manager) set came due, or they promised something by a date that has passed. Your own outreach and one-off emails no longer make "No reply yet" tiles, and reminders a sequence creates stay on the Reminders page. A candidate's reply tile lets you move their stage from the same window. Also: the app now asks for everyone's mailboxes once when it opens (was once per person), so pages load faster for admins and team leads.
+
+- **A bounce marks the address Invalid by itself — Outlook, app-password AND Gmail mailboxes, Inbox and Spam/Junk** (Gmail added 26 Oct, R-314): every 30 minutes and before each follow-up run, bounce notices are read and the contact's email becomes Invalid, so its follow-ups stop; a mailbox with too many bounces in a day pauses itself. Only the mailbox's own company's contacts are touched.
+- **Filter the Leads list by industry, with a search box** (26 Oct, R-312): the Industry button lists the industries your leads actually carry, most common first with how many; type to narrow a long list.
+- **A second job for your own client** (26 Oct, R-311): the "company added recently" cooldown stops a different person approaching a company, not its owner opening another job there.

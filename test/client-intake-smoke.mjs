@@ -163,12 +163,12 @@ function makeDb(tables, writes) {
   return { from: mk };
 }
 
-async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A' } = {}) {
+async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', role = 'bd_lead' } = {}) {
   const writes = [];
   const tables = { companies: companies.slice(), organizations: [], jobs: jobs.slice(), contacts: [], job_orders: [], app_settings: [] };
   const supabase = makeDb(tables, writes);
   const core = {
-    supabase, db: {}, auth: (q, r, n) => n(), hasRole: () => true, today: () => '2026-09-17',
+    supabase, db: {}, auth: (q, r, n) => n(), hasRole: (_req, ...rs) => rs.includes(role), today: () => '2026-09-17',
     orgIdFor: () => orgId, orgStamp: () => ({ org_id: orgId }), withOrg: (q) => q.eq('org_id', orgId),
     hasRequirementColumns: async () => false, applyDerivedJobFields: async () => ({}),
     persistScores: () => {}, invalidateJobScores: () => {},
@@ -184,7 +184,7 @@ async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A' } =
   require('../routes/recruiting/job-orders.js')(app, core);
   let status = 200, payload = null;
   const res = { status(s) { status = s; return res; }, json(j) { payload = j; return res; } };
-  await handler({ body, user: { id: 'u-1' }, orgId, params: {}, query: {} }, res);
+  await handler({ body, user: { id: 'u-1', role }, orgId, params: {}, query: {} }, res);
   return { status, payload, writes, tables };
 }
 
@@ -232,6 +232,22 @@ await ta('THE COOLDOWN BLOCKS an existing client added 6 days ago', async () => 
   assert.equal(r.payload.reason, 'company_cooldown');
   assert.match(r.payload.error, /Asha Rao/, 'the refusal does not say who to talk to');
   assert.equal(r.writes.filter(w => w.table === 'job_orders').length, 0);
+});
+
+await ta('R-311: a second job for YOUR OWN client is not blocked (the latest lead there is yours)', async () => {
+  const recent = new Date(Date.now() - 6 * 86400000).toISOString();
+  const r = await callCreate(
+    { lead: { position: 'Welder', company_id: 'co-1', company_name: 'Treplar Inc', contacts: GOOD_POC }, job: {} },
+    { companies: [{ id: 'co-1', name: 'Treplar Inc' }], jobs: [{ id: 'ld-1', position: 'Electrician', created_at: recent, assigned_to_bd: 'u-1', created_by: 'ra-9', users: { name: 'Asha Rao' } }] });
+  assert.equal(r.status, 201, 'own client refused: ' + JSON.stringify(r.payload));
+});
+
+await ta('R-311: …but a client whose latest lead is SOMEBODY ELSE\'s is still on cooldown', async () => {
+  const recent = new Date(Date.now() - 6 * 86400000).toISOString();
+  const r = await callCreate(
+    { lead: { position: 'Welder', company_id: 'co-1', company_name: 'Treplar Inc', contacts: GOOD_POC }, job: {} },
+    { companies: [{ id: 'co-1', name: 'Treplar Inc' }], jobs: [{ id: 'ld-1', position: 'Electrician', created_at: recent, assigned_to_bd: 'u-other', created_by: 'u-other', users: { name: 'Asha Rao' } }] });
+  assert.equal(r.status, 409);
 });
 
 await ta('a BRAND NEW client is never blocked by the lead it is about to get', async () => {

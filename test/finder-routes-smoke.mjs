@@ -542,8 +542,12 @@ step('Find leads now makes cards at once: the three clients (staffing firm and t
 step('…nothing is saved or scheduled: no saved search row exists', st.tables.finder_searches.length === 0 && oneCards.every((c) => c.search_id === null));
 step('…it asked Apollo once with the typed criteria, and cost one credit', apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && apollo.calls[0][1].filters.q_organization_job_titles.join() === 'CNC Machinist,Welder' && Number(st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)).value) === 1);
 step('…and the cards say what they were found for', oneCards.every((c) => c.payload.search.titles.join() === 'CNC Machinist,Welder'));
+r = await call('/finder/find', 'post', 'ra1', { titles: ['CNC Machinist', 'Welder'], locations: ['Texas'], sizes: ['mid'], posted_days: 14 });
+step('pressing Find again straight away with the SAME criteria does NOT call Apollo again (a double-click costs one credit)', r.out.results[0].skipped === true && /exact search/.test(r.out.results[0].note) && apollo.calls.filter((c) => c[0] === 'orgs').length === 1);
+const cardsBeforeChanged = st.tables.finder_cards.length;
 r = await call('/finder/find', 'post', 'ra1', { titles: ['Welder'], locations: ['Texas'] });
-step('pressing Find again straight away does NOT call Apollo again (a double-click costs one credit)', r.out.results[0].skipped === true && apollo.calls.filter((c) => c[0] === 'orgs').length === 1);
+step('a CHANGED search straight away runs at once (R-313: "I cannot re-search within a minute")', !r.out.results[0].skipped && apollo.calls.filter((c) => c[0] === 'orgs').length === 2, r.out.results[0].note);
+st.tables.finder_cards.splice(cardsBeforeChanged);  // keep the counts below about the first search
 r = await call('/finder/cards', 'get', 'ra1');
 step('one-off cards are in Today\'s cards but are NOT counted in the daily number ("0 of your 3 cards for today")', r.out.cards.length === 3 && r.out.today === 0 && r.out.daily === 3, 'today=' + r.out.today);
 // the daily run still gets its full number
@@ -561,7 +565,7 @@ step('a one-off search is held to its own ceiling per press (2 here), whatever t
 await settings.setSettings(st.supabase, { finder_cards_per_run: 0 });
 NOW = new Date('2026-10-21T12:20:00Z');
 r = await call('/finder/find', 'post', 'ra1', { titles: ['Welder'], locations: ['Texas'] });
-step('with the ceiling at 0 the one-off search is off, and says why — without calling Apollo', r.out.new_cards === 0 && /switched off/.test(r.out.results[0].note) && apollo.calls.filter((c) => c[0] === 'orgs').length === 3);
+step('with the ceiling at 0 the one-off search is off, and says why — without calling Apollo', r.out.new_cards === 0 && /switched off/.test(r.out.results[0].note) && apollo.calls.filter((c) => c[0] === 'orgs').length === 4);   // 4: the three runs above plus the changed search (R-313)
 
 // ═════ 7c. which mailbox a lead sends from ══════════════════════════════════════════════════════════════
 console.log('\nThe mailbox');

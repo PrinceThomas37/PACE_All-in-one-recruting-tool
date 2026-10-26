@@ -57,32 +57,43 @@
   // A repaint first keeps what the person has typed into the form — unless the caller has just changed the form itself
   // (skipCapture), in which case reading the old screen back would undo that change.
   function paint(skipCapture){ if(STATE.page!=='finder' && STATE.page!=='sourced')return; if(!skipCapture) captureForm(); paintPageContent(); }
+  // A paint caused by data ARRIVING (not by the person) waits while a dropdown on this page is open: the page is one
+  // region, so each of the ~5 loads on opening used to rebuild the open Industry list under the cursor (R-312, owner:
+  // "it pulls up many times before settling"). The held paint runs once, when the dropdown closes.
+  function bgPaint(){
+    var ae=document.activeElement, box=document.getElementById('content');
+    if (ae && ae.tagName==='SELECT' && box && box.contains(ae)){
+      if (!F.paintHeld){ F.paintHeld=true; ae.addEventListener('blur', function(){ F.paintHeld=false; paint(); }, { once:true }); }
+      return;
+    }
+    paint();
+  }
   UI.registerPage('finder', function(){ return renderPage(); });
   UI.registerPage('sourced', function(){ return renderPage(); });   // an old link or saved place still lands on the page
 
   // ── data ──────────────────────────────────────────────────────────────────
   function loadAccess(then){
-    apiGet('/finder/access').then(function(r){ F.access=r||{enabled:false}; F.accessFor=STATE.user&&STATE.user.id; paint(); if(then) then(); })
+    apiGet('/finder/access').then(function(r){ F.access=r||{enabled:false}; F.accessFor=STATE.user&&STATE.user.id; bgPaint(); if(then) then(); })
       .catch(function(e){ showToast('Could not load: '+e.message,'error'); });
   }
   function loadCards(){
-    F.loading = true; paint();
+    F.loading = true; bgPaint();
     apiGet('/finder/cards').then(function(r){
       F.loading=false; F.cards=((r&&r.cards)||[]).map(function(c){ c._base=(c.chips||[]).slice(); return c; });
-      F.waiting=(r&&r.waiting)||0; F.daily=(r&&r.daily)||0; F.today=(r&&r.today)||0; F.cardDays=(r&&r.card_days)||0; paint();
-    }).catch(function(e){ F.loading=false; F.cards=F.cards||[]; showToast('Could not load cards: '+e.message,'error'); paint(); });
+      F.waiting=(r&&r.waiting)||0; F.daily=(r&&r.daily)||0; F.today=(r&&r.today)||0; F.cardDays=(r&&r.card_days)||0; bgPaint();
+    }).catch(function(e){ F.loading=false; F.cards=F.cards||[]; showToast('Could not load cards: '+e.message,'error'); bgPaint(); });
   }
   function loadSearches(){
-    apiGet('/finder/searches').then(function(r){ F.searches=(r&&r.searches)||[]; paint(); })
-      .catch(function(e){ F.searches=F.searches||[]; showToast('Could not load searches: '+e.message,'error'); paint(); });
+    apiGet('/finder/searches').then(function(r){ F.searches=(r&&r.searches)||[]; bgPaint(); })
+      .catch(function(e){ F.searches=F.searches||[]; showToast('Could not load searches: '+e.message,'error'); bgPaint(); });
   }
   function loadHistory(){
-    apiGet('/finder/history'+(F.histAll?'?all=1':'')).then(function(r){ F.hist=r||{items:[],counts:{}}; paint(); })
-      .catch(function(e){ F.hist=F.hist||{items:[],counts:{},hidden:0}; showToast('Could not load the history: '+e.message,'error'); paint(); });
+    apiGet('/finder/history'+(F.histAll?'?all=1':'')).then(function(r){ F.hist=r||{items:[],counts:{}}; bgPaint(); })
+      .catch(function(e){ F.hist=F.hist||{items:[],counts:{},hidden:0}; showToast('Could not load the history: '+e.message,'error'); bgPaint(); });
   }
   function loadAdmin(){
-    apiGet('/finder/admin/users').then(function(r){ F.admin=r||{users:[]}; paint(); })
-      .catch(function(e){ F.admin={users:[]}; showToast('Could not load: '+e.message,'error'); paint(); });
+    apiGet('/finder/admin/users').then(function(r){ F.admin=r||{users:[]}; bgPaint(); })
+      .catch(function(e){ F.admin={users:[]}; showToast('Could not load: '+e.message,'error'); bgPaint(); });
   }
 
   window.fdTab = function(t){

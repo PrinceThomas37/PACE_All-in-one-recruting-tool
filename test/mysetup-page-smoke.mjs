@@ -179,6 +179,15 @@ try{
   const put3=(await calls()).find(c=>c[0]==='PUT');
   step('Save sends it to that mailbox\'s own endpoint, with the rebuild choice', put3 && /\/users\/test-bd\/emails\/m1\/sends-as$/.test(put3[1]) && put3[2].company==='Fute Global LLC' && put3[2].rebuild_signature===true);
   step('the page shows who m1 writes as — details only, no explanation — and the one button now says Edit', /Recruitment Manager · Fute Global LLC/.test(await txt()) && !/Has its own signature|Writes for:/.test(await txt()) && /Edit sender & signature/.test(await txt()));
+  // R-310 (owner: "I changed my signature number, but then it reverted"): the mailbox now HAS its own signature, so the box
+  // starts unticked — changing the phone must tick it, or Save keeps the old stored signature with the old number.
+  await ev(()=>mySetupEdit('m1')); await page.waitForTimeout(200);
+  step('R-310: editing a mailbox that has its own signature starts with "Replace" unticked', await ev(()=>document.getElementById('ms-rebuild').checked===false));
+  await page.fill('#ms-phone','+1 (972)-478-1119'); await page.waitForTimeout(100);
+  step('R-310: …changing the phone shows it in the signature AND ticks "Replace this mailbox\'s signature"', /478-1119/.test(await ev(()=>document.getElementById('sig-editor').innerHTML)) && await ev(()=>document.getElementById('ms-rebuild').checked));
+  await ev(()=>{ window.__calls.length=0; }); await ev(()=>mySetupSave()); await page.waitForTimeout(300);
+  const put4=(await calls()).find(c=>c[0]==='PUT');
+  step('R-310: …so Save asks for the stored signature to be rebuilt with the new number', put4 && put4[2].phone==='+1 (972)-478-1119' && put4[2].rebuild_signature===true, JSON.stringify(put4&&put4[2]));
   await ev(()=>{ window.__calls.length=0; mySetupRemove('m2'); }); await page.waitForTimeout(250);
   step('Remove (after the confirmation) deletes THAT mailbox for them and it leaves the list', (await calls()).some(c=>c[0]==='DELETE'&&/\/users\/test-bd\/emails\/m2$/.test(c[1])) && !/vp@acmetalent\.com/.test(await txt()));
 
