@@ -107,7 +107,7 @@ function makeDb(tables, writes) {
     const b = {
       _rows: (tables[table] || []).slice(), _ins: null,
       select() { return b; }, eq() { return b; }, is() { return b; },
-      ilike() { return b; }, limit() { return b; }, order() { return b; },
+      ilike() { return b; }, limit() { return b; }, order() { return b; }, not() { return b; },
       insert(payload) { b._ins = payload; writes.push({ table, payload }); return b; },
       update() { return b; },
       single() { return Promise.resolve(b._one()); },

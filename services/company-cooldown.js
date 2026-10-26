@@ -64,16 +64,4 @@ function cooldownSentence(state, { company, position, addedBy } = {}) {
     + `${addedBy || 'whoever added it'} before adding it again.`;
 }
 
-// YOUR OWN CLIENT IS NOT A RE-ADD (R-311, owner 26 Oct: "a BD manager is not able to add a new job with his existing
-// client"). The cooldown is there so two DIFFERENT people do not approach the same company a week apart; a second job for
-// a client whose latest lead is yours (or your team's — the same reporting-chain scope as everywhere, services/ownership.js)
-// is the same relationship, not a new approach. `scope` is ownership.viewScope(); `lastLead` carries assigned_to_bd and
-// created_by. Admin's scope is the whole company, so an admin is never stopped either.
-function ownClientExempt(lastLead, scope) {
-  if (!lastLead || !scope) return false;
-  if (scope.all) return true;
-  const ids = scope.ownerIds || [];
-  return [lastLead.assigned_to_bd, lastLead.created_by].some((id) => id && ids.includes(id));
-}
-
-module.exports = { cooldownState, cooldownSentence, ownClientExempt, DAY_MS };
+module.exports = { cooldownState, cooldownSentence, DAY_MS };

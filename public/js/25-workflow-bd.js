@@ -709,7 +709,8 @@
     var cd=f.intake&&f.intake.cooldown;
     if(!cd||!cd.blocked) return '';
     return '<div id="bd-cooldown" class="fs-12 c-text2" style="margin-top:8px;padding:10px 12px;border-left:3px solid var(--amber,#f59e0b);background:var(--bg);border-radius:6px;line-height:1.5">'+
-      '<strong class="c-text">On cooldown — this job cannot be saved yet.</strong><br>'+esc(cd.sentence)+'</div>';
+      // D-0174: a client someone else owns is not "on cooldown" — it is theirs, whatever the date.
+      '<strong class="c-text">'+(cd.reason==='client_owner'?'This client is someone else\'s — this job cannot be saved.':'On cooldown — this job cannot be saved yet.')+'</strong><br>'+esc(cd.sentence)+'</div>';
   }
   function bdCooldownBlocked(f){
     return !!(isDirectCreate(f)&&f.intake&&f.intake.cooldown&&f.intake.cooldown.blocked);
@@ -1052,7 +1053,7 @@
         showToast(msg,'error');
         // The server is the authority on both of these, and its answer names
         // the tab to open: a cooldown or a POC problem is fixed on Client & POC.
-        if(/cooldown|contact|email address/i.test(msg)&&STATE.bd.form){
+        if(/cooldown|belongs to|contact|email address/i.test(msg)&&STATE.bd.form){
           STATE.bd.form.tab='client'; renderNewJobModal();
         }
       });

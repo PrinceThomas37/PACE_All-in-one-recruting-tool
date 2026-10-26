@@ -2,11 +2,11 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0173** · contract C-0038 · roadmap **R-320** (next `R-321`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0175** · contract C-0038 · roadmap **R-321** (next `R-322`) · next migration **068** (none added this session).
 
 ## START HERE (26 Oct, Session 53, evening) — P0 LIVE (#368), P1 built on the dev branch (R-315)
 
-P0 merged and deployed (21:25 UTC). P1's six items are built with tests (see R-315 / surface.md 26 Oct): reminder Reconnect button, email-address links → PACE compose, inbox day headings, earlier-message attachments, job status note, "What went out" counts on Sent. **Next after P1 merges: P2 (R-316 Outreach Insights drill-down, R-317 interview emails, R-318 undo/pop-out/resize/star).** Owner still owes answers on: Martin's "Add as a lead" button (R-309), the own-client reading of the cooldown (R-311), and Apollo compose (R-320).
+**Owner's rulings 26 Oct:** D-0174 — only a client's owner opens jobs for that client, any number, any time (anyone else, admin included, refused; built on this branch, replaces #368's looser R-311). D-0175 — no contact-data vendor hard-wired; every company brings its own (R-321, plan first). Martin (R-309) explained; owner to answer. P0 merged and deployed (21:25 UTC). P1's six items are built with tests (see R-315 / surface.md 26 Oct): reminder Reconnect button, email-address links → PACE compose, inbox day headings, earlier-message attachments, job status note, "What went out" counts on Sent. **Next after P1 merges: P2 (R-316 Outreach Insights drill-down, R-317 interview emails, R-318 undo/pop-out/resize/star).** Owner still owes answers on: Martin's "Add as a lead" button (R-309), the own-client reading of the cooldown (R-311), and Apollo compose (R-320).
 
 ## START HERE (26 Oct, Session 53, later) — the owner's 28-note doc: P0 built, P1 next (R-308…R-320)
 
