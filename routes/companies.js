@@ -357,17 +357,19 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     const rows = leads || [];
     const last = rows[0];
 
-    const days = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
-    const state = companyCooldown.cooldownState({
-      lastLeadAt: last && last.created_at, now: new Date(), days,
-    });
-
     // D-0035/D5 (rampart review #4): a POC belongs to its lead (D-0020), so a
     // BD sees another BD's client contact only when that BD's leads are in
     // the viewer's own scope — not every lead at the client. Admin sees all.
     const isAdmin = hasRole(req, 'admin');
     const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
     const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+
+    // Your own client is not a re-add (R-311) — the same exemption POST /job-orders applies, so the form never warns
+    // about a block the save would not make.
+    const days = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
+    const state = companyCooldown.ownClientExempt(last, scope) ? null : companyCooldown.cooldownState({
+      lastLeadAt: last && last.created_at, now: new Date(), days,
+    });
     const visibleRows = rows.filter(r => own.canSeeLead(r, scope));
 
     // The POCs already known at this client, across the leads the viewer may

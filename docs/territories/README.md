@@ -119,6 +119,8 @@ MEMORY:    updated
 
 - **not sure, or it is just a sentence and a screenshot → `dispatch`** (the
   front door; it reads the sentence, reproduces it, and routes)
+- just "where is X / what calls Y / does PACE already do Z" → `scout` (Haiku,
+  read-only, cheapest; not a territory — it owns nothing and edits nothing)
 - something on screen → `surface`
 - an endpoint, a route, the server → `gateway`
 - a column, a table, a migration → `deep`

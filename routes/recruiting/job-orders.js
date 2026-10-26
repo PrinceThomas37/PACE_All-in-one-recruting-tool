@@ -247,11 +247,15 @@ ${text.slice(0, 12000)}`;
       if (!isNewCompany) {
         const cooldownDays = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
         const { data: recent } = await withOrg(supabase.from('jobs')
-          .select('position,created_at,created_by,users:users!created_by(name)')
+          .select('position,created_at,created_by,assigned_to_bd,users:users!created_by(name)')
           .eq('company_id', companyId).is('deleted_at', null), req)
           .order('created_at', { ascending: false }).limit(1);
         const last = recent && recent[0];
-        const state = companyCooldown.cooldownState({
+        // A second job for YOUR OWN client is not a re-add (R-311): the cooldown stops two different people
+        // approaching one company, not its owner opening another job there.
+        const chain = hasRole(req, 'admin') ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+        const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+        const state = !companyCooldown.ownClientExempt(last, scope) && companyCooldown.cooldownState({
           lastLeadAt: last && last.created_at, now: new Date(), days: cooldownDays,
         });
         if (state) {

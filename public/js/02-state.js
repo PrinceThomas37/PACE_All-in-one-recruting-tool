@@ -40,6 +40,13 @@ function escHtml(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/
 function getIndustriesList(){
   return (STATE.industriesList&&STATE.industriesList.length)?STATE.industriesList:[];
 }
+// A lead's industry as it carries it: its own, else its company's (R-312). The filter, the row and the counts all read this.
+function leadIndustryOf(j){ return String((j&&(j.industry||j.company_ind))||'').trim(); }
+// Filter-dropdown search box: hides the rows that do not match, in place, without a repaint (R-312).
+window.fltDropSearch=function(inp){
+  var q=String(inp.value||'').trim().toLowerCase(), panel=inp.closest('.flt-panel'); if(!panel)return;
+  panel.querySelectorAll('[data-flt]').forEach(function(row){ row.style.display=(!q||row.getAttribute('data-flt').indexOf(q)>-1)?'flex':'none'; });
+};
 function buildIndustrySelectOptions(selected){
   var list=getIndustriesList().slice();
   if(selected&&list.indexOf(selected)===-1)list.unshift(selected);

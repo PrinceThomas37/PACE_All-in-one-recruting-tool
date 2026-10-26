@@ -1,11 +1,11 @@
 {
-  "generated": "2026-10-08",
+  "generated": "2026-10-26",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 568,
-    "lines": 127257,
+    "files": 677,
+    "lines": 141149,
     "territories": 9,
-    "unclaimedFiles": 14
+    "unclaimedFiles": 49
   },
   "territories": [
     {
@@ -24,27 +24,27 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 79,
-      "lines": 34894,
+      "files": 84,
+      "lines": 38403,
       "largest": [
         {
-          "f": "public/js/25-workflow-bd.js",
-          "n": 1870
-        },
-        {
           "f": "public/js/47-page-mailbox.js",
-          "n": 1731
+          "n": 2479
         },
         {
-          "f": "public/js/07-page-email.js",
-          "n": 1120
+          "f": "public/js/25-workflow-bd.js",
+          "n": 1888
         },
         {
-          "f": "public/js/09-page-workflows.js",
-          "n": 1109
+          "f": "public/retro.css",
+          "n": 1309
+        },
+        {
+          "f": "public/js/68-page-finder.js",
+          "n": 1199
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-26",
       "openIn": 2,
       "openOut": 0
     },
@@ -79,27 +79,27 @@
         "services/viewer-time.js",
         "services/error-report.js"
       ],
-      "files": 42,
-      "lines": 14166,
+      "files": 45,
+      "lines": 15546,
       "largest": [
         {
           "f": "index.js",
-          "n": 3998
+          "n": 4376
         },
         {
           "f": "routes/finder.js",
-          "n": 980
+          "n": 1066
         },
         {
           "f": "routes/poc.js",
-          "n": 795
+          "n": 805
         },
         {
           "f": "routes/ownership-requests.js",
-          "n": 774
+          "n": 777
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-26",
       "openIn": 1,
       "openOut": 1
     },
@@ -122,8 +122,8 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 74,
-      "lines": 4399,
+      "files": 79,
+      "lines": 4504,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -142,7 +142,7 @@
           "n": 174
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-26",
       "openIn": 2,
       "openOut": 0
     },
@@ -194,27 +194,27 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 34,
-      "lines": 6202,
+      "files": 33,
+      "lines": 6728,
       "largest": [
         {
           "f": "services/mail-provider.js",
-          "n": 876
+          "n": 1091
         },
         {
           "f": "routes/mailbox.js",
-          "n": 569
+          "n": 706
         },
         {
           "f": "email-vars.js",
-          "n": 546
+          "n": 605
         },
         {
           "f": "routes/emails.js",
-          "n": 544
+          "n": 565
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-21",
       "openIn": 1,
       "openOut": 0
     },
@@ -264,11 +264,11 @@
         "services/next-action-dismissals.js"
       ],
       "files": 31,
-      "lines": 12009,
+      "lines": 12023,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
-          "n": 1229
+          "n": 1234
         },
         {
           "f": "jd-parser.js",
@@ -280,10 +280,10 @@
         },
         {
           "f": "routes/candidate-outreach.js",
-          "n": 1113
+          "n": 1069
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-21",
       "openIn": 0,
       "openOut": 1
     },
@@ -328,26 +328,26 @@
         "lead-ingest.js"
       ],
       "files": 34,
-      "lines": 8764,
+      "lines": 8884,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
-          "n": 926
+          "n": 929
         },
         {
           "f": "routes/recruiting/outreach.js",
-          "n": 891
+          "n": 927
         },
         {
           "f": "routes/wf.js",
-          "n": 551
+          "n": 560
         },
         {
           "f": "services/recruiting-core.js",
-          "n": 486
+          "n": 489
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-20",
       "openIn": 0,
       "openOut": 6
     },
@@ -375,7 +375,7 @@
         "services/ownership.js"
       ],
       "files": 9,
-      "lines": 2472,
+      "lines": 2635,
       "largest": [
         {
           "f": "services/ownership.js",
@@ -383,18 +383,18 @@
         },
         {
           "f": "routes/auth.js",
-          "n": 520
+          "n": 647
         },
         {
           "f": "services/provisioning.js",
           "n": 365
         },
         {
-          "f": "routes/sso.js",
+          "f": "routes/org-domains.js",
           "n": 198
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-20",
       "openIn": 1,
       "openOut": 0
     },
@@ -414,27 +414,27 @@
         "test/",
         ".github/"
       ],
-      "files": 245,
-      "lines": 43017,
+      "files": 307,
+      "lines": 51079,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",
-          "n": 765
+          "n": 852
+        },
+        {
+          "f": "test/finder-page-smoke.mjs",
+          "n": 751
         },
         {
           "f": "test/ownership-requests-smoke.mjs",
           "n": 728
         },
         {
-          "f": "test/poc-routes-smoke.mjs",
-          "n": 659
-        },
-        {
-          "f": "test/candidate-outreach-smoke.mjs",
-          "n": 657
+          "f": "test/mailbox-smoke.mjs",
+          "n": 666
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-26",
       "openIn": 1,
       "openOut": 0
     },
@@ -460,7 +460,7 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1334,
+      "lines": 1347,
       "largest": [
         {
           "f": "routes/reminders.js",
@@ -476,10 +476,10 @@
         },
         {
           "f": "services/reminder-source.js",
-          "n": 180
+          "n": 193
         }
       ],
-      "lastTouched": "2026-10-08",
+      "lastTouched": "2026-10-20",
       "openIn": 0,
       "openOut": 0
     }
@@ -747,19 +747,45 @@
     }
   ],
   "unclaimed": [
+    "company-site/fonts/fonts.css",
+    "company-site/index.html",
+    "company-site/privacy.html",
+    "company-site/terms.html",
+    "services/ai-teach.js",
+    "services/auto-reply.js",
+    "services/bounce-mark.js",
+    "services/candidate-brief.js",
+    "services/contact-edit-window.js",
+    "services/contact-status.js",
+    "services/daily-limit.js",
+    "services/date-format.js",
+    "services/email-setup.js",
     "services/followup-chain.js",
     "services/followup-steps.js",
     "services/followup-thread.js",
+    "services/job-title.js",
     "services/jobs-jsearch.js",
     "services/lead-check.js",
     "services/lead-decision.js",
+    "services/lead-fields.js",
     "services/lead-finder.js",
+    "services/lead-list.js",
     "services/lead-outreach-queue.js",
+    "services/list-tag.js",
+    "services/mailbox-limit.js",
+    "services/mailbox-secret.js",
+    "services/mailbox-send.js",
+    "services/memory-watch.js",
+    "services/operator.js",
+    "services/outreach-insights.js",
+    "services/recipient-suggest.js",
+    "services/reply-decline.js",
     "services/reply-target.js",
+    "services/scheduled-sends.js",
     "services/send-window.js",
     "services/sender-company.js",
-    "services/sequence-starter.js",
-    "services/setup-tasks.js",
-    "services/signature-logo.js"
+    "services/sending-pause.js",
+    "services/sent-sweep.js",
+    "services/sequence-starter.js"
   ]
 }
