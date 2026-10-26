@@ -163,7 +163,7 @@ function makeDb(tables, writes) {
   return { from: mk };
 }
 
-async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', role = 'bd_lead' } = {}) {
+async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', role = 'bd_lead', chain = null } = {}) {
   const writes = [];
   const tables = { companies: companies.slice(), organizations: [], jobs: jobs.slice(), contacts: [], job_orders: [], app_settings: [] };
   const supabase = makeDb(tables, writes);
@@ -174,7 +174,7 @@ async function callCreate(body, { companies = [], jobs = [], orgId = 'org-A', ro
     persistScores: () => {}, invalidateJobScores: () => {},
     STAGES: [], STAGE_ALIASES: {}, normalizeStage: (x) => x, BDM_GATED_STAGE: '',
     isBDM: () => true, isRecruiter: () => false,
-    assignedJobOrderIds: async () => [], recruiterCanTouchJob: async () => true, reportingChainIds: async () => [],
+    assignedJobOrderIds: async () => [], recruiterCanTouchJob: async () => true, reportingChainIds: async () => (chain || ['u-1']),
     nextId: async (p) => p + '-001', logSubmissionActivity: async () => {},
     JOB_ORDER_SELECT: '*', JOB_FIELDS: ['job_title', 'client'], JOB_DATE_FIELDS: [],
     pickJobFields: (s) => ({ job_title: s.job_title, client: s.client }),
@@ -252,7 +252,7 @@ await ta('D-0174: someone who is NOT the owner is refused, and told whose client
   const r = await callCreate(NEXT_JOB, ownedBy('u-other', 6));
   assert.equal(r.status, 409);
   assert.equal(r.payload.reason, 'client_owner');
-  assert.match(r.payload.error, /Only the client's owner can open jobs/);
+  assert.match(r.payload.error, /Only the client's owner \(or their manager\) can open jobs/);
   assert.equal(r.writes.filter(w => w.table === 'job_orders').length, 0);
 });
 await ta('D-0174: …regardless of the timeline — 200 days later it is still the owner\'s client', async () => {
@@ -262,6 +262,32 @@ await ta('D-0174: …regardless of the timeline — 200 days later it is still t
 });
 await ta('D-0174: …an admin who is not the owner is refused too (the client is reassigned first)', async () => {
   const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-other', 200), { role: 'admin' }));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
+});
+
+// D-0177 (owner, 26 Oct): "managers create jobs and follow business workflow" — the owner's manager may open a job for the
+// client; it goes into the OWNER's pipeline so the client does not change hands. An admin is still control only (D-0176).
+await ta('D-0177: the owner\'s MANAGER (the owner reports to them) opens a job for the client', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'bd_lead', chain: ['u-1', 'u-team'] }));
+  assert.equal(r.status, 201, 'manager refused: ' + JSON.stringify(r.payload));
+  const jo = r.tables.job_orders[0], ld = r.tables.jobs.find((j) => j.id !== 'ld-1');
+  assert.equal(jo.bd_manager_id, 'u-team', 'the job must go into the owner\'s pipeline, not the manager\'s');
+  assert.equal(ld.assigned_to_bd, 'u-team', 'the new lead row must stay the owner\'s, or the client changes hands');
+  assert.equal(jo.created_by, 'u-1', 'who opened it is still recorded');
+});
+await ta('D-0177: …a director higher up the same tree may too', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'director', chain: ['u-1', 'u-mid', 'u-team'] }));
+  assert.equal(r.status, 201, JSON.stringify(r.payload));
+});
+await ta('D-0177: a manager of ANOTHER team is refused (the owner is not under them)', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'bd_lead', chain: ['u-1', 'u-mine'] }));
+  assert.equal(r.status, 409);
+  assert.equal(r.payload.reason, 'client_owner');
+  assert.match(r.payload.error, /or their manager/);
+});
+await ta('D-0176: an admin is refused even when the owner is under them on the tree (admin = control, not creation)', async () => {
+  const r = await callCreate(NEXT_JOB, Object.assign(ownedBy('u-team', 3), { role: 'admin', chain: ['u-1', 'u-team'] }));
   assert.equal(r.status, 409);
   assert.equal(r.payload.reason, 'client_owner');
 });

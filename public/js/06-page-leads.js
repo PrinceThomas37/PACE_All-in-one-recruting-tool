@@ -807,6 +807,8 @@ function renderAddJobModal(){
   return '<div class="modal modal-w860">'+
     '<div class="mh"><div class="mt">Add lead</div><button class="btn-icon" onclick="closeModal()" aria-label="Close">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+
+      // R-309 / D-0178: from a reminder — say where it came from and whose it will be.
+      (a.fromReminder?'<div id="al-from-rem" class="fs-12_5 c-text2" style="padding:9px 11px;border-left:3px solid var(--accent);background:var(--bg);border-radius:6px;margin-bottom:12px">From your reminder for <strong class="c-text">'+htmlEsc(a.fromReminder.who)+'</strong>. Add the position — the lead will be yours, and the reminder will be tied to it.</div>':'')+
       '<div class="al-sec"><div class="al-h"><span class="al-ht">Company</span>'+
         '<div class="al-tabs"><button class="fc'+(a.mode==='existing'?' on':'')+'" onclick="addLeadMode(\'existing\')">Existing company</button>'+
         '<button class="fc'+(a.mode==='new'?' on':'')+'" onclick="addLeadMode(\'new\')">New company</button></div></div>'+company+'</div>'+

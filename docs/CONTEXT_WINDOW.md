@@ -2,7 +2,11 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0176** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0178** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+
+## START HERE (26 Oct, Session 53, last) — D-0177 managers open jobs (owner's pipeline); D-0178 reminder → your lead
+
+Both built on #369 with tests; #369 waits on the owner's "merge" (it now carries P1, D-0174/0176/0177, R-323, R-309/D-0178). Find Leads ownership left as D-0111 — owner told it is my reading; re-open if they meant ownership at save time.
 
 ## START HERE (26 Oct, Session 53, late night) — sign-in bounce fixed on the branch (R-323); server load is R-324
 

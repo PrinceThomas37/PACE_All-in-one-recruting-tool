@@ -707,6 +707,10 @@
   // scarce resource (D-0019).
   function bdCooldownBanner(f){
     var cd=f.intake&&f.intake.cooldown;
+    var fo=f.intake&&f.intake.for_owner;
+    // D-0177: a manager may open a job for a client of someone on their team — it goes into that person's pipeline, and says so.
+    if((!cd||!cd.blocked)&&fo) return '<div id="bd-for-owner" class="fs-12 c-text2" style="margin-top:8px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--bg);border-radius:6px;line-height:1.5">'+
+      '<strong class="c-text">This is '+esc(fo.name||'a team member')+'\'s client.</strong><br>You can open this job as their manager; it goes into '+esc(fo.name||'their')+(fo.name?'\'s':'')+' pipeline and the client stays theirs.</div>';
     if(!cd||!cd.blocked) return '';
     return '<div id="bd-cooldown" class="fs-12 c-text2" style="margin-top:8px;padding:10px 12px;border-left:3px solid var(--amber,#f59e0b);background:var(--bg);border-radius:6px;line-height:1.5">'+
       // D-0174: a client someone else owns is not "on cooldown" — it is theirs, whatever the date.

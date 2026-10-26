@@ -244,6 +244,7 @@ ${text.slice(0, 12000)}`;
       // WHO MAY OPEN A JOB FOR AN EXISTING CLIENT (D-0174, services/client-job-rule.js): the client's OWNER always may, any
       // number of jobs, no waiting period; anyone else is refused, naming the owner. Only a client NOBODY owns still runs
       // the company re-add cooldown (owner, Session 26). A company created a moment ago has no history, so it is skipped.
+      let jobOwnerId = null;   // D-0177: set when a manager opens a job for a client of someone under them
       if (!isNewCompany) {
         const ownerId = await clientJobRule.loadClientOwnerId({ supabase, withOrg, req, companyId });
         let ownerName = null;
@@ -261,8 +262,12 @@ ${text.slice(0, 12000)}`;
           last = recent && recent[0];
           state = companyCooldown.cooldownState({ lastLeadAt: last && last.created_at, now: new Date(), days: cooldownDays });
         }
-        const d = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: lead.company_name, cooldownBlocked: !!state });
+        const callerManagesOwner = ownerId && ownerId !== req.user.id
+          ? clientJobRule.callerManages({ ownerId, callerId: req.user.id, roles: req.user.roles || [req.user.role], chainIds: await reportingChainIds(req.user.id, orgIdFor(req)) })
+          : false;
+        const d = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: lead.company_name, cooldownBlocked: !!state, callerManagesOwner });
         if (d.why === 'not_owner') return res.status(409).json({ error: d.sentence, reason: 'client_owner' });
+        if (d.why === 'manager') jobOwnerId = d.jobOwnerId;
         if (d.why === 'cooldown') {
           return res.status(409).json({
             error: companyCooldown.cooldownSentence(state, {
@@ -307,7 +312,9 @@ ${text.slice(0, 12000)}`;
           stage: 'Connected',
           notes: lead.notes || '',
           created_by: req.user.id,
-          assigned_to_bd: req.user.id,
+          // D-0177: a manager opening a job for their team member's client puts it in THAT person's pipeline — the client's
+          // owner is read from these two fields (services/ownership.js clientOwnerFrom), so it must not change hands.
+          assigned_to_bd: jobOwnerId || req.user.id,
           lead_code: leadCode
         }, orgStamp(req))).select().single();
       if (leadErr) throw leadErr;
@@ -335,7 +342,7 @@ ${text.slice(0, 12000)}`;
         job_title: leadRow.position,
         priority: 'Normal',
         status: 'Active',
-        bd_manager_id: job.bd_manager_id || req.user.id,
+        bd_manager_id: job.bd_manager_id || jobOwnerId || req.user.id,
         created_by: req.user.id
       }, pickJobFields(job), orgStamp(req));
       if (!jobRow.job_title) jobRow.job_title = leadRow.position;

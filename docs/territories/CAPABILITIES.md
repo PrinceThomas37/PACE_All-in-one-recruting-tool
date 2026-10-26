@@ -298,6 +298,14 @@ customer-facing text.**
 Leads: 08:00–16:00 in the lead's timezone. Candidates: **no window** since
 D-0010 (switch off by default). One resolver, `getTimezoneFromLocation`.
 
+### Turn a reminder into a lead
+**Status:** BUILT (dev branch, R-309 / D-0178) · owner `surface` + `gateway`
+A reminder about someone PACE does not know shows "Add as lead": the Add Lead window opens filled in from the reminder, the person adds the position, and the lead is theirs straight away (Assigned, from their main mailbox), with the reminder tied to it.
+
+### A manager opens a job for their team member's client
+**Status:** BUILT (dev branch, D-0177) · owner `guild`
+The client's owner — or anyone they report to — may open jobs for that client; a manager's job goes into the owner's pipeline so the client stays theirs. Admins and other teams' managers are refused (D-0174, D-0176).
+
 ### A sign-in survives a slow server
 **Status:** BUILT (dev branch, R-323) · owner `surface`
 When the password is right but the first load fails (a busy server), PACE keeps the person signed in, tries once more by itself, then says "Your sign-in worked, but PACE could not load your data" with Try again / Sign out — it never drops them back on the login page. A sign-in that has truly run out still goes to the login page with its own sentence (R-118).

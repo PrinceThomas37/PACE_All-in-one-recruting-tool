@@ -365,7 +365,9 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     }
     const days = ownerId ? 0 : await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
     const state = ownerId ? null : companyCooldown.cooldownState({ lastLeadAt: last && last.created_at, now: new Date(), days });
-    const verdict = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: company.name, cooldownBlocked: !!state });
+    const callerManagesOwner = clientJobRule.callerManages({ ownerId, callerId: req.user.id, roles: req.user.roles || [req.user.role],
+      chainIds: chain || (ownerId && ownerId !== req.user.id ? await reportingChainIds(req.user.id, orgIdFor(req)) : []) });
+    const verdict = clientJobRule.decide({ ownerId, callerId: req.user.id, ownerName, company: company.name, cooldownBlocked: !!state, callerManagesOwner });
     const visibleRows = rows.filter(r => own.canSeeLead(r, scope));
 
     // The POCs already known at this client, across the leads the viewer may
@@ -400,6 +402,8 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
       address,
       lead_count: rows.length,
       contacts,
+      // D-0177: a manager opening a job for a team member's client is told whose pipeline it goes into.
+      for_owner: verdict.why === 'manager' ? { id: ownerId, name: ownerName || null } : null,
       // `blocked` is the answer the form acts on; the sentence is what it shows.
       cooldown: verdict.why === 'not_owner'
         ? { blocked: true, reason: 'client_owner', sentence: verdict.sentence }

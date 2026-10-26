@@ -6,8 +6,12 @@
 // regardless of the timeline. Only the client owner can create multiple jobs with the same client."
 //
 //   · the client's OWNER  → always allowed, no waiting period;
-//   · anyone else (manager and admin included) → refused, naming the owner — the client is reassigned or taken over first
-//     (the "Ask to take over" flow, R-047), never worked around;
+//   · the owner's MANAGER (D-0177, owner 26 Oct: "managers create jobs and follow business workflow") → allowed: someone the
+//     owner reports to, directly or higher up (hierarchy.js reportingChainIds), opens jobs for their team's clients. The job
+//     stays in the owner's pipeline — the route makes the OWNER its BD manager, so the client does not change hands;
+//   · an ADMIN who is neither → refused (D-0176: "the admin job is just control, not creation of any job");
+//   · anyone else → refused, naming the owner — the client is reassigned or taken over first (the "Ask to take over" flow,
+//     R-047), never worked around;
 //   · a client NOBODY owns → the company re-add cooldown still applies (services/company-cooldown.js).
 //
 // Who owns a client is the ONE ladder in services/ownership.js (clientOwnerFrom). `loadClientOwnerId` is only the three
@@ -30,16 +34,30 @@ async function loadClientOwnerId({ supabase, withOrg, req, companyId }) {
   return own.clientOwnerFrom({ company: co, jobOrders: jos || [], leads: leads || [] });
 }
 
-// → { allowed: true, why: 'owner' | 'no_owner' }  or  { allowed: false, why: 'not_owner', sentence }
-// `cooldownBlocked` is only consulted when nobody owns the client.
-function decide({ ownerId, callerId, ownerName, company, cooldownBlocked }) {
+// → { allowed: true, why: 'owner' | 'manager' | 'no_owner', jobOwnerId? }  or  { allowed: false, why: 'not_owner', sentence }
+// `callerManagesOwner`: the owner is in the caller's reporting chain AND the caller is not acting as an admin (the route works
+// that out — callerManages()). `cooldownBlocked` is only consulted when nobody owns the client.
+function decide({ ownerId, callerId, ownerName, company, cooldownBlocked, callerManagesOwner }) {
   if (ownerId && ownerId === callerId) return { allowed: true, why: 'owner' };
+  if (ownerId && callerManagesOwner) return { allowed: true, why: 'manager', jobOwnerId: ownerId };
   if (ownerId) {
     const who = ownerName || 'another person';
     return { allowed: false, why: 'not_owner',
-      sentence: `${company || 'This client'} belongs to ${who}. Only the client's owner can open jobs for it — ask ${ownerName || 'them'} to open it, or ask to take the client over.` };
+      sentence: `${company || 'This client'} belongs to ${who}. Only the client's owner (or their manager) can open jobs for it — ask ${ownerName || 'them'} to open it, or ask to take the client over.` };
   }
   return cooldownBlocked ? { allowed: false, why: 'cooldown' } : { allowed: true, why: 'no_owner' };
 }
 
-module.exports = { loadClientOwnerId, decide };
+// Is the caller the owner's MANAGER for this rule? The owner sits under them on the reporting tree, and they are not acting as
+// an admin (D-0176: an admin's part is control; someone who is BOTH an admin and a BD manager still manages their own team).
+//   chainIds   reportingChainIds(caller) — the caller plus everyone under them
+//   roles      the caller's roles
+function callerManages({ ownerId, callerId, chainIds, roles }) {
+  if (!ownerId || ownerId === callerId) return false;
+  const rs = (roles || []).filter(Boolean);
+  const managesAsBd = rs.some((r) => ['bd', 'bd_lead', 'associate_director', 'director'].includes(r));
+  if (!managesAsBd) return false;
+  return (chainIds || []).includes(ownerId);
+}
+
+module.exports = { loadClientOwnerId, decide, callerManages };
