@@ -133,7 +133,7 @@ try {
   // hover ahead
   await ev(() => mbBack());
   const h0 = await msgGets();
-  await page.hover('.mb-row:nth-child(3)');       // third row after the select-all header → a2
+  await page.hover(`.mb-row[onclick*="mbOpen('a2')"]`);   // the a2 row, by its message — not by position (day headings sit between rows, R-315)
   await settle(900);
   step('resting the pointer on a row fetches that message ahead of the click', (await msgGets()) === h0 + 1, `h0=${h0} now=${await msgGets()}`);
   const row = await ev(() => document.querySelectorAll('.mb-row')[1].getAttribute('onclick'));

@@ -40,6 +40,7 @@ const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
 const horizon = require('../services/view-horizon');
 const own = require('../services/ownership');
+const sentSummary = require('../services/sent-summary');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -116,6 +117,53 @@ module.exports = (ctx) => {
       job_order_id: row.job_order_id || null,
     };
   }
+
+  // GET /email/sent-summary?from=ISO&to=ISO (R-315) — what WENT OUT in the range, counted (never the list's 400-row page):
+  // lead emails by sequence step (first / FU1 / FU2 … / reminder), one-off sends and candidate batches. The same people
+  // rule as the list below: a lead email counts if I sent it or the lead is OWNED in my scope (own.scopeEmails is the
+  // final gate); one-off and candidate sends count by sender. Rows are read light (two or four columns), a page at a time.
+  const READ_PAGE = 1000;    // PostgREST's own page size — a technical batch, not a customer limit
+  async function readAllPages(build) {
+    const rows = [];
+    for (let from = 0; ; from += READ_PAGE) {
+      const { data, error } = await build().order('id', { ascending: true }).range(from, from + READ_PAGE - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < READ_PAGE) break;
+    }
+    return rows;
+  }
+  router.get('/email/sent-summary', auth, async (req, res) => {
+    try {
+      const range = sentSummary.readRange(req.query);
+      if (range.error) return res.status(400).json({ error: range.error });
+      const scope = await scopeFor(req);
+      const inRange = (q, col) => q.gte(col, range.from).lt(col, range.to);
+      let leadRows;
+      if (scope.all) {
+        leadRows = await readAllPages(() => inRange(withOrg(supabase.from('emails').select('id,followup_type'), req).eq('status', 'sent'), 'sent_at'));
+      } else {
+        const ownIds = own.queryOwnerIds(scope) || [];
+        const owned = await ownedJobMap(req, scope);
+        const base = () => inRange(withOrg(supabase.from('emails').select('id,followup_type,sent_by,job_id'), req).eq('status', 'sent'), 'sent_at');
+        const byId = new Map();
+        if (ownIds.length) for (const r of await readAllPages(() => base().in('sent_by', ownIds))) byId.set(r.id, r);
+        for (const part of chunk(owned.ids || [], 200)) for (const r of await readAllPages(() => base().in('job_id', part))) byId.set(r.id, r);
+        leadRows = own.scopeEmails([...byId.values()], owned.jobsById, scope);
+      }
+      const bySender = (q) => {
+        if (scope.all) return q;
+        const ids = own.queryOwnerIds(scope) || [];
+        return q.in('sent_by', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+      };
+      const countOf = async (q) => { try { const { count, error } = await q; if (error) throw error; return count || 0; } catch (_) { return 0; } };
+      const [oneOff, candidates] = await Promise.all([
+        countOf(bySender(inRange(withOrg(supabase.from('email_tracking').select('id', { count: 'exact', head: true }), req), 'sent_at'))),
+        countOf(bySender(inRange(withOrg(supabase.from('candidate_outreach').select('id', { count: 'exact', head: true }), req).eq('status', 'sent'), 'sent_at'))),
+      ]);
+      res.json(Object.assign({ from: range.from, to: range.to }, sentSummary.summarize(leadRows, { oneOff, candidates })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
 
   // GET /email/history
   //   ?q=            search subject / recipient

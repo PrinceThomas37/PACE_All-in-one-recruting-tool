@@ -156,7 +156,7 @@ module.exports = (ctx) => {
 
       const note = own.promptNote({
         fromName: req.user.name, title: askedTitle, subtitle: alert.email,
-        note: `${alert.sentence} Open Today and press Reconnect on the mailbox warning.`,
+        note: `${alert.sentence} Press Reconnect on this reminder.`,
       });
       const { error } = await db.forRequest(req).from('reminders').insert({
         user_id: alert.owner_id, contact_name: askedTitle, company_name: alert.email,

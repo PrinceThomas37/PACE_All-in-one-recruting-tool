@@ -328,8 +328,42 @@
   window.bdJobClearSel=function(){STATE.bd.jobSel={};render();};
   // ONE way to change a job's status — the bulk bar and a row's panel both
   // come through here, so the two cannot drift apart.
-  function setJobStatus(ids,status){ return Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,{status:status});})); }
-  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;setJobStatus(ids,status).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status,'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});};
+  // The note (optional) travels WITH the status and is kept on the job's own history (the rewind panel), against that change.
+  function setJobStatus(ids,status,note){ var b={status:status}; if(note) b.status_note=note; return Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,b);})); }
+  // R-315 (owner: "when a job stage is changed, the user should be able to add notes to it and then save the stage
+  // change"): choosing a status no longer changes it at once — a small window asks for a note, and Save does both.
+  // Cancel changes nothing (a status picked in the row goes back to what it was).
+  function askStatus(ids,status,onSave){
+    STATE.bd._statusAsk={ ids:ids, status:status, onSave:onSave };
+    var n=ids.length, one=n===1?joById(ids[0]):null;
+    var what=one?esc(one.job_title||'This job'):(n+' jobs');
+    STATE.modal='<div class="modal modal-w480" onclick="event.stopPropagation()">'+
+      '<div class="fs-16" style="padding:18px 20px;border-bottom:1px solid var(--border);font-weight:700">Set '+what+' to '+esc(status)+'</div>'+
+      '<div style="padding:16px 20px">'+
+        '<label class="fs-12 c-text2" for="bd-status-note">Note <span class="c-text3">(optional — kept in the job\'s history with this change)</span></label>'+
+        '<textarea id="bd-status-note" class="inp" rows="4" maxlength="1000" placeholder="e.g. Client paused hiring until January" style="width:100%;margin-top:6px;resize:vertical"></textarea>'+
+      '</div>'+
+      '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
+        '<button class="btn btn-outline" onclick="bdStatusCancel()">Cancel</button>'+
+        '<button class="btn btn-primary" id="bd-status-save" onclick="bdStatusSave()">Save</button>'+
+      '</div>'+
+    '</div>';
+    render();
+    setTimeout(function(){ var t=document.getElementById('bd-status-note'); if(t) t.focus(); },0);
+  }
+  window.bdStatusCancel=function(){ STATE.bd._statusAsk=null; closeModal(); };
+  window.bdStatusSave=function(){
+    var a=STATE.bd._statusAsk; if(!a) return;
+    var t=document.getElementById('bd-status-note'), note=t?String(t.value||'').trim():'';
+    var b=document.getElementById('bd-status-save'); if(b){ b.disabled=true; b.textContent='Saving…'; }
+    STATE.bd._statusAsk=null; closeModal();
+    a.onSave(note);
+  };
+  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;
+    askStatus(ids,status,function(note){
+      setJobStatus(ids,status,note).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status+(note?' — note saved':''),'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});
+    });
+  };
   window.bdSetJobFilter=function(k,v){STATE.bd.jobFilter[k]=v;STATE.bd.jobFilterOpen=true;render();};
   window.bdClearJobFilter=function(){STATE.bd.jobFilter={state:"",status:"",job_type:"",priority:"",remote:""};render();};
   window.bdToggleFilter=function(){STATE.bd.jobFilterOpen=!STATE.bd.jobFilterOpen;render();};
@@ -527,14 +561,15 @@
   window.bdJobSetStatus=function(id,status){
     var j=joById(id); if(!j||!status||j.status===status) return;
     var was=j.status;
-    setJobStatus([id],status).then(function(){
+    askStatus([id],status,function(note){ saveOne(note); });
+    function saveOne(note){ setJobStatus([id],status,note).then(function(){
       j.status=status;
-      showToast((j.job_title||'Job')+' is now '+status,'success');
+      showToast((j.job_title||'Job')+' is now '+status+(note?' — note saved':''),'success');
       render();                 // the row's badge moves; the panel is put back
     }).catch(function(e){
       showToast('Could not change the status: '+(e&&e.message||e),'error');
       j.status=was; if(window.rowRevealRefresh) rowRevealRefresh();
-    });
+    }); }
   };
 
   // ════════════════════════════════════════════════════════════════════════════

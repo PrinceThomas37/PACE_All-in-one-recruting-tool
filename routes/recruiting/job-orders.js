@@ -490,7 +490,9 @@ ${text.slice(0, 12000)}`;
       // Record what actually moved, against the row as it was BEFORE the write.
       // Never awaited into the response path beyond this — but it IS awaited, so
       // a history row cannot lose a race with the next edit of the same record.
-      await history.recordFields(req, 'job_order', req.params.id, current || {}, data, JOB_ORDER_TRACKED);
+      // R-315: a note sent with a status change is kept on that change's history row ("why it moved").
+      const statusNote = typeof b.status_note === 'string' ? b.status_note.trim().slice(0, 1000) : '';
+      await history.recordFields(req, 'job_order', req.params.id, current || {}, data, JOB_ORDER_TRACKED, { notes: { status: statusNote || null } });
       // The job changed, so every cached score against it is stale.
       invalidateJobScores(req.params.id);
       res.json(data);

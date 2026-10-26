@@ -168,6 +168,9 @@ function renderReminders(){
           // button disappears instead of composing a whole email and then being
           // refused at the last step. The reason is printed below, not hidden.
           (r.reminder_type==='setup'?'<button class="btn btn-primary btn-sm" onclick="goPage(\'mysetup\')">Open My Setup</button>':'')+
+          // R-315: a "Reconnect your mailbox" reminder carries the button itself (owner: "reconnect option should be shown
+          // there only") — no trip to Today's warning. It is only for the mailbox's owner, which is who the reminder is for.
+          (isReconnectReminder(r)?'<button class="btn btn-primary btn-sm" data-email="'+escAttr(r.company_name)+'" onclick="reminderReconnect(\''+r.id+'\',this.dataset.email,this)">Reconnect</button>':'')+
           (toEmail&&cmp.can_send!==false?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+
@@ -274,6 +277,33 @@ function renderReminders(){
 
 // ── Add reminder ──────────────────────────────
 function remField(lbl,inner){return '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em">'+lbl+'</label>'+inner+'</div>';}
+// A reminder that asks the person to reconnect a mailbox: the title the manager's prompt uses (routes/mailbox-alerts.js
+// askedTitle) and the mailbox's address in company_name.
+function isReconnectReminder(r){ return !!(r&&r.contact_name==='Reconnect your mailbox'&&/@/.test(String(r.company_name||''))); }
+// Find THIS person's mailbox with that address, open its provider's sign-in, and close the reminder once it succeeds.
+window.reminderReconnect=function(reminderId,email,btn){
+  var uid=STATE.user&&STATE.user.id; if(!uid) return;
+  var addr=String(email||'').trim().toLowerCase();
+  if(btn){ btn.disabled=true; btn.textContent='Opening…'; }
+  var reset=function(){ if(btn){ btn.disabled=false; btn.textContent='Reconnect'; } };
+  apiGet('/users/'+uid+'/emails').then(function(list){
+    var mb=(list||[]).filter(function(m){ return String(m.email_address||'').toLowerCase()===addr; })[0];
+    if(!mb){ reset(); showToast('That mailbox is not connected to your account any more — nothing to reconnect.','warning'); return; }
+    var done=function(e){
+      if(e.data&&(e.data.type==='ms_oauth_success'||e.data.type==='google_oauth_success')){
+        window.removeEventListener('message',done);
+        showToast(mb.email_address+' is connected again','success');
+        dismissReminder(reminderId);
+        if(typeof loadMailboxAlerts==='function') loadMailboxAlerts(true);
+      }
+    };
+    reset();
+    // An app-password mailbox has no sign-in window: its password is re-entered in My Setup.
+    if(String(mb.platform||'').toLowerCase()==='smtp'){ goPage('mysetup'); return; }
+    window.addEventListener('message',done);
+    if(String(mb.platform||'').toLowerCase()==='gmail') connectGmailUserEmail(uid,mb.id); else connectMicrosoftUserEmail(uid,mb.id);
+  }).catch(function(e){ reset(); showToast('Could not open the sign-in: '+((e&&e.message)||e),'error'); });
+};
 window.remOpenAdd=function(){
   var t=todayIST();
   STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">'+

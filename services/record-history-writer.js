@@ -60,12 +60,15 @@ function makeRecorder(supabase, orgStamp) {
   // recordFields(req, entity, id, before, after, fields) — one row per field
   // that genuinely moved. Callers pass the whole before/after so adding a
   // tracked field is a list edit, not another call site.
-  async function recordFields(req, entity, entityId, before, after, fields) {
+  // `opts.notes` (optional) is { field: 'why it changed' } — the note is kept on THAT field's row (R-315: a job's status
+  // change carries the person's note).
+  async function recordFields(req, entity, entityId, before, after, fields, opts) {
+    const notes = (opts && opts.notes) || {};
     for (const f of (fields || [])) {
       const from = before ? before[f] : null;
       const to = after ? after[f] : null;
       if (!changed(from, to)) continue;
-      await record(req, entity, entityId, { action: f === 'stage' || f === 'status' ? 'stage' : 'field', field: f, from, to });
+      await record(req, entity, entityId, { action: f === 'stage' || f === 'status' ? 'stage' : 'field', field: f, from, to, note: notes[f] || null });
     }
   }
 
