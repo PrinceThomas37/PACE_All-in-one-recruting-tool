@@ -1257,3 +1257,6 @@ Any `getSetting(supabase, key)` with no organisation returns the deployment defa
 
 ## 2026-10-27 (Session 54) — R-332: settings follow the company
 Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-follow-company-smoke.mjs` fails otherwise; allow-list in the test, with reasons). Only `wf_tick_batch` is engine-wide.
+
+## 2026-10-27 (Session 54) — Find Leads industry filter (D-0185)
+`routes/finder.js` config: each industry now says whether it `filters`. `services/lead-finder.js` `industryCodes(search)` — a code filter only when every picked industry has codes.

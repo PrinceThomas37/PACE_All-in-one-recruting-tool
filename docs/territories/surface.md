@@ -288,3 +288,6 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 
 ## 2026-10-27 (Session 54) — paused mailbox in the dashboard warning card (D-0183)
 `60-mailbox-alerts.js`: state `auto_paused` draws a "PAUSED" tag, "paused <day> at <time>", the reason sentence, only "Hide for a week" — never Reconnect/Remind (they would not fix it). Actions are the owner's to define later.
+
+## 2026-10-27 (Session 54) — Find Leads industry hint (D-0185)
+`68-page-finder.js` `renderIndustries`: when every picked industry `filters` (hospitals) and the source is the contact database, one plain line says only that kind of company is searched.

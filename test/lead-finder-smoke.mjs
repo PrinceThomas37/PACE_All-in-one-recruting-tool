@@ -41,6 +41,18 @@ step('the posted-within date counts back whole days — 0 means today, 30 a mont
 step('sizes become Apollo\'s employee ranges (small 11–50, mid 51–200 and 201–500)', f.organization_num_employees_ranges.join() === '11,50,51,200,201,500');
 step('keywords and domains are passed only when there are some', f.q_organization_keyword_tags.join() === 'machining' && f.q_organization_domains_list.join() === 'acme.com' && !('q_organization_keyword_tags' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)) && !('organization_num_employees_ranges' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)));
 
+// ── HOSPITALS (owner, 27 Oct 2026: "add hospital and healthcare … very hard to get that industry in particular") ─────────────────
+{
+  const hs = F.SECTORS.hospital;
+  step('Hospitals & health care is an industry in the list, with titles to tick', hs && /Hospitals/.test(hs.label) && hs.titles.length >= 15 && hs.titles.includes('Registered Nurse') && hs.titles.includes('Respiratory Therapist'));
+  const h = F.apolloFilters({ titles: ['Registered Nurse'], locations: ['Texas'], sectors: ['hospital'] }, NOW);
+  step('picking it asks Apollo for hospitals only (NAICS 622, Apollo\'s own organization_naics_codes), not just the titles', h.organization_naics_codes && h.organization_naics_codes.join() === '622', JSON.stringify(h));
+  step('the ordinary filters are untouched beside it', h.q_organization_job_titles.join() === 'Registered Nurse' && h.organization_job_locations.join() === 'Texas');
+  step('picked WITH an industry that has no code (IT), no code filter at all — IT companies must not be dropped', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['hospital', 'it'] }, NOW)));
+  step('industries without a code behave exactly as before (no code filter)', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['medical'] }, NOW)) && !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)));
+  step('a saved search keeps the hospital industry', F.normalizeSearch({ name: 'RN', titles: 'Registered Nurse', locations: 'Texas', sectors: ['hospital'] }).value.sectors.join() === 'hospital');
+}
+
 // ── finding a company by name ──────────────────────────────────────────────
 console.log('\nFinding a company by name');
 step('a typed website is recognised and reduced to the bare site; a company name is not mistaken for one', F.websiteFrom('https://www.Acme.com/careers') === 'acme.com' && F.websiteFrom('acme.co.uk') === 'acme.co.uk' && F.websiteFrom('Acme Corp') === '' && F.websiteFrom('Acme Inc.') === '' && F.websiteFrom('') === '');

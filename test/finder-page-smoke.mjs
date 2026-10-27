@@ -36,7 +36,7 @@ const ACCESS = {
   limits: { jobs_per_lead: 3, contacts_per_lead: 3 },
   enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, contact_data: { provider:'apollo', label:'Apollo.io', name:'Apollo', connected:true, capabilities: { searchPeople:{offered:true,credits:0}, revealPerson:{offered:true,credits:1}, enrichOrganization:{offered:true,credits:1}, searchOrganizations:{offered:true,credits:1}, organizationJobPostings:{offered:true,credits:1}, checkPeopleSearch:{offered:true,credits:0} } }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
   wait_days: 14, card_days: 5, goes_to: 'pool', jobsource: { connected: false, used: 0, limit: 10, per_run: 3 },
-  sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
+  sectors: [{ id: 'hospital', label: 'Hospitals & health care', filters: true, titles: ['Registered Nurse', 'Respiratory Therapist'] }, { id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
   sizes: [{ id: 'small', label: '11–50' }, { id: 'mid', label: '51–500' }], posted: { min: 0, max: 30, def: 14 },
 };
 const CARDS = {
@@ -388,6 +388,16 @@ try {
   await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); });
   h = await html();
   step('SEVERAL industries can be picked: each is a chip with its own titles to tick (the old page took one)', /fd-chip">Medical &amp; dental/.test(h) && /fd-chip">IT &amp; software/.test(h) && /Dental Hygienist/.test(h) && /Software Engineer/.test(h));
+  // Hospitals are a real FILTER (R-330-style ask, owner 27 Oct): the form says so, but only when every picked industry is one.
+  await page.evaluate(() => { window.fdAddSector('hospital'); });
+  h = await html();
+  step('a mix of a filtering industry and an ordinary one does not claim to filter', !/Searches only companies classed in/.test(h));
+  await page.evaluate(() => { window.fdDropSector('medical'); window.fdDropSector('it'); });
+  h = await html();
+  step('Hospitals alone says plainly that only that kind of company is searched', /Searches only companies classed in this industry/.test(h) && /fd-chip">Hospitals &amp; health care/.test(h) && /Registered Nurse/.test(h));
+  await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); window.fdDropSector('hospital'); });
+  h = await html();
+  step('…and it goes away with the industry', !/Searches only companies classed in/.test(h) && /fd-chip">Medical &amp; dental/.test(h));
   step('each picked industry is drawn exactly ONCE (one Select all and one Clear per industry — a screenshot once showed every block twice)', (h.match(/fdTitlesAll\('medical'\)/g) || []).length === 1 && (h.match(/fdTitlesAll\('it'\)/g) || []).length === 1 && (h.match(/fdTitlesNone\('medical'\)/g) || []).length === 1 && (h.match(/Dental Hygienist/g) || []).length === 1);
   step('…an unnamed run is named after the first industry, and nothing is ticked yet (0 of 4)', /value="Medical &amp; dental"/.test(h) && /0 of 4 ticked/.test(h) && !/aria-pressed="true"/.test(h));
   const titlesNow = () => page.evaluate(() => window.STATE.finder.form.titles.join('|'));
