@@ -238,14 +238,17 @@ function renderSidebar(){
     '<div class="sb-brand" onclick="paceLogoClick()" role="button" tabindex="0" '+
       'title="PACE" aria-label="PACE">'+
       // R-122: the pixel logo on a slice of the sky (retro.css paints both).
-      // R-319: the mark is the two forward chevrons (pace = moving ahead), in the same pixels as the word; folded, it stands alone.
-      '<div class="rail-mark">'+pixelSprite(PACE_GO,'currentColor',2)+'</div>'+
+      '<div class="rail-mark">P</div>'+
       paceLogoWord()+
       '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
-      // The arrow: folds the sidebar to the icon rail, or opens it. Its look (which way it points) is CSS from the sidebar's own
-      // `pinned` class, so the markup never changes between states; the click handler must not also be the brand's click.
-      // It is also the touch device's "open the labels" control (the old hamburger, `.rail-pin`).
-      '<button type="button" class="rail-pin rail-arrow" onclick="event.stopPropagation();toggleRail(true)" aria-label="Fold or open the menu" title="Fold or open the menu" aria-expanded="'+(railPinned?'true':'false')+'">'+pixelSprite(PACE_ARROW,'currentColor',3)+'</button>'+
+    '</div>'+
+    // R-319 (owner, 27 Oct video): the menu opens and folds ONLY when this button is pressed — never by a pointer resting on it.
+    // Its own row under the logo, so it never sits on the logo or jumps; both arrows are always drawn and CSS shows the one that
+    // applies from the sidebar's own `pinned` class, so the markup never changes between states and an idle repaint writes nothing.
+    '<div class="rail-toggle">'+
+      '<button type="button" class="rail-pin rail-arrow" onclick="event.stopPropagation();toggleRail(true)" aria-label="Fold or open the menu" title="Fold or open the menu" aria-expanded="'+(railPinned?'true':'false')+'">'+
+        '<span class="ra-fold">'+pixelSprite(PACE_ARROW,'currentColor',2)+'</span><span class="ra-open">'+pixelSprite(PACE_ARROW_OPEN,'currentColor',2)+'</span>'+
+      '</button>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
@@ -545,9 +548,9 @@ document.addEventListener('keydown',function(ev){
   if(ev.key==='Escape'&&STATE.newMenu){ STATE.newMenu=false; render(); }
 });
 // Pixel clouds (always) and stars (CSS shows them at dusk and night).
-// The brand mark: two forward chevrons (11x9), and the arrow's chevron pointing left (5x7; CSS turns it round when the menu is folded).
-var PACE_GO=['##...##....','.##...##...','..##...##..','...##...##.','....##...##','...##...##.','..##...##..','.##...##...','##...##....'];
+// The fold/open button's two arrows (5x7): left = "fold the menu", right = "open it". Both are drawn; CSS shows one.
 var PACE_ARROW=['...##','..##.','.##..','##...','.##..','..##.','...##'];
+var PACE_ARROW_OPEN=['##...','.##..','..##.','...##','..##.','.##..','##...'];
 var PACE_CLOUD=['......####......','...#########....','..############..','.##############.','################'];
 function paceSkyDecor(){
   return '<span class="tb-cloud c1">'+pixelSprite(PACE_CLOUD,'currentColor',3)+'</span>'+

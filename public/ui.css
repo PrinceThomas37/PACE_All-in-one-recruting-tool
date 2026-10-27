@@ -81,19 +81,8 @@ body.ui-kit #sidebar.pinned .rail-word{opacity:1;transform:none}
    The right question is not "how wide is the screen" but "is there a pointer
    that can hover", which is what this query asks. `.pinned` stays outside it:
    that is an explicit choice, not a hover. */
-@media (hover:hover) and (pointer:fine){
-  body.ui-kit #sidebar:hover{width:var(--rail-w-open);box-shadow:var(--sh2)}
-  body.ui-kit #sidebar:hover .rail-word{opacity:1;transform:none}
-  body.ui-kit #sidebar:hover .sb-lbl{opacity:1}
-  body.ui-kit #sidebar:hover .nav-txt{opacity:1;transform:none}
-  body.ui-kit #sidebar:hover .user-meta{opacity:1;transform:none}
-  body.ui-kit #sidebar:hover .nav-badge{
-    position:static;margin-left:auto;margin-right:10px;
-    min-width:auto;height:auto;padding:1px 7px;border-radius:10px;
-    background:var(--accent);color:#fff;font-size:10px;font-weight:700;
-    font-family:var(--mono);
-  }
-}
+/* THE SIDEBAR OPENS AND FOLDS ONLY WHEN THE PERSON PRESSES THE ARROW (owner, 27 Oct, after the video: "the push and pull is automatic … it should
+   be manual"). It used to float open under a resting mouse; a pointer over the rail now does nothing. The open look is `.pinned`. */
 
 /* Nav */
 body.ui-kit .sb-nav{padding:8px;flex:1;overflow-y:auto;overflow-x:hidden}
