@@ -2,13 +2,21 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-27 (Session 54). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+**Updated**: 2026-10-27 (Session 54, end). **Highest ids:** decision **D-0182** · contract C-0038 · roadmap **R-330** (next `R-331`) · next migration **069** (068 applied live this session).
 
-## START HERE (27 Oct, Session 54, R-321) — contact data from any provider: steps 1–3 BUILT (D-0180); migration 068 APPLIED live; merging after the clean runs
+## START HERE (27 Oct, Session 54, end) — everything built this session is MERGED; what is left is in the list below
 
-Owner said "R-321", answered the four plan questions (D-0180: build 1–3; second provider = slot only; "connect a contact database" prompt; read vendor terms before go-live). **Built:** `services/contact-data.js` (contract + registry + per-organisation choice; Apollo = `people-apollo.js` unchanged), routes/screens through it, a picker in Integrations. **Migration 068 APPLIED to the live DB on the owner's go (27 Oct, read back).** **Next if asked:** R-329 (apply 068; the real second vendor needs the owner to name it + docs + a test key; data-level Apollo names), then **R-320 (P4: compose rebuilt around contact search) is now unblocked** — it builds on this layer. Plan doc: `docs/PLAN_R-321_contact_data_any_provider.md`.
+**Merged today:** #372 (P3, R-319) · #373 (R-321 contact data from any provider; **migration 068 applied live**, D-0180) · #374 (sidebar opens only by its button, `››` mark gone — D-0181; send basket goes first outreach → fu1 → fu2 → fu3–5 → reminders — D-0182). Each had a clean-worktree full suite: 315/315 on Node 22 and on Node 26.11.1. **Not yet confirmed from this session:** that the Render deploys of #373/#374 are live and error-free (the Render tools lost their workspace selection — ask the owner before choosing one; service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng` per the older note below).
 
-## START HERE (27 Oct, Session 54, last) — the owner parked a security list for the NEW Render service (R-328)
+**Owner's questions answered (no code):** send order is not random (window-open first → first outreach → [now] fu1 → fu2 …; mailboxes interleaved; oldest first); Martin's 173→209 pending was the daily follow-up engine adding 72 follow-ups at 13:03:52 UTC (`followup_send_time` 18:30 IST = 13:00 UTC), no duplicate first emails (0 of 136 already sent to the same address).
+
+**Open for the owner's reaction:** the sidebar (does the button itself stay? I kept it; "remove that arrow on the side of PACE" was read as the `››` mark only). **Left, by who is blocked** — see the reply to the owner in the archive entry "Session 54, what's left"; short form: owner owes R-328's steps when the new Render service exists, R-306 (95 vs 78 import), the `[SlowReq]` speed verdict after a US working day (R-303 if still slow), R-325/R-326 offers, R-329 (name the second vendor + docs + test key); I owe confirming the deploys and R-320 (P4 compose around contact search, now unblocked) once the owner decides.
+
+## START HERE (27 Oct, Session 54, R-321) — contact data from any provider: MERGED (#373, D-0180); migration 068 APPLIED live
+
+`services/contact-data.js` (contract + registry + per-organisation choice; Apollo = `people-apollo.js` unchanged), routes/screens through it, a picker in Integrations. Plan doc: `docs/PLAN_R-321_contact_data_any_provider.md`. R-329: the real second vendor needs the owner to name it + docs + a test key; Apollo-named data leftovers.
+
+## START HERE (27 Oct, Session 54, security) — the owner parked a security list for the NEW Render service (R-328)
 
 `docs/TODO_SECURITY_AT_NEW_RENDER_SERVICE.md` is the checklist (owner's steps A, my fixes B, checks C, decisions D). Read it when the owner says the new service is ready; first things then: the secret key (R-205), the new web address in the sign-in settings, a database backup. Nothing is built.
 
