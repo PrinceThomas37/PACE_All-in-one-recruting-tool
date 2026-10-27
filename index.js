@@ -79,6 +79,7 @@ const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mai
 const { createSmtpDelivery } = require('./services/smtp-delivery');
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
+const mailboxAlertsRules = require('./services/mailbox-alerts');   // what a paused mailbox's notice says (D-0183)
 const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
@@ -702,8 +703,10 @@ function warmupLimit(mailboxRow, start, step) {
   const warmupStep = step != null ? step : 5;
   return warmupStart + warmupStep * days;
 }
-async function setMailboxAutoPaused(userEmailId, paused, reason) {
+async function setMailboxAutoPaused(userEmailId, paused, reason, note) {
   try { await supabase.from('user_emails').update({ auto_paused_at: paused ? new Date() : null }).eq('id', userEmailId); } catch (_) {}
+  // What the pause was FOR is kept beside it, so the dashboard can say which mailbox, when and why; a resume forgets it.
+  if (paused) await mailboxAlertsRules.saveNote(supabase, userEmailId, note); else await mailboxAlertsRules.forgetNote(supabase, userEmailId);
   if (paused) {
     console.log(`[Deliverability] Mailbox ${userEmailId} AUTO-PAUSED: ${reason}`);
     emit(EVENTS.MAILBOX_AUTOPAUSED, { userEmailId, reason });
@@ -2164,7 +2167,8 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
 
     if (userEmailId && mailboxDeliv[userEmailId] && mailboxDeliv[userEmailId].auto_paused_at) {
       skippedInactive++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (mailbox auto-paused: high bounce rate)` });
+      // Say WHICH mailbox (owner, 27 Oct 2026): five were paused and the line gave no way to tell which one held this email back.
+      await setSendProgress(userId, { ...progressBase, current: mailboxAlertsRules.heldByPauseLine(email.to_email, sendingEmail?.email_address) });
       continue;
     }
 
@@ -2960,7 +2964,7 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
     settingsConfig.getSetting(supabase, 'bounce_min_sample'),
   ]);
   if (sentToday >= minSample && bouncesToday / sentToday > thresholdPct / 100) {
-    await setMailboxAutoPaused(userEmailId, true, `bounce rate ${(bouncesToday / sentToday * 100).toFixed(1)}% (${bouncesToday}/${sentToday} today)`);
+    await setMailboxAutoPaused(userEmailId, true, `bounce rate ${(bouncesToday / sentToday * 100).toFixed(1)}% (${bouncesToday}/${sentToday} today)`, mailboxAlertsRules.pauseNote(bouncesToday, sentToday));
   }
 }
 

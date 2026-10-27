@@ -285,3 +285,6 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-27 (Session 54) — sidebar is manual only (D-0181)
 No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arrow`, own row under the logo, ≥861px) or, on touch, the brand tap changes `pinned`. Two arrows are drawn and picked by `#sidebar.pinned`; never reintroduce a flip transform or position change between states. `.rail-mark` is the plain `P` (hidden when pinned). Guard: `mobile-layout-smoke` ("a pointer resting on the folded rail does NOT open it").
+
+## 2026-10-27 (Session 54) — paused mailbox in the dashboard warning card (D-0183)
+`60-mailbox-alerts.js`: state `auto_paused` draws a "PAUSED" tag, "paused <day> at <time>", the reason sentence, only "Hide for a week" — never Reconnect/Remind (they would not fix it). Actions are the owner's to define later.

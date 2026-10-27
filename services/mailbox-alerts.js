@@ -30,11 +30,43 @@ function reasonSentence(platform, error) {
   return `The sign-in stopped working — reconnect it.`;
 }
 
+// A mailbox PACE paused by itself (too many bounces, R-243/D-0179 sweeps). The owner asked (27 Oct 2026): "the user should know which one
+// … and when", and the admin must be told. `note` is what was recorded at the moment of the pause ({ bounces, sent, pct } — see
+// pauseNote) or null for a pause made before that was recorded; the sentence never invents numbers it does not have.
+function pauseNote(bounces, sent) {
+  const b = Number(bounces), n = Number(sent);
+  if (!(n > 0) || !(b >= 0)) return null;
+  return { bounces: b, sent: n, pct: Math.round((b / n) * 1000) / 10 };
+}
+function pausedSentence(note) {
+  const why = note && note.sent > 0
+    ? `${note.bounces} of the ${note.sent} emails it sent that day bounced (${note.pct}%), which is over the limit.`
+    : 'Too many of its emails bounced, which is over the limit.';
+  return `PACE paused this mailbox by itself to protect its reputation. ${why} Nothing sends from it until someone resumes it.`;
+}
+
+// Keep / forget what a pause was for. app_settings, like the bounce counts beside it — no schema change. Best-effort: the pause itself
+// already happened, so a failure here only means the notice says it in general terms.
+async function saveNote(supabase, mailboxId, note) {
+  if (!mailboxId || !note) return false;
+  try { await supabase.from('app_settings').upsert({ key: pauseNoteKey(mailboxId), value: JSON.stringify(note), updated_at: new Date() }, { onConflict: 'key' }); return true; } catch (_) { return false; }
+}
+async function forgetNote(supabase, mailboxId) {
+  if (!mailboxId) return false;
+  try { await supabase.from('app_settings').delete().eq('key', pauseNoteKey(mailboxId)); return true; } catch (_) { return false; }
+}
+
+// The line under "Sending emails…" when an email is held back by a paused mailbox — it must say WHICH mailbox (owner, 27 Oct 2026).
+function heldByPauseLine(toEmail, mailboxAddress) {
+  return `${toEmail} (held: mailbox ${mailboxAddress || 'unknown'} was auto-paused for a high bounce rate)`;
+}
+
 // One mailbox → one alert, or null.
-//   mailbox: { id, email_address, is_active, user_id }
+//   mailbox: { id, email_address, is_active, user_id, auto_paused_at }
 //   conn:    mailbox-health's deriveTokenStatus shape, plus `certain`
 //   held:    emails waiting to go out from this mailbox
-function alertFor({ mailbox, conn, held = 0 }) {
+//   pauseNote: what was recorded when PACE paused it (or null)
+function alertFor({ mailbox, conn, held = 0, pauseNote: note = null }) {
   if (!mailbox || mailbox.is_active === false) return null;
   const c = conn || { connected: false, status: 'none' };
   // The provider the connection used, else the one the mailbox was set up as
@@ -53,6 +85,11 @@ function alertFor({ mailbox, conn, held = 0 }) {
         : `This mailbox's sign-in has not renewed when it should have — it has probably expired. Reconnect it to be sure.`,
     };
   }
+  // A mailbox that is signed in but PAUSED is a different problem with a different fix: reconnecting does nothing for it.
+  if (mailbox.auto_paused_at) {
+    return { mailbox_id: mailbox.id, email: mailbox.email_address, platform, state: 'auto_paused',
+      since: mailbox.auto_paused_at, paused_at: mailbox.auto_paused_at, held, sentence: pausedSentence(note) };
+  }
   if (c.status === 'none' && held > 0) {
     return { mailbox_id: mailbox.id, email: mailbox.email_address, platform, state: 'not_connected', since: null, held,
       sentence: 'This mailbox was never connected, so nothing can send from it.' };
@@ -62,7 +99,7 @@ function alertFor({ mailbox, conn, held = 0 }) {
 
 // Most urgent first: certain failures, then mail waiting, then the rest.
 function sortAlerts(list) {
-  const rank = { failed: 0, not_connected: 1, probably_expired: 2 };
+  const rank = { failed: 0, auto_paused: 1, not_connected: 2, probably_expired: 3 };
   return (list || []).slice().sort((a, b) =>
     (rank[a.state] - rank[b.state]) || ((b.held || 0) - (a.held || 0)) || String(a.email).localeCompare(String(b.email)));
 }
@@ -83,6 +120,7 @@ function sortAlerts(list) {
 // there is no migration; expired entries are dropped whenever it is read.
 const HIDE_DAYS = 7;
 const MS_DAY = 24 * 60 * 60 * 1000;
+function pauseNoteKey(mailboxId) { return `mailbox_pause_note_${mailboxId}`; }
 function hideKey(userId) { return `mba_hide_${userId}`; }
 function fingerprintOf(alert) {
   return alert ? `${alert.state || ''}|${alert.since || ''}` : '';
@@ -124,7 +162,8 @@ function applyHidden(alerts, store, now = Date.now()) {
 // WHO MAY ASK WHOM. A prompt drops a task on somebody's morning list, so only
 // a person with that mailbox's owner in their reporting chain (or an admin) may
 // send one — never a colleague, never yourself (you have the Reconnect button).
-function askRefusal({ askerId, ownerId, isAdmin, chainIds }) {
+function askRefusal({ askerId, ownerId, isAdmin, chainIds, state }) {
+  if (state === 'auto_paused') return 'This mailbox was paused by PACE, not signed out — asking its owner to reconnect would not fix it.';
   if (!ownerId) return 'Nobody owns this mailbox, so there is nobody to ask.';
   if (ownerId === askerId) return 'This is your own mailbox — use Reconnect.';
   if (!isAdmin && !(chainIds || []).includes(ownerId)) return 'You can only ask somebody on your own team to reconnect a mailbox.';
@@ -132,6 +171,6 @@ function askRefusal({ askerId, ownerId, isAdmin, chainIds }) {
 }
 
 module.exports = {
-  reasonSentence, alertFor, sortAlerts,
+  reasonSentence, alertFor, sortAlerts, pauseNote, pausedSentence, pauseNoteKey, heldByPauseLine, saveNote, forgetNote,
   HIDE_DAYS, hideKey, fingerprintOf, pruneHidden, recordHide, isHidden, applyHidden, askRefusal,
 };

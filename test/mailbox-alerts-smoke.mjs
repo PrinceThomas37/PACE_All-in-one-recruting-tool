@@ -201,6 +201,56 @@ step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
   step('Show brings every hidden warning back', x.out.success === true && back.out.alerts.length === 1 && back.out.hidden === 0);
 }
 
+// ── A MAILBOX PACE PAUSED BY ITSELF (owner, 27 Oct 2026, D-0183) ─────────────
+// "I saw 'mailbox auto-paused' but not which one … the admin should be informed … actions later."
+{
+  const okConn = { connected: true, status: 'ok' };
+  const note = ma.pauseNote(2, 29);
+  step('the pause records what it was for (2 of 29 = 6.9%)', note && note.bounces === 2 && note.sent === 29 && note.pct === 6.9, JSON.stringify(note));
+  step('no sample, no invented numbers', ma.pauseNote(0, 0) === null && /Too many of its emails bounced/.test(ma.pausedSentence(null)) && !/\d/.test(ma.pausedSentence(null)));
+  let pa = ma.alertFor({ mailbox: { ...mb, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: okConn, held: 7, pauseNote: note });
+  step('a signed-in but PAUSED mailbox is an alert, saying which, when, and why',
+    pa && pa.state === 'auto_paused' && pa.email === 'a@x.com' && pa.paused_at === '2026-10-27T14:55:36Z' && /2 of the 29/.test(pa.sentence) && /Nothing sends from it/.test(pa.sentence) && pa.held === 7, JSON.stringify(pa));
+  step('a paused mailbox that is also switched off raises nothing', ma.alertFor({ mailbox: { ...mb, is_active: false, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: okConn }) === null);
+  step('a dead sign-in still comes first when both are true', ma.alertFor({ mailbox: { ...mb, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: Object.assign({ platform: 'microsoft' }, certain) }).state === 'failed');
+  step('a paused mailbox sorts right after a dead sign-in', ma.sortAlerts([{ state: 'not_connected', email: 'c' }, { state: 'auto_paused', email: 'b' }, { state: 'failed', email: 'a' }]).map(x => x.email).join('') === 'abc');
+  step('nobody can "ask the owner to reconnect" a paused mailbox — it would not fix it', /not signed out/.test(ma.askRefusal({ askerId: 'a', ownerId: 'b', isAdmin: true, state: 'auto_paused' })));
+  step('the line under "Sending emails…" names the mailbox', /dan\.johnson@futeglobal\.com/.test(ma.heldByPauseLine('mknight@dwsenergy.com', 'dan.johnson@futeglobal.com')) && /mknight@dwsenergy\.com/.test(ma.heldByPauseLine('mknight@dwsenergy.com', 'dan.johnson@futeglobal.com')));
+
+  // What is written at the moment of the pause, and forgotten on a resume.
+  const store = [];
+  const fsb = { from: () => ({ upsert: async (row) => { store.push(row); return { error: null }; }, delete: () => ({ eq: async (_k, v) => { const i = store.findIndex(r => r.key === v); if (i >= 0) store.splice(i, 1); return { error: null }; } }) }) };
+  await ma.saveNote(fsb, 'mbZ', ma.pauseNote(2, 29));
+  step('a pause stores its reason under the mailbox\'s own key', store.length === 1 && store[0].key === 'mailbox_pause_note_mbZ' && JSON.parse(store[0].value).sent === 29, JSON.stringify(store));
+  await ma.forgetNote(fsb, 'mbZ');
+  step('a resume forgets it', store.length === 0);
+  step('a store that fails never breaks the pause', (await ma.saveNote({ from: () => { throw new Error('down'); } }, 'm', { sent: 1 })) === false);
+
+  // The route: the owner, a manager above, and the admin are told; another organisation never.
+  const P = JSON.parse(JSON.stringify(T));
+  P.user_emails.find(m => m.id === 'mb-mgr').auto_paused_at = '2026-10-27T14:24:38Z';
+  P.user_emails.find(m => m.id === 'mb-x').auto_paused_at = '2026-10-27T14:24:38Z';
+  P.app_settings = [{ key: 'mailbox_pause_note_mb-mgr', value: JSON.stringify(ma.pauseNote(3, 38)) }];
+  function pq(table) {
+    const f = [];
+    const api = { select() { return api; }, eq(k, v) { f.push(r => r[k] === v); return api; }, in(k, vs) { f.push(r => vs.includes(r[k])); return api; },
+      is(k, v) { f.push(r => (r[k] == null) === (v == null)); return api; },
+      then(res, rej) { return Promise.resolve({ data: (P[table] || []).filter(r => f.every(fn => fn(r))), error: null }).then(res, rej); } };
+    return api;
+  }
+  const pr = require('../routes/mailbox-alerts.js')({ supabase: { from: pq }, auth: (_a, _b, n) => n(), hasRole: (req, r) => (req.user.roles || []).includes(r) });
+  const ph = pr.stack.find(l => l.route && l.route.path === '/mailboxes/alerts').route.stack.slice(-1)[0].handle;
+  const pcall = async (user) => { let out; const res = { status() { return res; }, json(j) { out = j; return res; } }; await ph({ user, orgId: user.org_id }, res); return out; };
+  let o = await pcall({ id: 'u-mgr', roles: ['bd_lead'], org_id: 'o1' });
+  const mine = o.alerts.find(a => a.email === 'mona@a.com');
+  step('the owner of a paused mailbox is told which one, when and why', mine && mine.state === 'auto_paused' && mine.is_owner === true && /3 of the 38/.test(mine.sentence) && mine.paused_at === '2026-10-27T14:24:38Z', JSON.stringify(mine));
+  o = await pcall({ id: 'u-adm', roles: ['admin'], org_id: 'o1' });
+  step('the admin is told too', o.alerts.some(a => a.email === 'mona@a.com' && a.state === 'auto_paused'));
+  step('…and never about another organisation\'s paused mailbox', !o.alerts.some(a => a.email === 'x@b.com'));
+  o = await pcall({ id: 'u-peer', roles: ['bd'], org_id: 'o1' });
+  step('a colleague outside the chain is not told about it', !o.alerts.some(a => a.email === 'mona@a.com'));
+}
+
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);
