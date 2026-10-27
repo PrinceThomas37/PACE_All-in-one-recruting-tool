@@ -16,6 +16,7 @@
 (function(){
   'use strict';
   function esc(s){ return htmlEsc(s); }
+  function clock(s){ try{ return new Date(s).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
   function day(s){ try{ return new Date(s).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }catch(e){ return ''; } }
 
   window.loadMailboxAlerts=function(force){
@@ -51,11 +52,17 @@
       var mine=a.is_owner;
       var who=mine?'':'<span class="mba-owner">'+esc(a.owner_name||'Its owner')+'\'s mailbox · </span>';
       var held=a.held?'<span class="mba-held">'+a.held+' email'+(a.held===1?'':'s')+' waiting behind it</span>':'';
-      var since=a.since?'<span class="mba-since">last worked '+esc(day(a.since))+'</span>':'';
+      var paused=a.state==='auto_paused';
+      var since=a.since?(paused
+        ? '<span class="mba-since">paused '+esc(day(a.since))+' at '+esc(clock(a.since))+'</span>'
+        : '<span class="mba-since">last worked '+esc(day(a.since))+'</span>'):'';
       // Only the owner can complete the provider's consent screen, so anyone
       // else can PROMPT: the "Remind" puts a task on the owner's own list.
       var first=esc(a.owner_name||'them');   // the full name: a first word alone would read "Remind BD" for "BD 2"
-      var action=(mine
+      // A paused mailbox is not signed out: Reconnect would do nothing and "remind its owner to reconnect" would be wrong. The actions
+      // for it are the owner's to define (27 Oct 2026), so it carries only the notice — and the same hide as the others.
+      var hideBtn='<button class="btn btn-sm btn-outline" onclick="mailboxAlertHide(\''+a.mailbox_id+'\',this)" title="Hide this warning for a week. It comes back sooner if the mailbox fails in a new way.">Hide for a week</button>';
+      var action=paused?hideBtn:(mine
         ? '<button class="btn btn-sm btn-primary" onclick="mailboxAlertReconnect(\''+a.mailbox_id+'\',\''+(a.platform||'')+'\')">Reconnect</button>'
         : (a.asked
             ? '<span class="mba-ask">Asked '+first+' — it is on their list</span>'
@@ -63,7 +70,7 @@
         '<button class="btn btn-sm btn-outline" onclick="mailboxAlertHide(\''+a.mailbox_id+'\',this)" title="Hide this warning for a week. It comes back sooner if the mailbox fails in a new way.">Hide for a week</button>';
       return '<div class="mba-row">'+
         '<div class="mba-main">'+
-          '<div class="mba-mail">'+who+esc(a.email)+(a.state==='probably_expired'?' <span class="mba-tag">probably</span>':'')+'</div>'+
+          '<div class="mba-mail">'+who+esc(a.email)+(a.state==='probably_expired'?' <span class="mba-tag">probably</span>':'')+(paused?' <span class="mba-tag">paused</span>':'')+'</div>'+
           '<div class="mba-text">'+esc(a.sentence)+'</div>'+
           ((held||since)?'<div class="mba-meta">'+[held,since].filter(Boolean).join(' · ')+'</div>':'')+
         '</div>'+

@@ -135,7 +135,7 @@ function createWarmupEngine(ctx) {
       messageId = draft.id; conversationId = draft.conversationId || null;
     }
 
-    const delayMs = await replyDelayMs();
+    const delayMs = await replyDelayMs(from.org_id);
     await supabase.from('warmup_threads').update({
       conversation_id: conversationId, root_message_id: messageId,
       exchanges: 1, landed_in: 'unknown',
@@ -146,20 +146,22 @@ function createWarmupEngine(ctx) {
     return thread.id;
   }
 
-  async function replyDelayMs() {
-    const base = await getSetting(supabase, 'warmup_reply_delay_min');
+  // Every warm-up number is the mailbox's own COMPANY's (Admin → Settings) — the pool spans companies, so each is read per mailbox.
+  async function replyDelayMs(orgId) {
+    const base = await getSetting(supabase, 'warmup_reply_delay_min', orgId || undefined);
     const jitter = Math.floor(Math.random() * base); // base .. 2*base minutes
     return (base + jitter) * 60 * 1000;
   }
 
   // ── sendWave: each warming mailbox tops up to its daily ramp target ─────────
   async function sendWave(pool) {
-    const [start, step, repliesPer, hardCap] = await Promise.all([
-      getSetting(supabase, 'warmup_pool_start'),
-      getSetting(supabase, 'warmup_pool_step'),
-      getSetting(supabase, 'warmup_replies_per_thread'),
-      getSetting(supabase, 'warmup_daily_hard_cap'),
-    ]);
+    const rampMemo = {};
+    const rampFor = async (org) => (rampMemo[org || ''] = rampMemo[org || ''] || await Promise.all([
+      getSetting(supabase, 'warmup_pool_start', org || undefined),
+      getSetting(supabase, 'warmup_pool_step', org || undefined),
+      getSetting(supabase, 'warmup_replies_per_thread', org || undefined),
+      getSetting(supabase, 'warmup_daily_hard_cap', org || undefined),
+    ]));
     let sent = 0;
     const warming = pool.filter(m => m.warmup_status === 'warming');
     for (const mb of warming) {
@@ -170,6 +172,7 @@ function createWarmupEngine(ctx) {
       if (!partners.length) continue; // nobody to warm with
       // Cross-domain traffic is the reputation signal that matters; prefer
       // partners on a different domain, fall back to any partner.
+      const [start, step, repliesPer, hardCap] = await rampFor(mb.org_id);
       const myDomain = domainOf(mb.email_address);
       const crossDomain = partners.filter(p => domainOf(p.email_address) !== myDomain);
       const target = Math.min(hardCap, start + step * daysSince(mb.warmup_start_date));
@@ -243,7 +246,7 @@ function createWarmupEngine(ctx) {
             const nextExchanges = (thread.exchanges || 0) + 1;
             const otherId = thread.from_mailbox_id === mb.id ? thread.to_mailbox_id : thread.from_mailbox_id;
             const done = nextExchanges >= thread.target_exchanges;
-            const delayMs = await replyDelayMs();
+            const delayMs = await replyDelayMs(mb.org_id);
             await supabase.from('warmup_threads').update({
               exchanges: nextExchanges, status: done ? 'done' : 'open',
               next_actor_mailbox_id: done ? null : otherId,
@@ -295,7 +298,7 @@ function createWarmupEngine(ctx) {
             const nextExchanges = (thread.exchanges || 0) + 1;
             const otherId = thread.from_mailbox_id === mb.id ? thread.to_mailbox_id : thread.from_mailbox_id;
             const done = nextExchanges >= thread.target_exchanges;
-            const delayMs = await replyDelayMs();
+            const delayMs = await replyDelayMs(mb.org_id);
             await supabase.from('warmup_threads').update({
               exchanges: nextExchanges,
               status: done ? 'done' : 'open',
@@ -329,10 +332,10 @@ function createWarmupEngine(ctx) {
   // ── graduate: warming mailboxes past their duration become 'warmed' ─────────
   async function graduate() {
     const { data: warming } = await supabase.from('user_emails')
-      .select('id,email_address,warmup_start_date,warmup_days').eq('warmup_status', 'warming');
+      .select('id,org_id,email_address,warmup_start_date,warmup_days').eq('warmup_status', 'warming');
     let graduated = 0;
     for (const mb of (warming || [])) {
-      const days = mb.warmup_days || await getSetting(supabase, 'warmup_pool_days');
+      const days = mb.warmup_days || await getSetting(supabase, 'warmup_pool_days', mb.org_id || undefined);
       if (daysSince(mb.warmup_start_date) >= days) {
         await supabase.from('user_emails').update({ warmup_status: 'warmed', warmup_graduated_at: nowIso() }).eq('id', mb.id);
         emit(EVENTS.MAILBOX_WARMED, { userEmailId: mb.id, email: mb.email_address });

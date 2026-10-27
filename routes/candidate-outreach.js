@@ -160,9 +160,12 @@ module.exports = (ctx) => {
   // silently does nothing is worse than no setting, so the four hour entries in
   // Admin → System settings are only consulted while `enabled` is true, and the
   // sender payload says which of the two is in force.
-  let windowCache = { at: 0, cfg: null };
-  async function candidateWindow() {
-    if (windowCache.cfg && Date.now() - windowCache.at < 60000) return windowCache.cfg;
+  // The four hours are each COMPANY's own (Admin → Settings), so the answer is remembered per company, never shared between them.
+  const windowCache = new Map();    // orgId ('' = none) → { at, cfg }
+  async function candidateWindow(orgId) {
+    const ck = orgId || '';
+    const hit = windowCache.get(ck);
+    if (hit && hit.cfg && Date.now() - hit.at < 60000) return hit.cfg;
     let enabled = false;
     try {
       const { data } = await supabase.from('app_settings').select('value')
@@ -170,18 +173,19 @@ module.exports = (ctx) => {
       enabled = gen.windowEnabledFromSetting(data && data.value);
     } catch (_) { enabled = false; }   // unreadable settings must not re-impose it
     let cfg = { enabled, weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
-    if (!enabled) { windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) }; return windowCache.cfg; }
+    if (!enabled) { const c = gen.normalizeWindow(cfg); windowCache.set(ck, { at: Date.now(), cfg: c }); return c; }
     try {
       const [wds, wde, wes, wee] = await Promise.all([
-        settingsConfig.getSetting(supabase, 'candidate_window_weekday_start'),
-        settingsConfig.getSetting(supabase, 'candidate_window_weekday_end'),
-        settingsConfig.getSetting(supabase, 'candidate_window_weekend_start'),
-        settingsConfig.getSetting(supabase, 'candidate_window_weekend_end'),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekday_start', orgId || undefined),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekday_end', orgId || undefined),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekend_start', orgId || undefined),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekend_end', orgId || undefined),
       ]);
       cfg = { enabled: true, weekday: [wds, wde], weekend: [wes, wee] };
     } catch (_) { /* the schema defaults are the answer if settings are unreadable */ }
-    windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) };
-    return windowCache.cfg;
+    const out = gen.normalizeWindow(cfg);
+    windowCache.set(ck, { at: Date.now(), cfg: out });
+    return out;
   }
 
   const placeOf = (c) => txt((c || {}).current_location) ||
@@ -465,7 +469,7 @@ module.exports = (ctx) => {
       // those it was — the app knew and would not say, which is the same
       // failure as reporting a skip only as "failed check".
       const now = new Date();
-      const win = await candidateWindow();
+      const win = await candidateWindow(req.orgId);
       const paused = !!(isSendingPaused && isSendingPaused());
       const waitFor = (r) => {
         if (r.status !== 'pending') return null;
@@ -507,7 +511,7 @@ module.exports = (ctx) => {
       // queued. The owner queued a batch at 3am and then had to ask why nothing
       // moved; "they go out in the evening" belongs on screen beforehand, and
       // it comes from the same config the drain obeys so the two cannot drift.
-      const win = await candidateWindow();
+      const win = await candidateWindow(req.orgId);
       res.json({
         company_name: companyName,
         ai: await aiProvider.isAvailable(supabase, req.orgId),
@@ -927,7 +931,13 @@ module.exports = (ctx) => {
       .limit(limit);
     if (!due || !due.length) return { sent: 0, skipped: 0, failed: 0 };
 
-    const win = await candidateWindow();
+    // Each row is judged by ITS company's hours and warm-up ramp, remembered per company for this pass.
+    const winMemo = {}, rampMemo = {};
+    const winFor = async (org) => (winMemo[org || ''] = winMemo[org || ''] || await candidateWindow(org));
+    const rampFor = async (org) => (rampMemo[org || ''] = rampMemo[org || ''] || await Promise.all([
+      settingsConfig.getSetting(supabase, 'mailbox_warmup_start', org || undefined),
+      settingsConfig.getSetting(supabase, 'mailbox_warmup_step', org || undefined),
+    ]));
     // A queued row went to whichever address was the main when it was queued. The person may
     // have opted out since — on that address or on another of theirs — so every address they
     // have is checked, not only the one on the row (D-0070).
@@ -938,10 +948,6 @@ module.exports = (ctx) => {
     const addrsOf = (row) => contactPoints.allEmails({ email: row.to_email, extra_emails: contactPoints.allEmails(candById[row.candidate_id] || {}) }).map(contactPoints.normEmail);
     const suppressed = await loadSuppressedSet([...new Set(due.flatMap(addrsOf))]);
     const delivState = await loadMailboxDelivState([...new Set(due.map(r => r.mailbox_id).filter(Boolean))]);
-    const [warmupStart, warmupStep] = await Promise.all([
-      settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
-      settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
-    ]);
 
     let sent = 0, skipped = 0, failed = 0, deferred = 0;
     const sentToday = {};
@@ -974,6 +980,8 @@ module.exports = (ctx) => {
         //
         // The candidate lookup is skipped entirely when the window is off — no
         // row-by-row query to answer a question nobody is asking.
+        const rowOrg = row.org_id || mailbox.org_id;
+        const win = await winFor(rowOrg);
         if (win.enabled) {
           const { data: cand } = await supabase.from('candidates')
             .select('id,current_location,city,state').eq('id', row.candidate_id).maybeSingle();
@@ -988,6 +996,7 @@ module.exports = (ctx) => {
           sentToday[mailbox.id] = (log && log.emails_sent) || 0;
         }
         const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase, row.org_id || (mailbox && mailbox.org_id)));
+        const [warmupStart, warmupStep] = await rampFor(rowOrg);
         const wl = warmupLimit(delivState[mailbox.id], warmupStart, warmupStep);
         const cap = wl ? Math.min(base, wl) : base;
         if (sentToday[mailbox.id] >= cap) { deferred++; continue; }

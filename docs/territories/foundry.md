@@ -1355,3 +1355,12 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## 2026-10-27 (Session 54) — sidebar guard (D-0181)
 `test/mobile-layout-smoke.mjs`: the old "real pointer still expands the rail on hover" step is now its opposite ("a pointer resting on the folded rail does not expand it"), plus a button-position step. Mutation-checked: re-adding a `#sidebar:hover{width}` rule fails 3 steps.
+
+## 2026-10-27 (Session 54) — paused-mailbox guards (D-0183)
+`mailbox-alerts-smoke` (57) covers the `auto_paused` state, the stored/forgotten reason, who is told (owner, manager above, admin; never another company or a colleague) and that the ask route refuses a paused mailbox; `mailbox-alerts-ui-smoke` (21) covers the card (named, dated, "paused", no Reconnect/Remind). Mutation: the paused branch switched off → 3 steps fail.
+
+## 2026-10-27 (Session 54) — auto-pause limits guard
+`test/auto-pause-smoke.mjs` uses the REAL settings reader against rows shaped like the live database (`sys_<key>@<org>`), so a call that forgets the organisation fails it.
+
+## 2026-10-27 (Session 54) — R-332 guard
+`test/settings-follow-company-smoke.mjs` scans source for `getSetting(x, 'key')` with no company (probe must see >30 readers; allow-list must stay real). It is a convention guard, backed by behavioural ones: `auto-pause-smoke`, and the company-cooldown steps in `lead-decision-smoke`.

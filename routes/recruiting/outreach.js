@@ -135,7 +135,7 @@ wfEngine.registerContextLoader('candidate', async (enrollment) => {
 async function recruiterSendingMailbox(recruiterId) {
   if (!recruiterId) return null;
   const { data: mailboxes } = await supabase.from('user_emails')
-    .select('id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
+    .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
     .eq('user_id', recruiterId).order('is_primary', { ascending: false });
   if (!mailboxes?.length) return null;
   const ids = mailboxes.map(m => m.id);
@@ -234,7 +234,7 @@ async function filledSignature(mailbox, userId) {
 async function connectedMailboxById(id) {
   if (!id) return null;
   const { data: mb } = await supabase.from('user_emails')
-    .select('id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
+    .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
     .eq('id', id).maybeSingle();
   if (!mb || mb.is_active === false) return null;
   if (String(mb.platform || '').toLowerCase() === 'smtp') return (await smtpLive([id])).has(id) ? mb : null;
@@ -360,10 +360,10 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
   const delivState = await loadMailboxDelivState([mailbox.id]);
   if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('id,emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase));
+  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase, mailbox.org_id || undefined));
   const [warmupStart, warmupStep] = await Promise.all([
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_start', mailbox.org_id || undefined),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_step', mailbox.org_id || undefined),
   ]);
   const wl = warmupLimit(delivState[mailbox.id], warmupStart, warmupStep);
   const cap = wl ? Math.min(base, wl) : base;

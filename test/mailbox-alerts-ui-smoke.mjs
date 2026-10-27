@@ -38,6 +38,8 @@ const ALERTS=[
   { mailbox_id:'mb2', email:'raj@example.test', platform:'gmail', state:'probably_expired', since:new Date(Date.now()-2*86400000).toISOString(), held:0, is_owner:false, owner_name:'Raj',
     sentence:"This mailbox's sign-in has not renewed when it should have — it has probably expired. Reconnect it to be sure." },
 ];
+const PAUSED={ mailbox_id:'mb3', email:'dan.johnson@futeglobal.test', platform:'gmail', state:'auto_paused', since:'2026-10-27T14:55:36Z', paused_at:'2026-10-27T14:55:36Z', held:44, is_owner:false, owner_name:'Martin Smith',
+  sentence:'PACE paused this mailbox by itself to protect its reputation. 2 of the 44 emails it sent that day bounced (4.5%), which is over the limit. Nothing sends from it until someone resumes it.' };
 function reply(route, body, status=200){ return route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) }); }
 const calls=[];
 const hiddenIds=new Set(); const bodies=[];
@@ -49,7 +51,7 @@ async function api(route){
   if (m==='POST' && p==='/mailboxes/alerts/show') { hiddenIds.clear(); return reply(route,{success:true}); }
   if (m==='GET' && p==='/mailboxes/alerts') {
     if (mode==='error') return reply(route,{error:'x'},500);
-    const list = mode==='alerts' ? ALERTS.filter(a=>!hiddenIds.has(a.mailbox_id)) : [];
+    const list = mode==='alerts' ? ALERTS.filter(a=>!hiddenIds.has(a.mailbox_id)) : mode==='paused' ? [PAUSED] : [];
     return reply(route,{ alerts:list, hidden: mode==='alerts' ? ALERTS.length-list.length : 0, scope:'team' });
   }
   return reply(route, m==='GET'?[]:{});
@@ -96,6 +98,12 @@ try{
       await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(400);
       mode='none'; await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(400);
       step('all mailboxes fine → nothing drawn at all', (await card())===null);
+      // A mailbox PACE paused by itself (D-0183): which one, when, why — and NO Reconnect / Remind (neither would fix it).
+      mode='paused'; await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(500);
+      t=await card();
+      step('a paused mailbox is named, with when and why', t && /dan\.johnson@futeglobal\.test/.test(t) && /Martin Smith/.test(t) && /paused 27 Oct at \d\d:\d\d/i.test(t) && /2 of the 44/.test(t) && /44 emails waiting/.test(t), (t||'').slice(0,300));
+      step('…tagged "paused", with no Reconnect and no "Remind Martin" (they would do nothing)', t && /paused/i.test(t) && !/Reconnect/.test(t) && !/Remind/.test(t), (t||'').slice(0,300));
+      if(SHOTS) await page.screenshot({ path:path.join(SHOTS,'41-mailbox-paused-'+width+'.png') });
       mode='error'; await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(400);
       t=await card();
       step('a failed check says so, never looks like "all fine"', t && /Could not check/.test(t));

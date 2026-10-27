@@ -378,3 +378,9 @@ The send loop, follow-up queue and cancel path now ask `services/contact-status.
 
 ## 2026-10-27 (Session 54) — send basket order (D-0182)
 Order of a run: window-open leads before closed-window ones; inside each, first outreach → fu1 → fu2 → fu3 → fu4 → fu5 → reminder → unknown type; mailboxes alternate inside a band; oldest-first inside a mailbox. One home: `send-queue-order.js` (`BAND_ORDER`). Never rank by generation time. Guard: `send-queue-order-smoke`.
+
+## 2026-10-27 (Session 54) — paused mailbox notice (D-0183)
+`setMailboxAutoPaused(id, paused, reason, note)` now keeps the reason (`mailbox_pause_note_<id>` in app_settings) and forgets it on resume. The send-progress line for a held email names the mailbox (`mailboxAlertsRules.heldByPauseLine`). A pause is cleared ONLY by `POST /admin/mailbox/:id/resume` (admin/bd_lead) — nothing resets it at midnight, although the admin setting says "for the day". Open (rampart): that route does not check the mailbox belongs to the caller's company.
+
+## 2026-10-27 (Session 54) — R-332: warm-up, smtp batch, candidate hours per company
+Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`); `routes/recruiting/outreach.js` mailbox selects now include `org_id`. Candidate-email hours: `candidateWindow(orgId)` (per-company cache); the drain uses each row's company. `warmup-engine.js` reads every number per mailbox.

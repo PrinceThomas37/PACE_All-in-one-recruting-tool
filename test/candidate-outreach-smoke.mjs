@@ -560,7 +560,7 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
   // Read through config/settings.js, so the admin screen and the sender share
   // one source rather than two hand-synced copies of four numbers.
   ok('the window is read through the shared settings schema, not a private query',
-    /settingsConfig\.getSetting\(supabase, 'candidate_window_weekday_start'\)/.test(route) &&
+    /settingsConfig\.getSetting\(supabase, 'candidate_window_weekday_start', orgId \|\| undefined\)/.test(route) &&   // for the company asking (R-332)
     !/from\('app_settings'\)[\s\S]{0,200}candidate_window_/.test(route));
   ok('candidate sending does NOT use the leads engine window',
     !/isInLeadSendWindow|getSendWindowHours|formatWindowOpensLabel/.test(route));

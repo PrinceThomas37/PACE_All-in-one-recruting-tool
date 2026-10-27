@@ -11,6 +11,9 @@
 // D-0020); admin sees the whole company. Another organisation's mailboxes are
 // never read: every query goes through db.forRequest(req).
 //
+// A mailbox PACE paused by itself (too many bounces) is an alert here too, with which mailbox, when and why — for its owner, a
+// manager above it, and an admin (D-0183). No action button is offered for it yet: the owner will define the actions.
+//
 // `is_owner` tells the page whether to offer the Reconnect button — only the
 // mailbox's owner can complete the provider's consent screen.
 // ============================================================================
@@ -45,6 +48,19 @@ module.exports = (ctx) => {
     const ids = active.map(b => b.id);
     const conns = await mailboxConnections(supabase, ids);
 
+    // Which of them PACE has paused (a column from migration 006 — a database without it simply has none), and what was
+    // recorded when it did.
+    const pausedAt = {}, notes = {};
+    try {
+      const { data: rows } = await db.forRequest(req).from('user_emails').select('id,auto_paused_at').in('id', ids);
+      (rows || []).forEach(r => { if (r.auto_paused_at) pausedAt[r.id] = r.auto_paused_at; });
+      const pausedIds = Object.keys(pausedAt);
+      if (pausedIds.length) {
+        const { data: ns } = await supabase.from('app_settings').select('key,value').in('key', pausedIds.map(mailboxAlerts.pauseNoteKey));
+        (ns || []).forEach(n => { try { notes[n.key] = typeof n.value === 'string' ? JSON.parse(n.value) : n.value; } catch (_) { /* no note: the sentence says it in general terms */ } });
+      }
+    } catch (_) { /* paused state unreadable: the sign-in warnings still show */ }
+
     // Mail waiting behind each mailbox: a pending email is sent by its own
     // override mailbox if it has one, otherwise by its lead's mailbox — the
     // same rule the send loop uses.
@@ -63,7 +79,8 @@ module.exports = (ctx) => {
     }
 
     let alerts = active.map(mb => {
-      const a = mailboxAlerts.alertFor({ mailbox: mb, conn: conns[mb.id], held: held[mb.id] || 0 });
+      const a = mailboxAlerts.alertFor({ mailbox: Object.assign({}, mb, { auto_paused_at: pausedAt[mb.id] || null }), conn: conns[mb.id],
+        held: held[mb.id] || 0, pauseNote: notes[mailboxAlerts.pauseNoteKey(mb.id)] || null });
       return a && Object.assign(a, { owner_id: mb.user_id, is_owner: mb.user_id === req.user.id });
     }).filter(Boolean);
 
@@ -146,7 +163,7 @@ module.exports = (ctx) => {
       if (!alert) return res.status(404).json({ error: 'That mailbox is not showing a warning any more — it may already be fixed.' });
       const org = orgOf(req);
       const chain = built.isAdmin ? null : await reportingChainIds(req.user.id, org);
-      const refusal = mailboxAlerts.askRefusal({ askerId: req.user.id, ownerId: alert.owner_id, isAdmin: built.isAdmin, chainIds: chain });
+      const refusal = mailboxAlerts.askRefusal({ askerId: req.user.id, ownerId: alert.owner_id, isAdmin: built.isAdmin, chainIds: chain, state: alert.state });
       if (refusal) return res.status(403).json({ error: refusal });
 
       const { data: already } = await db.forRequest(req).from('reminders').select('id')

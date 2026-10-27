@@ -201,8 +201,8 @@ router.get('/admin/deliverability', auth, async (req, res) => {
       try { const { data } = await scoped.from('user_emails').select('id,warmup_start_date,auto_paused_at').in('id', ids); (data || []).forEach(r => { delivCols[r.id] = r; }); } catch (_) {}
     }
     const [warmupStart, warmupStep] = await Promise.all([
-      getSetting(supabase, 'mailbox_warmup_start'),
-      getSetting(supabase, 'mailbox_warmup_step'),
+      getSetting(supabase, 'mailbox_warmup_start', orgOf(req)),
+      getSetting(supabase, 'mailbox_warmup_step', orgOf(req)),
     ]);
     const conns = await mailboxConnections(supabase, (mailboxes || []).map(m => m.id));
     const mailboxHealth = (mailboxes || []).map(m => {

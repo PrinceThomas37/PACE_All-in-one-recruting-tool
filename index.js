@@ -79,6 +79,8 @@ const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mai
 const { createSmtpDelivery } = require('./services/smtp-delivery');
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
+const autoPause = require('./services/auto-pause');   // the bounce limits an organisation chose, and the pause decision
+const mailboxAlertsRules = require('./services/mailbox-alerts');   // what a paused mailbox's notice says (D-0183)
 const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
@@ -702,8 +704,10 @@ function warmupLimit(mailboxRow, start, step) {
   const warmupStep = step != null ? step : 5;
   return warmupStart + warmupStep * days;
 }
-async function setMailboxAutoPaused(userEmailId, paused, reason) {
+async function setMailboxAutoPaused(userEmailId, paused, reason, note) {
   try { await supabase.from('user_emails').update({ auto_paused_at: paused ? new Date() : null }).eq('id', userEmailId); } catch (_) {}
+  // What the pause was FOR is kept beside it, so the dashboard can say which mailbox, when and why; a resume forgets it.
+  if (paused) await mailboxAlertsRules.saveNote(supabase, userEmailId, note); else await mailboxAlertsRules.forgetNote(supabase, userEmailId);
   if (paused) {
     console.log(`[Deliverability] Mailbox ${userEmailId} AUTO-PAUSED: ${reason}`);
     emit(EVENTS.MAILBOX_AUTOPAUSED, { userEmailId, reason });
@@ -2164,7 +2168,8 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
 
     if (userEmailId && mailboxDeliv[userEmailId] && mailboxDeliv[userEmailId].auto_paused_at) {
       skippedInactive++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (mailbox auto-paused: high bounce rate)` });
+      // Say WHICH mailbox (owner, 27 Oct 2026): five were paused and the line gave no way to tell which one held this email back.
+      await setSendProgress(userId, { ...progressBase, current: mailboxAlertsRules.heldByPauseLine(email.to_email, sendingEmail?.email_address) });
       continue;
     }
 
@@ -2955,12 +2960,10 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
   await supabase.from('app_settings').upsert({ key: bkey, value: String(bouncesToday), updated_at: new Date() }, { onConflict: 'key' });
   const { data: sRow } = await supabase.from('email_send_log').select('emails_sent').eq('user_email_id', userEmailId).eq('send_date', today()).maybeSingle();
   const sentToday = sRow?.emails_sent || 0;
-  const [thresholdPct, minSample] = await Promise.all([
-    settingsConfig.getSetting(supabase, 'bounce_rate_threshold_pct'),
-    settingsConfig.getSetting(supabase, 'bounce_min_sample'),
-  ]);
-  if (sentToday >= minSample && bouncesToday / sentToday > thresholdPct / 100) {
-    await setMailboxAutoPaused(userEmailId, true, `bounce rate ${(bouncesToday / sentToday * 100).toFixed(1)}% (${bouncesToday}/${sentToday} today)`);
+  // The limits are THIS mailbox's organisation's own (Admin → Settings saves them per organisation) — services/auto-pause.js.
+  const { thresholdPct, minSample } = await autoPause.limitsFor(supabase, settingsConfig, userEmailId);
+  if (autoPause.shouldPause({ bouncesToday, sentToday, thresholdPct, minSample })) {
+    await setMailboxAutoPaused(userEmailId, true, `bounce rate ${(bouncesToday / sentToday * 100).toFixed(1)}% (${bouncesToday}/${sentToday} today)`, mailboxAlertsRules.pauseNote(bouncesToday, sentToday));
   }
 }
 
@@ -2999,7 +3002,7 @@ async function readSmtpMailbox(tokenRow, folders, since) {
   const loaded = await smtpStore.get(tokenRow.user_email_id);
   if (!loaded || loaded.error) return null;
   try {
-    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: await settingsConfig.getSetting(supabase, 'smtp_sweep_batch') });
+    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: await settingsConfig.getSetting(supabase, 'smtp_sweep_batch', tokenRow.org_id || undefined) });
     await smtpStore.outcome(tokenRow.user_email_id, true);
     return msgs;
   } catch (e) {
@@ -3606,15 +3609,22 @@ async function catchUpLeadReplies(tokenRow, platform, { days = CATCHUP_DAYS } = 
   return { mailbox: mb.email_address, filed, searched: addrs.length };
 }
 async function runClientIntelCatchUp({ force = false } = {}) {
-  if (Number(await settingsConfig.getSetting(supabase, 'client_intel_enabled')) !== 1) return { skipped: 'switched_off' };
   const [{ data: ms }, { data: gm }] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id'),
     supabase.from('gmail_tokens').select('user_email_id,email_address,org_id'),
   ]);
   const boxes = (ms || []).map(t => ({ t, p: 'microsoft' })).concat((gm || []).map(t => ({ t, p: 'gmail' })));
   const results = [];
-  let ran = 0;
+  let ran = 0, off = 0;
+  // The switch is each COMPANY's own (Admin → Settings): a mailbox is caught up only when ITS company has the timeline on.
+  const onMemo = {};
+  const enabledFor = async (org) => {
+    const k = org || '';
+    if (!(k in onMemo)) onMemo[k] = Number(await settingsConfig.getSetting(supabase, 'client_intel_enabled', org || undefined)) === 1;
+    return onMemo[k];
+  };
   for (const { t, p } of boxes) {
+    if (!(await enabledFor(t.org_id))) { off++; continue; }
     const key = 'cis_catchup_' + t.user_email_id;
     if (!force) {
       const { data: done } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
@@ -3629,7 +3639,7 @@ async function runClientIntelCatchUp({ force = false } = {}) {
       await supabase.from('app_settings').upsert({ key, value: JSON.stringify(Object.assign({ at: new Date().toISOString() }, r)), updated_at: new Date() }, { onConflict: 'key' });
     } catch (e) { results.push({ mailbox: t.email_address, error: e.message }); }
   }
-  if (!results.length) return { skipped: 'nothing_to_catch_up' };
+  if (!results.length) return { skipped: off && off === boxes.length ? 'switched_off' : 'nothing_to_catch_up' };
   return { mailboxes: results.length, filed: results.reduce((n, r) => n + (r.filed || 0), 0), results };
 }
 app.post('/admin/client-intel/catch-up', auth, async (req, res) => {
@@ -4082,8 +4092,8 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   const { data: sendLog } = await supabase.from('email_send_log').select('emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
   const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase, mailbox && mailbox.org_id));
   const [warmupStart, warmupStep] = await Promise.all([
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_start', mailbox.org_id || undefined),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_step', mailbox.org_id || undefined),
   ]);
   const wl = warmupLimit(delivState[mailbox.id], warmupStart, warmupStep);
   const cap = wl ? Math.min(base, wl) : base;

@@ -88,15 +88,19 @@ function like(pattern, value) {           // SQL ILIKE with % wildcards and \-es
 function makeStore() {
   const store = {
     tables: {
-      app_settings: [{ key: 'sys_company_cooldown_days', value: '30' }],
+      app_settings: [{ key: 'sys_company_cooldown_days', value: '30' }, { key: 'sys_company_cooldown_days@o3', value: '1' }],
       companies: [
         { id: 'c1', org_id: 'o1', name: 'Acme, Inc.', website: 'https://www.acme.com', linkedin_url: 'https://www.linkedin.com/company/acme-corp', deleted_at: null },
         { id: 'c2', org_id: 'o1', name: 'ACME INC', website: 'acme.com', linkedin_url: null, deleted_at: null },
         { id: 'c3', org_id: 'o2', name: 'Acme Inc', website: 'acme.com', linkedin_url: null, deleted_at: null },           // ANOTHER organisation
         { id: 'c4', org_id: 'o1', name: 'Zed Works', website: 'zed.com', linkedin_url: null, deleted_at: null },
+        { id: 'c9', org_id: 'o3', name: 'Qux Ltd', website: 'qux.com', linkedin_url: null, deleted_at: null },             // a company with its OWN cooldown (R-332)
+        { id: 'c10', org_id: 'o4', name: 'Qux Ltd', website: 'qux.com', linkedin_url: null, deleted_at: null },            // a company with none: the shared 30 days
       ],
       jobs: [
         { id: 'j1', org_id: 'o1', company_id: 'c2', position: 'Staff Accountant', stage: 'Assigned', created_at: daysAgo(10), created_by: 'u1', assigned_to_bd: 'u2', assigned_to: 'u2', deleted_at: null },
+        { id: 'j9', org_id: 'o3', company_id: 'c9', position: 'Cook', stage: 'Rejected', created_at: daysAgo(2), created_by: 'x9', assigned_to_bd: null, assigned_to: null, deleted_at: null },
+        { id: 'j10', org_id: 'o4', company_id: 'c10', position: 'Cook', stage: 'Rejected', created_at: daysAgo(2), created_by: 'x9', assigned_to_bd: null, assigned_to: null, deleted_at: null },
         { id: 'j3', org_id: 'o2', company_id: 'c3', position: 'Cook', stage: 'Assigned', created_at: daysAgo(2), created_by: 'x9', assigned_to_bd: null, assigned_to: null, deleted_at: null },
       ],
       job_orders: [],
@@ -146,6 +150,11 @@ d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser
 step('another organisation\'s companies are NEVER matched or named: o2 asking about Zed Works finds nothing of o1\'s', !d.blocked && d.company_id === null);
 d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser('o2'), candidate: { name: 'Acme Inc', website: 'acme.com' }, now: NOW });
 step('…and o2\'s own Acme is seen only through o2\'s own leads (a cook added 2 days ago → cooldown), never o1\'s', d.blocked && d.state === 'active_job' && d.company_id === 'c3' && !/Marcus|Priya/.test(d.sentence), d.sentence);
+// R-332 (27 Oct 2026): a company's OWN cooldown (Admin → Settings) is the one that applies — the check used to read the shared value.
+d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser('o3'), candidate: { name: 'Qux Ltd', website: 'qux.com' }, now: NOW });
+step('a company that set its cooldown to 1 day: a lead rejected 2 days ago does not block it', !d.blocked, JSON.stringify(d).slice(0, 160));
+d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser('o4'), candidate: { name: 'Qux Ltd', website: 'qux.com' }, now: NOW });
+step('…while a company with no choice of its own still gets the shared 30 days', d.blocked && d.state === 'cooldown', JSON.stringify(d).slice(0, 160));
 d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser('o1'), candidate: { name: 'A Completely Different Name', website: 'https://careers.acme.com/jobs' }, now: NOW });
 step('found by WEBSITE alone, whatever name was typed (a careers sub-domain still means acme.com)', d.blocked && d.matched_on.join() === 'website', JSON.stringify(d.matched_on));
 d = await leadCheck.checkCompany({ db: st.db, supabase: st.supabase, req: asUser('o1'), candidate: { linkedin: 'https://www.linkedin.com/company/acme-corp/' }, now: NOW });
@@ -208,12 +217,12 @@ const src = sourcedRouter(st); call = callOn(src);
 const sourcedUser = (extra) => Object.assign(asUser('o1', ['bd'], 'u2'), extra);
 r = await call('/sourced-leads/:id/approve', 'post', sourcedUser({ params: { id: 's1' }, body: {} }));
 step('approving a sourced lead for a company already on file under another name is REFUSED (409) with the owner named', r.code === 409 && r.out.reason === 'active_job' && /Marcus Bell/.test(r.out.error), r.out && r.out.error);
-step('…nothing was created: no lead, no company, the posting is still "new"', st.tables.jobs.filter((j) => j.org_id === 'o1').length === 1 && st.tables.companies.length === 4 && st.tables.sourced_jobs_raw[0].status === 'new');
+step('…nothing was created: no lead, no company, the posting is still "new"', st.tables.jobs.filter((j) => j.org_id === 'o1').length === 1 && st.tables.companies.length === 6 && st.tables.sourced_jobs_raw[0].status === 'new');
 r = await call('/sourced-leads/:id/approve', 'post', sourcedUser({ params: { id: 's3' }, body: {} }));
 const zedLead = st.tables.jobs.find((j) => j.position === 'Cook' && j.org_id === 'o1');
-step('approving a company that is on file but free REUSES that company instead of creating a second one', r.code === 201 && zedLead && zedLead.company_id === 'c4' && st.tables.companies.length === 4, JSON.stringify(r.out));
+step('approving a company that is on file but free REUSES that company instead of creating a second one', r.code === 201 && zedLead && zedLead.company_id === 'c4' && st.tables.companies.length === 6, JSON.stringify(r.out));
 r = await call('/sourced-leads/:id/approve', 'post', sourcedUser({ params: { id: 's2' }, body: {} }));
-step('a company nobody has is created as before (still a 201, one new company)', r.code === 201 && st.tables.companies.length === 5);
+step('a company nobody has is created as before (still a 201, one new company)', r.code === 201 && st.tables.companies.length === 7);
 r = await call('/sourced-leads/:id/approve', 'post', sourcedUser({ params: { id: 's3' }, body: {} }));
 step('approving the same posting twice is still refused ("Already approved")', r.code === 409 && /Already approved/.test(r.out.error));
 st = makeStore(); leadCheck._resetForTests();

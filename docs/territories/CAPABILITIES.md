@@ -815,3 +815,5 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **Screens name the company's own provider and offer only what it can do** — no "Apollo" written into the app for a company that chose another; a button the provider does not have (look a company up by name, see its open jobs) is not shown, and says so (27 Oct).
 - **A company with no contact database connected is told what to do** — an admin: where to connect one; anyone else: to ask an admin (27 Oct).
 
+
+- **Paused-mailbox notice (27 Oct 2026, D-0183):** when PACE pauses a mailbox for bouncing too much, the Today screen says which mailbox, when and why — to its owner, managers above and the admin — and the send progress line names the mailbox. Actions to be defined.
