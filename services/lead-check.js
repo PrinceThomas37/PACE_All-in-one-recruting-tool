@@ -75,7 +75,7 @@ async function checkCompany({ db, supabase, req, candidate, now }) {
   const scoped = db.forRequest(req);
   const { cand, companies } = await load(scoped, candidate || {});
   const matchedIds = companies.filter((c) => rule.reasonsFor(cand, c).length).map((c) => c.id);
-  const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
+  const cooldownDays = await getSetting(supabase, 'company_cooldown_days', (req && (req.orgId || (req.user && req.user.org_id))) || undefined);   // the company's own (Admin → Settings)
   if (!matchedIds.length) {
     return rule.decide({ candidate: cand, companies, leads: [], jobOrders: [], nameOf: () => '', now: now || new Date(), cooldownDays });
   }

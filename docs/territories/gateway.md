@@ -1254,3 +1254,6 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## 2026-10-27 (Session 54) — bounce limits are the mailbox's ORGANISATION's (`services/auto-pause.js`)
 Any `getSetting(supabase, key)` with no organisation returns the deployment default and silently ignores what an admin saved for their company. Fixed for `bounce_rate_threshold_pct` / `bounce_min_sample`; the same pattern is still in other places (R-332).
+
+## 2026-10-27 (Session 54) — R-332: settings follow the company
+Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-follow-company-smoke.mjs` fails otherwise; allow-list in the test, with reasons). Only `wf_tick_batch` is engine-wide.

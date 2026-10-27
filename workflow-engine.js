@@ -178,7 +178,7 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
 
     if (result.outcome === 'failed') {
       const fails = ((enrollment.metadata || {}).fail_count || 0) + 1;
-      const maxStepFailures = await getSetting(supabase, 'wf_max_step_failures');
+      const maxStepFailures = await getSetting(supabase, 'wf_max_step_failures', enrollment.org_id || undefined);   // the enrollment's own company
       if (fails >= maxStepFailures) {
         await updateEnrollment(enrollment.id, { status: 'failed', exit_reason: 'step_failed', completed_at: new Date().toISOString(), metadata: { ...(enrollment.metadata || {}), fail_count: fails } });
       } else {
@@ -204,6 +204,8 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
     ticking = true;
     const log = { checked: 0, done: 0, skipped: 0, failed: 0, deferred: 0, completed: 0, exited: 0 };
     try {
+      // ONE tick works through every company's due enrollments together, so there is no single company whose number applies:
+      // this is the deployment-wide value (R-332 — it belongs with the operator's settings, not an admin's).
       const tickBatch = await getSetting(supabase, 'wf_tick_batch');
       const { data: due, error } = await supabase.from('workflow_enrollments')
         .select('*').eq('status', 'active').lte('next_step_due_date', todayStr())

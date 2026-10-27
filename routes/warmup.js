@@ -76,8 +76,8 @@ module.exports = (ctx) => {
       const ids = (mbs || []).map(m => m.id);
       const connected = await connectedSet(ids);
       const [start, step, hardCap, defDays] = await Promise.all([
-        getSetting(supabase, 'warmup_pool_start'), getSetting(supabase, 'warmup_pool_step'),
-        getSetting(supabase, 'warmup_daily_hard_cap'), getSetting(supabase, 'warmup_pool_days'),
+        getSetting(supabase, 'warmup_pool_start', orgOf(req)), getSetting(supabase, 'warmup_pool_step', orgOf(req)),
+        getSetting(supabase, 'warmup_daily_hard_cap', orgOf(req)), getSetting(supabase, 'warmup_pool_days', orgOf(req)),
       ]);
       // today's warm-up send counts
       const { data: logs } = ids.length
@@ -141,7 +141,7 @@ module.exports = (ctx) => {
       if (!mb || !mb.is_active) return res.status(404).json({ error: 'Mailbox not found or inactive' });
       if (mb.platform === 'Microsoft' && !(await isConnected(mb.id)))
         return res.status(400).json({ error: 'Mailbox must be connected before warm-up can send. Connect it under the user\'s Email IDs first.' });
-      const defDays = await getSetting(supabase, 'warmup_pool_days');
+      const defDays = await getSetting(supabase, 'warmup_pool_days', orgOf(req));
       let days = parseInt(req.body?.days, 10);
       if (!Number.isInteger(days) || days < 1 || days > 120) days = defDays;
       const optIn = req.body?.opt_in_receive !== false; // default: also receive
