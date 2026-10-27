@@ -801,3 +801,12 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **See the files a client attached anywhere in a conversation** — earlier messages show their attachments as download buttons (26 Oct, R-315).
 - **Add a note when changing a job's status** — from the list's "Set status" or the job row; the note is kept in the job's history with that change (26 Oct, R-315).
 - **"What went out" on All email → Sent** — real counts of first emails, each follow-up, one-offs and candidate batches for today, yesterday, last 7 days, this month or chosen dates (26 Oct, R-315).
+
+## P3 — the small things (Session 54, R-319 — on the branch)
+- **Rewrite with AI, for one person's first email** — in the Find Leads review window, each email has "✨ Rewrite with AI" (written for that person: their job title and the posting, checked by the same house rules as a send) and "Undo rewrite" (27 Oct).
+- **A link to the job posting** beside each job you tick in the Find Leads "Add as a lead" window (27 Oct).
+- **Zoom the Outreach Insights chart** — scroll, pinch, drag to move, or the + / − / Show all buttons (27 Oct).
+- **Fold or open the sidebar from an arrow** on the logo band; remembered; smoother; a new chevron logo mark (27 Oct).
+- **Click a draft in a mailbox's Drafts folder to keep writing it** — Gmail or Outlook, in either view (27 Oct).
+- **The lead beside its email** — an email from (or to) a person PACE knows as a lead's contact shows who they are, the company, and the leads with job, place, stage and owner — only leads you may see (27 Oct).
+

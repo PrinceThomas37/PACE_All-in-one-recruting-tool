@@ -2,7 +2,15 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+**Updated**: 2026-10-27 (Session 54). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+
+## START HERE (27 Oct, Session 54, later) — P3 built (R-319, all six); merge only after the clean-worktree runs
+
+**Owner: "Complete p3 and merge the changes."** Built directly, no agents. Roadmap R-319 (DONE on the branch), new R-325 (Rewrite with AI in Email → Pending), R-326 (lead card for candidates), R-327 (logo + arrow are a first draft). Archive entry "Session 54, later" has the mechanism per item. **Owed:** full suite Node 22 AND 26 from a clean worktree of the exact head, then merge, then `list_deploys` for the merge commit. **Still waiting on the owner:** the four R-321 answers (plan in `docs/PLAN_R-321_contact_data_any_provider.md`); the speed verdict needs a busy day of `[SlowReq]`.
+
+## START HERE (27 Oct, Session 54) — speed check read (too early to call); R-321 planned, waiting on the owner
+
+**Render, read ~10:06 UTC after #370/#371 went live:** no crash event, no slow GET /jobs, memory 84–90 MB — but [Certain] there was almost no user traffic yet, so this proves nothing. **Re-read `*SlowReq*` after a US working day** (service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`); still 15 s+ → plan R-303. **R-321 plan is written** (`docs/PLAN_R-321_contact_data_any_provider.md`) — four plain questions for the owner at the end; build nothing until they answer. After that: P3 (R-319), then R-320 on top of R-321. Small open: R-306, R-163.
 
 ## START HERE (27 Oct, end of Session 53) — the 28-note doc: P0, P1, P2 done; the owner continues in a NEW chat
 

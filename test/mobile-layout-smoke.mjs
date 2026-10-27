@@ -328,6 +328,43 @@ try {
     width: Math.round(document.getElementById('sidebar').getBoundingClientRect().width) }));
   step('an old remembered "collapsed" is ignored on a full-size screen', oldMemory.pinned && oldMemory.width > 180, JSON.stringify(oldMemory));
 
+  // R-319 (owner's 28 notes): "the sidebar opens from an arrow, smoother, a better PACE logo".
+  await dpage.evaluate(() => { localStorage.removeItem('pace-rail'); localStorage.removeItem('pace-rail-arrow'); window.render(); });
+  await dpage.waitForTimeout(250);
+  const arrowOpen = await dpage.evaluate(() => {
+    const a = document.querySelector('#sidebar .rail-arrow'), r = a && a.getBoundingClientRect(), sb = document.getElementById('sidebar').getBoundingClientRect();
+    return { there: !!a, visible: !!a && getComputedStyle(a).display !== 'none' && r.width > 10, inside: !!a && r.left >= sb.left && r.right <= sb.right + 1, expanded: a && a.getAttribute('aria-expanded'), flipped: a && getComputedStyle(a.querySelector('svg')).transform !== 'none',
+      mark: !!document.querySelector('#sidebar .rail-mark svg') && getComputedStyle(document.querySelector('#sidebar .rail-mark')).display !== 'none', word: getComputedStyle(document.querySelector('#sidebar .rail-word')).opacity };
+  });
+  step('R-319: a full-size, open sidebar shows an arrow inside it, pointing left ("fold it"), with aria-expanded true', arrowOpen.there && arrowOpen.visible && arrowOpen.inside && arrowOpen.expanded === 'true' && !arrowOpen.flipped, JSON.stringify(arrowOpen));
+  step('R-319: the logo is the chevron mark AND the word, side by side, when open', arrowOpen.mark && arrowOpen.word === '1', JSON.stringify(arrowOpen));
+  await dpage.click('#sidebar .rail-arrow');
+  await dpage.mouse.move(900, 500);   // off the rail: a pointer resting on a folded rail floats it open (hover), which is not what is measured here
+  await dpage.waitForTimeout(450);
+  const arrowFolded = await dpage.evaluate(() => {
+    const sb = document.getElementById('sidebar'), a = sb.querySelector('.rail-arrow');
+    return { pinned: sb.classList.contains('pinned'), width: Math.round(sb.getBoundingClientRect().width), mainLeft: Math.round(document.getElementById('main').getBoundingClientRect().left),
+      expanded: a.getAttribute('aria-expanded'), flipped: getComputedStyle(a.querySelector('svg')).transform !== 'none', mem: localStorage.getItem('pace-rail-arrow'), typing: document.querySelector('#sidebar .rail-word').classList.contains('typing') && false };
+  });
+  step('R-319: pressing the arrow folds the sidebar to the icon rail and the page moves over with it (no gap, no cover)', !arrowFolded.pinned && arrowFolded.width < 80 && Math.abs(arrowFolded.mainLeft - arrowFolded.width) <= 1, JSON.stringify(arrowFolded));
+  step('R-319: …the arrow now points right ("open it"), says aria-expanded false, and the choice is remembered', arrowFolded.flipped && arrowFolded.expanded === 'false' && arrowFolded.mem === 'closed', JSON.stringify(arrowFolded));
+  // The render engine writes nothing when the sidebar's html is unchanged, so a repaint cannot show what the NEXT visit will draw — build the html itself.
+  const nextVisit = await dpage.evaluate(() => ({ closed: !/<div id="sidebar" class="[^"]*pinned/.test(renderSidebar()), expanded: /aria-expanded="false"/.test(renderSidebar()) }));
+  step('R-319: the next visit draws it folded on a full-size screen (the person asked for it) — by the arrow\'s own memory, not the old logo one', nextVisit.closed && nextVisit.expanded, JSON.stringify(nextVisit));
+  const motion = await dpage.evaluate(() => ({ main: getComputedStyle(document.getElementById('main')).transitionProperty, sb: getComputedStyle(document.getElementById('sidebar')).transitionProperty, dur: getComputedStyle(document.getElementById('main')).transitionDuration }));
+  step('R-319: smoother — the page edge and the sidebar move on the same curve and time, and only the properties that move (never "all")', /margin-left/.test(motion.main) && /width/.test(motion.sb) && !/\ball\b/.test(motion.main + motion.sb) && motion.dur === '0.22s', JSON.stringify(motion));
+  await dpage.emulateMedia({ reducedMotion: 'reduce' });
+  const still = await dpage.evaluate(() => getComputedStyle(document.getElementById('main')).transitionDuration);
+  step('R-319: a device set to reduce motion gets none', parseFloat(still) < 0.001, still);
+  await dpage.emulateMedia({ reducedMotion: 'no-preference' });
+  await dpage.click('#sidebar .rail-arrow'); await dpage.waitForTimeout(450);
+  const reopened = await dpage.evaluate(() => ({ pinned: document.getElementById('sidebar').classList.contains('pinned'), mainLeft: Math.round(document.getElementById('main').getBoundingClientRect().left), width: Math.round(document.getElementById('sidebar').getBoundingClientRect().width), mem: localStorage.getItem('pace-rail-arrow') }));
+  step('R-319: pressing it again opens the sidebar and pushes the page back over', reopened.pinned && reopened.width > 180 && Math.abs(reopened.mainLeft - reopened.width) <= 1 && reopened.mem === 'open', JSON.stringify(reopened));
+  await dpage.setViewportSize({ width: 800, height: 900 }); await dpage.waitForTimeout(200);
+  step('R-319: on a phone-sized window (the drawer menu) the arrow is not drawn', await dpage.evaluate(() => getComputedStyle(document.querySelector('#sidebar .rail-arrow')).display === 'none'));
+  await dpage.setViewportSize({ width: 1400, height: 900 }); await dpage.waitForTimeout(200);
+  await dpage.evaluate(() => { localStorage.removeItem('pace-rail'); localStorage.removeItem('pace-rail-arrow'); window.render(); }); await dpage.waitForTimeout(200);
+
   // A narrow window (below 1100px) keeps the logo's fold — that is the touch
   // device's only way to read the labels — and everything below is the slim
   // rail's original contract.

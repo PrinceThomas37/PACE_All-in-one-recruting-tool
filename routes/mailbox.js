@@ -54,7 +54,7 @@ const recipientCache = new Map(); // mailboxId -> { at, value }
 module.exports = (ctx) => {
   const router = express.Router();
   const {
-    supabase, db, auth, orgIdFor,
+    supabase, db, auth, orgIdFor, hasRole, ownership, reportingChainIds,
     graphMailRequest, getMicrosoftToken, gmailProvider,
     sendMicrosoftNewMessage, buildHtmlEmailBody, getMailboxSignature,
   } = ctx;
@@ -195,6 +195,51 @@ module.exports = (ctx) => {
 
   // Nav badge. Deliberately one number and one cheap call per mailbox — the
   // inbox unread count only, not a per-folder breakdown.
+  // ── THE LEAD BESIDE ITS EMAIL (R-319, owner's 28 notes: "show the lead's details beside an email received from a lead's address") ──
+  // A small card for an address PACE knows as a contact on a lead: who they are, the company, and the leads (up to three) with the
+  // job, place, stage and who owns each. ONLY leads the caller may see (D-0034 — `ownership.canSeeLead`, the same rule as opening
+  // the lead): a colleague's lead is not named here, and when nothing is visible the answer is the same `{ found:false }` as for an
+  // address nobody knows, so this cannot be used to ask "is this person a lead somewhere". Literal path: above any `/mailbox/:mid/…`.
+  router.get('/mailbox/lead-card', auth, async (req, res) => {
+    try {
+      const email = String(req.query.email || '').trim().toLowerCase();
+      if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email address is required' });
+      const scoped = db.forRequest(req);
+      const { data: contacts } = await scoped.from('contacts').select('id,first_name,last_name,designation,email,job_id').eq('email', email).limit(20);
+      const jobIds = [...new Set((contacts || []).map(c => c.job_id).filter(Boolean))];
+      if (!jobIds.length) return res.json({ found: false });
+      const { data: jobs } = await scoped.from('jobs')
+        .select('id,position,location,stage,created_at,created_by,assigned_to,assigned_to_bd,deleted_at,company:companies(id,name,website)')
+        .in('id', jobIds).is('deleted_at', null);
+      const orgId = orgIdFor ? orgIdFor(req) : req.orgId;
+      const chain = hasRole(req, 'admin') || !reportingChainIds ? null : await reportingChainIds(req.user.id, orgId);
+      const scope = ownership.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+      const seen = (jobs || []).filter(j => ownership.canSeeLead(j, scope))
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      if (!seen.length) return res.json({ found: false });
+      const ownerIds = [...new Set(seen.map(j => j.assigned_to_bd).filter(Boolean))];
+      const names = {};
+      if (ownerIds.length) {
+        const { data: us } = await supabase.from('users').select('id,name').in('id', ownerIds);
+        (us || []).forEach(u => { names[u.id] = u.name || ''; });
+      }
+      const visibleJobIds = new Set(seen.map(j => j.id));
+      const mine = (contacts || []).filter(c => visibleJobIds.has(c.job_id));
+      const c0 = mine[0] || {};
+      const lead = seen[0];
+      res.json({
+        found: true,
+        contact: { name: [c0.first_name, c0.last_name].filter(Boolean).join(' ') || email, designation: c0.designation || '', email },
+        company: lead.company ? { name: lead.company.name || '', website: lead.company.website || '' } : null,
+        leads: seen.slice(0, 3).map(j => ({
+          id: j.id, position: j.position || '', location: j.location || '', stage: j.stage || '',
+          owner: j.assigned_to_bd ? (names[j.assigned_to_bd] || '') : '', unassigned: !j.assigned_to_bd,
+        })),
+        more: Math.max(0, seen.length - 3),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   router.get('/mailbox/unread-count', auth, async (req, res) => {
     try {
       const hit = unreadCache.get(req.user.id);

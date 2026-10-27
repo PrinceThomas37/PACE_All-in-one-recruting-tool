@@ -102,9 +102,17 @@ await t('the send loop asks AI only for first emails not already AI-written, whe
   assert.match(idx, /for \(let email of ordered\)/, 'loop variable must be reassignable');
 });
 await t('the draft is stored before it is sent, and unstored text is never sent', () => {
-  const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('function retryNote'));
+  // R-319: the drafting moved into aiDraftFirstEmail (shared with the Rewrite-with-AI button), which sits just above aiWriteFirstEmail.
+  const fn = idx.slice(idx.indexOf('async function aiDraftFirstEmail'), idx.indexOf('function retryNote'));
   assert.match(fn, /update\(upd\)\.eq\('id', email\.id\)[\s\S]*if \(error\) return email;/);
   assert.match(fn, /input\.thin_posting \? 'engine_first_email_thin' : 'engine_first_email'/);
+});
+await t('R-319: the send loop and the Rewrite-with-AI button draft through the SAME function (one writer, one checker)', () => {
+  const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
+  assert.match(fn, /await aiDraftFirstEmail\(email, sendingEmail, sigTemplate\)/);
+  const route = readFileSync(new URL('../routes/email-rewrite.js', import.meta.url), 'utf8');
+  assert.match(route, /await aiDraftFirstEmail\(email, sendingEmail, sigTemplate\)/);
+  assert.match(idx, /aiDraftFirstEmail,\s+\/\/ the one AI first-email writer/);
 });
 await t('R-041: title-only leads use the fast model, leads with a posting the quality one', () => {
   const src = readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8');
@@ -132,7 +140,7 @@ await t('R-259: a TAUGHT follow-up is written after the claim and before deliver
   assert.match(fn, /if \(!res\.body\) \{[\s\S]*return email;/, 'no draft = the backup follow-up, unchanged');
 });
 await t('R-259: the first email carries the person\'s answers as instructions', () => {
-  const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
+  const fn = idx.slice(idx.indexOf('async function aiDraftFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
   assert.match(fn, /aiStyle\.styleBlock\(c\.styleNote\) \+ aiTeach\.firstBlock\(c\.teach\)/);
 });
 await t('the sender\'s title (from the sending mailbox\'s "sends as") reaches the draft input; none given = empty, as before', () => {

@@ -1937,20 +1937,27 @@ async function aiWriterContext(email, sendingEmail) {
   return { input, who, sendsAs, companyName: (sendsAs && sendsAs.company) || companyName, styleNote, teach };
 }
 
+// The one place a lead's first email is drafted by the AI and held to the house checker — the send loop (aiWriteFirstEmail) and the
+// "Rewrite with AI" button (POST /emails/:id/rewrite-ai) both go through it, so a button press is checked exactly like a send.
+async function aiDraftFirstEmail(email, sendingEmail, sigTemplate) {
+  const c = await aiWriterContext(email, sendingEmail);
+  const input = c.input;
+  const res = await engineDraft.draftFirstEmail({
+    gen: outreachGen, input, companyName: c.companyName,
+    omitSignOff: !!String(sigTemplate || '').trim(),
+    // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js), and R-259: the
+    // answers they gave on the sequence screen (services/ai-teach.js). Read once per email; one that cannot be read is "none".
+    complete: (system, prompt) => aiProvider.complete(supabase, {
+      system: system + aiStyle.styleBlock(c.styleNote) + aiTeach.firstBlock(c.teach), prompt, maxTokens: 800, orgId: email.org_id,
+      feature: input && input.thin_posting ? 'engine_first_email_thin' : 'engine_first_email',
+    }),
+  });
+  return { res, c };
+}
+
 async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
   try {
-    const c = await aiWriterContext(email, sendingEmail);
-    const input = c.input;
-    const res = await engineDraft.draftFirstEmail({
-      gen: outreachGen, input, companyName: c.companyName,
-      omitSignOff: !!String(sigTemplate || '').trim(),
-      // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js), and R-259: the
-      // answers they gave on the sequence screen (services/ai-teach.js). Read once per email; one that cannot be read is "none".
-      complete: (system, prompt) => aiProvider.complete(supabase, {
-        system: system + aiStyle.styleBlock(c.styleNote) + aiTeach.firstBlock(c.teach), prompt, maxTokens: 800, orgId: email.org_id,
-        feature: input && input.thin_posting ? 'engine_first_email_thin' : 'engine_first_email',
-      }),
-    });
+    const { res } = await aiDraftFirstEmail(email, sendingEmail, sigTemplate);
     if (!res.body) {
       console.log(`[EngineAI] template kept for ${email.to_email}: ${res.skipped}${res.violations ? ' ' + res.violations.join(',') : ''}`);
       return email;
@@ -3947,6 +3954,7 @@ const routeCtx = {
   // deliberately no second send path.
   graphMailRequest, gmailProvider, sendMicrosoftNewMessage,
   sentSweepSoon,   // a send from the in-app mailbox is learned as "we replied" within seconds (R-296)
+  aiDraftFirstEmail,   // the one AI first-email writer + house checker (the send loop and "Rewrite with AI" share it)
 };
 app.use(require('./routes/auth')(routeCtx));
 app.use(require('./routes/my-setup')(routeCtx));
@@ -3975,6 +3983,7 @@ app.use(require('./routes/lead-check')(routeCtx));  // R-157 / D-0090: can this 
 // R-157: the Lead Finder — saved searches, today's cards, contacts, Accept. Kept as a const: the nightly sweep below calls its runDue().
 const finderRouter = require('./routes/finder')(routeCtx);
 app.use(finderRouter);
+app.use(require('./routes/email-rewrite')(routeCtx));   // POST /emails/:id/rewrite-ai — before routes/emails (literal-before-param)
 app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));

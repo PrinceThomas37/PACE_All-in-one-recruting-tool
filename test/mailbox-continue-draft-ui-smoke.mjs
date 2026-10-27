@@ -56,6 +56,7 @@ try {
     window.__calls = [];
     window.apiGet = function (p) {
       window.__calls.push(['GET', p]);
+      if (window.__failOnce && p.indexOf('/messages/' + window.__failOnce) >= 0) { window.__failOnce = null; return Promise.reject(new Error('boom')); }
       if (/^\/mailbox\/accounts/.test(p)) return Promise.resolve([{ id: 'mb1', email_address: 'prince@futeglobal.com', platform: 'Gmail', is_primary: true, is_active: true, readable: true, connection: { connected: true } }]);
       if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 0, mailboxes: 1 });
       if (/\/labels$/.test(p)) return Promise.resolve([]);
@@ -63,7 +64,7 @@ try {
       if (/\/recipients$/.test(p)) return Promise.resolve({ recipients: [] });
       if (/\/folders$/.test(p)) return Promise.resolve([{ id: 'f-inbox', name: 'Inbox', kind: 'inbox' }, { id: 'f-drafts', name: 'Drafts', kind: 'drafts' }]);
       if (/^\/mailbox\/mb1\/conversations\?/.test(p)) return Promise.resolve({ conversations: rows, next_cursor: null, crm: {} });
-      if (/^\/mailbox\/mb1\/messages\?/.test(p)) return Promise.resolve({ messages: rows, next_cursor: null, crm: {} });
+      if (/^\/mailbox\/mb1\/messages\?/.test(p)) return Promise.resolve({ messages: rows.map(r => { const c = Object.assign({}, r); ['message_ids', 'in_folder', 'unread_ids', 'participants', 'more_participants', 'count', 'latest_id', 'latest_mine', 'has_draft', 'party'].forEach(k => delete c[k]); return c; }), next_cursor: null, crm: {} });   // one MESSAGE per row, as the server answers it
       let m = p.match(/\/threads\/([^/?]+)$/); if (m) return Promise.resolve(threads[m[1]] || []);
       m = p.match(/^\/mailbox\/mb1\/messages\/([^/?]+)/); if (m) return Promise.resolve(Object.assign({ attachments: [], has_remote_images: false, crm: {} }, msgs[m[1]]));
       return Promise.resolve({});
@@ -163,9 +164,32 @@ try {
   await page.evaluate(() => document.querySelector('#layer .overlay').click());
   await page.waitForTimeout(150);
   step('an ordinary window (Add lead) still just closes on an outside click', await page.evaluate(() => !STATE.modal && Dock.count() === 0));
+
+  // ── R-319 (owner's 28 notes): "a Gmail draft opened in PACE can be edited" — a click on a draft in the Drafts folder opens it to write ──
+  await page.evaluate(() => { Dock.close(); STATE.mailbox.composer = null; STATE.mailbox.compose = null; STATE.mailView = 'threads'; window.__calls.length = 0; window.mbSelectFolder('f-drafts'); });
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'GET' && /folder=f-drafts/.test(c[1])), { timeout: 8000 });
+  const dcalls = await page.evaluate(() => window.__calls.filter(c => c[0] === 'GET' && /folder=f-drafts/.test(c[1])).map(c => c[1]));
+  step('the Drafts folder lists DRAFTS, one per row, even in conversation view (a conversation row leaves its drafts out, so a draft with nothing before it never showed)', dcalls.length >= 1 && dcalls.every(u => /\/messages\?/.test(u) && !/\/conversations\?/.test(u)), JSON.stringify(dcalls));
+  const inboxCall = await page.evaluate(() => { window.__calls.length = 0; window.mbSelectFolder('f-inbox'); return null; });
+  await page.waitForFunction(() => window.__calls.some(c => c[0] === 'GET' && /folder=f-inbox/.test(c[1])), { timeout: 8000 });
+  step('…while the Inbox is still conversations in that view', await page.evaluate(() => window.__calls.filter(c => /folder=f-inbox/.test(c[1])).every(c => /\/conversations\?/.test(c[1]))));
+  await page.evaluate(() => { window.__calls.length = 0; window.mbSelectFolder('f-drafts'); });
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).some(x => x.id === 'd2') && STATE.mailbox.folderId === 'f-drafts', { timeout: 8000 });
+  step('the conversations switch still shows the person\'s own choice (on) while in the Drafts folder', await page.evaluate(() => document.querySelector('.mb-switch') && document.querySelector('.mb-switch').getAttribute('aria-checked') === 'true'));
+  await page.evaluate(() => { window.__calls.length = 0; window.mbOpenRow('d2'); });
+  await page.waitForFunction(() => STATE.mailbox.compose && STATE.mailbox.compose.providerDraftId === 'd2', { timeout: 8000 });
+  const own = await page.evaluate(() => { const k = STATE.mailbox.compose; return { to: k.to, subject: k.subject, body: k.body, reader: STATE.mailbox.message && STATE.mailbox.message.id }; });
+  step('clicking a draft row opens it STRAIGHT in the window to write — its recipient, subject and words, and the draft it came from', own.to === 'sam@x.com' && own.subject === 'Intro call' && /free Friday/.test(own.body), JSON.stringify(own));
+  step('…nothing is deleted or sent by opening it', (await calls(/\/drafts\//, 'DELETE')).length === 0 && (await calls(/\/send$|\/reply$/, 'POST')).length === 0);
+  await page.evaluate(() => { Dock.close(); STATE.mailbox.compose = null; window.mbOpenRow('r2'); });
+  await page.waitForFunction(() => (STATE.mailbox.message || {}).id === 'r2', { timeout: 8000 });
+  step('clicking an ordinary email row still READS it (no window)', await page.evaluate(() => !STATE.mailbox.compose && !STATE.mailbox.composer));
+  await page.evaluate(() => { STATE.mailbox.message = null; STATE.mailbox.selectedId = null; window.__failOnce = 'd2'; window.mbOpenRow('d2'); });
+  await page.waitForFunction(() => (STATE.mailbox.message || {}).id === 'd2', { timeout: 8000 });
+  step('a draft that cannot be opened for writing is shown to READ instead (with its Continue writing button), never a dead click', await page.evaluate(() => !STATE.mailbox.compose && /Continue writing/.test(document.getElementById('mb-head').innerText)));
   step('no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
-  step('the page part ran to the end', false, String(e && e.stack || e));
+  step('the page part ran to the end', false, String(e && e.stack || e) + ' PAGEERRORS: ' + pageErrors.join(' | '));
 } finally {
   if (browser) await browser.close();
   server.close();

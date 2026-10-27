@@ -133,11 +133,11 @@ try {
   // hover ahead
   await ev(() => mbBack());
   const h0 = await msgGets();
-  await page.hover(`.mb-row[onclick*="mbOpen('a2')"]`);   // the a2 row, by its message — not by position (day headings sit between rows, R-315)
+  await page.hover(`.mb-row[onclick*="mbOpenRow('a2')"]`);   // the a2 row, by its message — not by position (day headings sit between rows, R-315)
   await settle(900);
   step('resting the pointer on a row fetches that message ahead of the click', (await msgGets()) === h0 + 1, `h0=${h0} now=${await msgGets()}`);
   const row = await ev(() => document.querySelectorAll('.mb-row')[1].getAttribute('onclick'));
-  const opened = /mbOpen\('(\w+)'\)/.exec(row)[1];
+  const opened = /mbOpenRow\('(\w+)'\)/.exec(row)[1];
   await ev((id) => mbOpen(id), opened);
   const pre = await ev(() => ({ open: STATE.mailbox.message && STATE.mailbox.message.id, loading: STATE.mailbox.msgLoading }));
   step('…so the click is instant', pre.open === opened && !pre.loading, JSON.stringify(pre));

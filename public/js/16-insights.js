@@ -432,7 +432,7 @@ function loadOutreachInsights(){
   var tz=(insightsTzQ()||'').replace(/^\?/,'');
   var q=['bucket='+encodeURIComponent(o.bucket),'seq='+encodeURIComponent(o.seq)];
   if(o.from) q.push('from='+o.from); if(o.to) q.push('to='+o.to); if(tz) q.push(tz);
-  apiGet('/insights/outreach?'+q.join('&')).then(function(d){ o.data=d; o.loading=false; if(!o.from){ o.from=d.from; o.to=d.to; } if(STATE.page==='bdinsights') render(); })
+  apiGet('/insights/outreach?'+q.join('&')).then(function(d){ o.data=d; o.zoom=null; o.loading=false; if(!o.from){ o.from=d.from; o.to=d.to; } if(STATE.page==='bdinsights') render(); })
     .catch(function(e){ o.loading=false; o.err=(e&&e.message)||'Could not load'; if(STATE.page==='bdinsights') render(); });
 }
 window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); if(o.drill) oiLoadDrill(); render(); };
@@ -501,7 +501,10 @@ function oiSplitCard(title,list){
     :'<div class="fs-13 c-text3">Nothing to split in these dates.</div>')+'</div>';
 }
 function oiNum(v,suffix){ return v==null?'—':(typeof v==='number'?v.toLocaleString('en-US'):v)+(v==null?'':(suffix||'')); }
-function oiChart(series,bucket){
+// ZOOM (R-319, owner's 28 notes: "graph zoom by scroll / pinch"). A window onto the days: o.zoom = { a, b } (first and last day shown),
+// null = all of them. The rule is oiZoomWindow (pure, below); oiChartBlock draws the chart and its small zoom bar.
+function oiChart(series,bucket,zoom){
+  var all=series.length, sub=(zoom&&zoom.b-zoom.a+1<all)?series.slice(zoom.a,zoom.b+1):series; series=sub;
   var W=1140,H=300,L=44,R=1130,T=20,B=260;
   var max=Math.max(1,series.reduce(function(m,p){ return Math.max(m,p.emailed,p.opened,p.replied); },0));
   var step=series.length>1?(R-L)/(series.length-1):0;
@@ -515,6 +518,97 @@ function oiChart(series,bucket){
   return '<svg class="oi-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Emailed, opened and replied '+(bucket==='week'?'each week':'each day')+'">'+grid+
     '<line class="oi-axis" x1="'+L+'" y1="'+B+'" x2="'+R+'" y2="'+B+'"></line>'+labels+line('emailed','oi-emailed')+line('opened','oi-opened')+line('replied','oi-replied')+hits+'</svg>';
 }
+var OI_MIN_DAYS=3;
+// The window after a zoom. n = how many days there are; win = {a,b} or null (all); at = where the pointer is across the plot, 0..1;
+// factor > 1 shows MORE days (zoom out), < 1 FEWER (zoom in). The day under the pointer stays under the pointer. Returns null when the
+// result is "all of them", so the chart is in its plain state again.
+window.oiZoomWindow=function(n,win,at,factor){
+  if(!(n>1)) return null;
+  var a=win?win.a:0, b=win?win.b:n-1, size=b-a+1;
+  var minSize=Math.min(OI_MIN_DAYS,n);
+  var next=Math.max(minSize,Math.min(n,Math.round(size*factor)));
+  if(next===size&&factor!==1) next=factor<1?Math.max(minSize,size-1):Math.min(n,size+1);   // a small nudge still moves by a whole day
+  if(next>=n) return null;
+  var f=Math.max(0,Math.min(1,at==null?0.5:at)), anchor=a+f*(size-1);
+  var na=Math.round(anchor-f*(next-1));
+  na=Math.max(0,Math.min(n-next,na));
+  return { a:na, b:na+next-1 };
+};
+// Dragging moves the window along by whole days (dx = the drag as a share of the plot's width; right = earlier days).
+window.oiPanWindow=function(n,win,dxShare){
+  if(!win||!(n>1)) return win||null;
+  var size=win.b-win.a+1, shift=Math.round(-dxShare*(size-1));
+  var na=Math.max(0,Math.min(n-size,win.a+shift));
+  return { a:na, b:na+size-1 };
+};
+function oiChartBlock(d,o){
+  if(!d||!d.series||!d.series.length) return '';
+  var n=d.series.length, z=o.zoom&&o.zoom.b-o.zoom.a+1<n?o.zoom:null;
+  var canIn=n>OI_MIN_DAYS&&(!z||z.b-z.a+1>OI_MIN_DAYS);
+  var bar='<div class="oi-zoombar">'+
+    (n>OI_MIN_DAYS?'<button type="button" class="oi-zbtn" aria-label="Zoom in" title="Zoom in" onclick="oiZoomBy(0.5)"'+(canIn?'':' disabled')+'>+</button>'+
+      '<button type="button" class="oi-zbtn" aria-label="Zoom out" title="Zoom out" onclick="oiZoomBy(2)"'+(z?'':' disabled')+'>−</button>'+
+      (z?'<button type="button" class="oi-zbtn oi-zreset" onclick="oiZoomReset()">Show all</button>':'')+
+      '<span class="oi-zhint">'+(z?(d.series[z.a].key+' → '+d.series[z.b].key+' · drag to move'):'Scroll or pinch the chart to zoom')+'</span>':'')+
+    '</div>';
+  return oiChart(d.series,d.bucket,z)+bar;
+}
+// Only the chart is redrawn while zooming (a page repaint per wheel tick would rebuild the tiles and tables too), at most once a frame.
+// o.zoom is the state, so any later full repaint draws the same thing.
+var oiRaf=0;
+function oiPaintChart(){
+  if(oiRaf) return;
+  oiRaf=(window.requestAnimationFrame||function(f){ return setTimeout(f,16); })(function(){
+    oiRaf=0;
+    var o=oiState(), box=document.querySelector('[data-oi-chart]');
+    if(box&&o.data) box.innerHTML=oiChartBlock(o.data,o);
+  });
+}
+function oiSetZoom(win){ var o=oiState(); o.zoom=win; oiPaintChart(); }
+window.oiZoomBy=function(factor){ var o=oiState(); if(!o.data||!o.data.series) return; oiSetZoom(oiZoomWindow(o.data.series.length,o.zoom,0.5,factor)); };
+window.oiZoomReset=function(){ oiSetZoom(null); };
+// The gestures, bound once to the page (the chart is redrawn, so listeners on it would be lost): wheel / trackpad pinch (a pinch arrives
+// as a wheel with ctrlKey), two fingers on a screen, and a drag to move along. A wheel that would only zoom OUT of the full chart is left
+// alone, so scrolling the page past the chart never gets stuck on it.
+(function(){
+  if(window.__oiGestures) return; window.__oiGestures=true;
+  function plot(svg,clientX){ var r=svg.getBoundingClientRect(); if(!r.width) return 0.5; var vx=(clientX-r.left)/r.width*1140; return Math.max(0,Math.min(1,(vx-44)/(1130-44))); }
+  function chartAt(t){ return t&&t.closest?t.closest('svg.oi-chart'):null; }
+  function liveSvg(){ return document.querySelector('svg.oi-chart'); }   // the chart is redrawn while a gesture goes on: never keep the old element
+  document.addEventListener('wheel',function(e){
+    var svg=chartAt(e.target); if(!svg) return;
+    var o=oiState(); if(!o.data||!o.data.series||o.data.series.length<=OI_MIN_DAYS) return;
+    var out=e.deltaY>0; if(out&&!o.zoom) return;
+    e.preventDefault();
+    var k=e.ctrlKey?0.012:0.0025, f=Math.exp(e.deltaY*k);
+    oiSetZoom(oiZoomWindow(o.data.series.length,o.zoom,plot(svg,e.clientX),f));
+  },{passive:false});
+  var ptrs={}, last=null;
+  function count(){ return Object.keys(ptrs).length; }
+  document.addEventListener('pointerdown',function(e){
+    var svg=chartAt(e.target); if(!svg||e.pointerType==='mouse'&&e.button!==0) return;
+    ptrs[e.pointerId]={x:e.clientX,y:e.clientY}; last={svg:svg,x:e.clientX,d:0};
+    if(count()===2){ var p=Object.keys(ptrs).map(function(k){ return ptrs[k]; }); last.d=Math.abs(p[0].x-p[1].x)||1; }
+    try{ svg.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  document.addEventListener('pointermove',function(e){
+    if(!ptrs[e.pointerId]||!last) return;
+    var o=oiState(); if(!o.data||!o.data.series) return; var n=o.data.series.length;
+    ptrs[e.pointerId]={x:e.clientX,y:e.clientY};
+    if(count()===2){
+      var p=Object.keys(ptrs).map(function(k){ return ptrs[k]; }), dist=Math.abs(p[0].x-p[1].x)||1;
+      if(last.d){ var sv=liveSvg(); if(sv) oiSetZoom(oiZoomWindow(n,o.zoom,plot(sv,(p[0].x+p[1].x)/2),last.d/dist)); }
+      last.d=dist; return;
+    }
+    if(count()===1&&o.zoom){
+      var sv2=liveSvg(); if(!sv2) return; var r=sv2.getBoundingClientRect(), share=(e.clientX-last.x)/(r.width*(1086/1140)||1);
+      var w=oiPanWindow(n,o.zoom,share);
+      if(w&&(w.a!==o.zoom.a)){ last.x=e.clientX; oiSetZoom(w); }
+    }
+  });
+  function up(e){ delete ptrs[e.pointerId]; if(!count()) last=null; else if(last){ last.d=0; } }
+  document.addEventListener('pointerup',up); document.addEventListener('pointercancel',up);
+})();
 function renderOutreachInsights(toggle){
   var o=oiState();
   if(!o.data&&!o.loading&&!o.err) loadOutreachInsights();
@@ -538,7 +632,7 @@ function renderOutreachInsights(toggle){
   var legend='<div class="oi-legend"><span><i class="oi-key oi-emailed"></i>Emailed</span><span><i class="oi-key oi-opened"></i>Opened</span><span><i class="oi-key oi-replied"></i>Replied</span></div>';
   var buckets='<div class="oi-seg" role="group" aria-label="By day or week">'+[['day','Daily'],['week','Weekly']].map(function(b){ return '<button type="button" class="oi-segb'+(o.bucket===b[0]?' on':'')+'" aria-pressed="'+(o.bucket===b[0])+'" onclick="oiSet(\'bucket\',\''+b[0]+'\')">'+b[1]+'</button>'; }).join('')+'</div>';
   var chart='<div class="card oi-card"><div class="oi-chart-head">'+legend+buckets+'</div>'+
-    (d?(d.series&&d.series.length?oiChart(d.series,d.bucket):'<div class="fs-13 c-text3">Nothing was sent in these dates.</div>'):'<div class="fs-13 c-text3">Loading…</div>')+'</div>';
+    (d?(d.series&&d.series.length?'<div class="oi-chart-wrap" data-oi-chart>'+oiChartBlock(d,o)+'</div>':'<div class="fs-13 c-text3">Nothing was sent in these dates.</div>'):'<div class="fs-13 c-text3">Loading…</div>')+'</div>';
   var rows=((d&&d.sequences)||[]).map(function(r){
     return '<tr><td class="fw6">'+htmlEsc(r.name)+(r.candidates?' <span class="c-text3">(candidates)</span>':'')+'</td><td>'+oiNum(r.people)+'</td><td>'+oiNum(r.emailed)+'</td><td>'+oiNum(r.opened_rate,'%')+'</td><td>'+oiNum(r.replied_rate,'%')+'</td><td>'+oiNum(r.interested)+'</td><td>'+oiNum(r.bounced_rate,'%')+'</td></tr>';
   }).join('');

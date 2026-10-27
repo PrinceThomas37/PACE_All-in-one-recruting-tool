@@ -295,6 +295,17 @@
       a.mailboxes.map(function(m){ return '<option value="'+esc(m.id)+'"'+(m.id===a.mailboxId?' selected':'')+'>'+esc((m.display_name?m.display_name+' ':'')+'<'+m.email_address+'>')+' — '+m.sent_today+' sent today</option>'; }).join('')+'</select>'+
       '<div class="fd-hint">The email goes out from this address, signed with it. We pre-select the one that has sent the fewest today.</div>';
   }
+  // The posting behind each ticked job (owner, 26 Oct: "a link to the job posting in the small lead window"). The card already holds
+  // the posting's address; a job typed by hand has none and shows nothing. Only http(s) addresses reach an href (normalizePostings).
+  window.fdPostingLinks = postingLinks;
+  function postingLinks(card, jobs){
+    var posts=(card&&card.postings)||[], seen={}, out=[];
+    (jobs||[]).forEach(function(t){
+      var hit=posts.filter(function(p){ return p.title===t && /^https?:\/\//i.test(p.url||''); })[0];
+      if (hit && !seen[hit.url]) { seen[hit.url]=1; out.push('<a class="fd-postlink" href="'+esc(hit.url)+'" target="_blank" rel="noopener noreferrer">'+esc(t)+' ↗</a>'); }
+    });
+    return out.length ? '<div class="fd-hint fd-postlinks">Job posting: '+out.join(' · ')+'</div>' : '';
+  }
   function renderAcceptModal(){
     var a=F.acc; if(!a) return '';
     var c=a.card, goes=(F.access&&F.access.goes_to)==='you';
@@ -309,6 +320,7 @@
         ? '<div class="fd-pills">'+shown.map(function(t){ var n=a.jobs.indexOf(t); return '<button class="fd-pill'+(n>=0?' on':(jobFull?' is-full':''))+'"'+(n<0&&jobFull?' title="The most one lead can carry is '+jobMax+' — untick one first"':'')+' onclick="fdToggleJob(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')">'+(n>=0?(t===a.main?'★ ':'✓ '):'')+esc(t)+'</button>'; }).join('')+
             (union.length>14?'<button type="button" class="fd-pill" onclick="fdShowAllPills()">'+(a.allPills?'Show fewer':'Show all '+union.length+' jobs')+'</button>':'')+'</div>'
         : '<div class="fd-hint">Open their jobs on the card to pick from a list, or type one below.</div>')+
+      postingLinks(c, a.jobs)+
       (a.jobErr?'<div class="fd-hint c-red" role="alert">'+esc(a.jobErr)+'</div>':'')+
       '<div class="fd-row"><input id="fd-position" class="inp fd-grow" placeholder="Or type a job, e.g. CNC Machinist" value="'+esc(a.jobQ)+'" onkeydown="if(event.key===\'Enter\'){fdAddJob()}">'+
         '<button class="btn btn-sm btn-outline" onclick="fdAddJob()">Add</button></div>'+
@@ -923,6 +935,37 @@
       loadHistory(); if(typeof loadEmailsForCurrentUser==='function') loadEmailsForCurrentUser();
     }).catch(function(e){ rv.busy=false; rv.err=((e&&e.message)||e)+' (Your changes are saved; nothing was sent.)'; STATE.modal=renderReviewModal(); render(); });
   };
+  // ✨ Rewrite with AI, for ONE person's email (R-319). What is on screen is saved first, so "Undo" brings back exactly what was there.
+  // The server uses the same writer and the same house checker as a send; if it cannot, the wording stays and the reason is shown.
+  function rvMail(id){ var rv=F.rv; return rv&&rv.list?rv.list.filter(function(x){ return x.id===id; })[0]:null; }
+  function rvRepaint(){ STATE.modal=renderReviewModal(); render(); }
+  window.fdRvRewrite = function(id){
+    var rv=F.rv, m=rvMail(id); if(!rv||rv.busy||!m||m.rwBusy) return; rvCapture();
+    m.rwBusy=true; m.rwNote=''; rvRepaint();
+    rvSave(rv).then(function(){
+      return apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{});
+    }).then(function(r){
+      if(F.rv!==rv) return;
+      rvCapture();   // anything typed in another email while this one was working stays
+      m.rwBusy=false;
+      if(r&&r.written&&r.email){
+        m.prev=r.previous||null; m.subject=r.email.subject||m.subject; m.body=r.email.body||m.body; m.orig={ subject:m.subject, body:m.body }; m.ai=false;
+        m.rwNote='Rewritten for this person. Read it, change anything you like, or undo.';
+      } else m.rwNote=(r&&r.reason)||'The AI could not write this one, so the wording was kept.';
+      rvRepaint();
+    }).catch(function(e){ if(F.rv!==rv) return; rvCapture(); m.rwBusy=false; m.rwNote='Could not rewrite: '+((e&&e.message)||e); rvRepaint(); });
+  };
+  window.fdRvUndo = function(id){
+    var rv=F.rv, m=rvMail(id); if(!rv||rv.busy||!m||m.rwBusy||!m.prev) return;
+    m.rwBusy=true; m.rwNote=''; rvRepaint();
+    apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{ restore:m.prev }).then(function(r){
+      if(F.rv!==rv) return;
+      rvCapture();   // anything typed in another email while this one was working stays
+      m.rwBusy=false;
+      if(r&&r.email){ m.subject=r.email.subject||''; m.body=r.email.body||''; m.orig={ subject:m.subject, body:m.body }; m.prev=null; m.rwNote='Back to the earlier wording.'; }
+      rvRepaint();
+    }).catch(function(e){ if(F.rv!==rv) return; rvCapture(); m.rwBusy=false; m.rwNote='Could not undo: '+((e&&e.message)||e); rvRepaint(); });
+  };
   window.fdRvClose = function(){ F.rv=null; STATE.modal=null; render(); };
   function renderReviewModal(){
     var rv=F.rv, body, foot;
@@ -937,6 +980,11 @@
           return '<div class="fd-rv-mail"><div class="fs-13"><strong>To:</strong> '+esc(m.to)+(m.fu?' <span class="fd-tag">follow-up</span>':'')+'</div>'+
             '<label class="fd-label" for="fd-rv-s-'+esc(m.id)+'">Subject</label><input id="fd-rv-s-'+esc(m.id)+'" class="inp fd-wide" value="'+esc(m.subject)+'">'+
             '<label class="fd-label" for="fd-rv-b-'+esc(m.id)+'">Message</label><textarea id="fd-rv-b-'+esc(m.id)+'" class="txta w100 fd-rv-body">'+esc(m.body)+'</textarea>'+
+            '<div class="fd-rv-tools">'+
+              (m.fu?'':'<button type="button" class="btn btn-sm btn-outline" '+(rv.busy||m.rwBusy?'disabled ':'')+'onclick="fdRvRewrite(\''+esc(m.id)+'\')">'+(m.rwBusy?'Working…':'✨ Rewrite with AI')+'</button>')+
+              (m.prev?'<button type="button" class="btn btn-sm btn-outline" '+(rv.busy||m.rwBusy?'disabled ':'')+'onclick="fdRvUndo(\''+esc(m.id)+'\')">Undo rewrite</button>':'')+
+              (m.rwNote?'<span class="fd-hint" role="status">'+esc(m.rwNote)+'</span>':'')+
+            '</div>'+
             (m.ai?'<div class="fd-hint">The AI writes this lead\'s email just before it is sent, so what you read here is the fallback wording.</div>':'')+'</div>';
         }).join('')+
         (rv.err?'<div class="c-red fs-13" role="alert" style="margin-top:8px">'+esc(rv.err)+'</div>':'')+
