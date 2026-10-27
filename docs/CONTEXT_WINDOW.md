@@ -4,9 +4,13 @@
 
 **Updated**: 2026-10-27 (Session 54). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
 
-## START HERE (27 Oct, Session 54, later) — P3 built (R-319, all six); merge only after the clean-worktree runs
+## START HERE (27 Oct, Session 54, last) — the owner parked a security list for the NEW Render service (R-328)
 
-**Owner: "Complete p3 and merge the changes."** Built directly, no agents. Roadmap R-319 (DONE on the branch), new R-325 (Rewrite with AI in Email → Pending), R-326 (lead card for candidates), R-327 (logo + arrow are a first draft). Archive entry "Session 54, later" has the mechanism per item. **Owed:** full suite Node 22 AND 26 from a clean worktree of the exact head, then merge, then `list_deploys` for the merge commit. **Still waiting on the owner:** the four R-321 answers (plan in `docs/PLAN_R-321_contact_data_any_provider.md`); the speed verdict needs a busy day of `[SlowReq]`.
+`docs/TODO_SECURITY_AT_NEW_RENDER_SERVICE.md` is the checklist (owner's steps A, my fixes B, checks C, decisions D). Read it when the owner says the new service is ready; first things then: the secret key (R-205), the new web address in the sign-in settings, a database backup. Nothing is built.
+
+## START HERE (27 Oct, Session 54, later) — P3 (R-319, all six) is MERGED and LIVE (#372, 11:31 UTC)
+
+**Owner: "Complete p3 and merge the changes."** Built directly, no agents. Roadmap R-319 (DONE on the branch), new R-325 (Rewrite with AI in Email → Pending), R-326 (lead card for candidates), R-327 (logo + arrow are a first draft). Archive entry "Session 54, later" has the mechanism per item. **Done:** clean-worktree full suite on head `5fecd6f` = 314/314 on Node 22 and on Node 26.11.1; merged as `66ddf8a`; Render deploy `dep-dbg8mgrbc2fs73a04mog` live 11:31:07 UTC, no error logs. **Owed:** the owner's reaction to the logo/arrow (R-327) and the feel of the zoom and fold; a hard refresh to see it. **Still waiting on the owner:** the four R-321 answers (plan in `docs/PLAN_R-321_contact_data_any_provider.md`); the speed verdict needs a busy day of `[SlowReq]`.
 
 ## START HERE (27 Oct, Session 54) — speed check read (too early to call); R-321 planned, waiting on the owner
 
