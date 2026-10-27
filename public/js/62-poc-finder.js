@@ -64,7 +64,7 @@
     if (st.busy) return;
     st.busy = true;
     apiGet('/jobs/'+encodeURIComponent(id)+'/poc').then(function(d){
-      st.busy = false; if (d && d.slots) { st.data = d; st.at = Date.now(); st.pre = !!pre; paint(id); }
+      st.busy = false; if (d && d.slots) { st.data = d; st.at = Date.now(); st.pre = !!pre; cdSet(d.finder && d.finder.contact_data); paint(id); }
     }).catch(function(){ st.busy = false; /* the plain list stays — never a blank block */ });
   }
   function paint(id){ var node = el(id); if (node && C[id] && C[id].data) node.innerHTML = inner(id); }
@@ -108,7 +108,7 @@
     var n = (e.sizing || 0) + people * (e.per_person || 1);
     var left = Math.max(0, (c.limit || 0) - (c.used || 0));
     var t = n ? 'up to ' + n + ' credit' + (n === 1 ? '' : 's') : 'free';
-    return { label: t, title: 'Searching is free. Apollo credits are spent only to size the company'+(e.sizing?' (1, this lead is not sized yet)':'')+' and to look up each person found — at most '+n+' for this click, '+left+' left today.'+(n > left ? ' Only '+left+' are left, so it will stop there.' : '') };
+    return { label: t, title: 'Searching is free. Credits are spent only to size the company'+(e.sizing?' (1, this lead is not sized yet)':'')+' and to look up each person found — at most '+n+' for this click, '+left+' left today.'+(n > left ? ' Only '+left+' are left, so it will stop there.' : '') };
   }
 
   // ── drawing ───────────────────────────────────────────────────────────────
@@ -165,8 +165,8 @@
       : '';
     // Apollo can size the company (1 credit when found, 0 when not) — offered
     // only while nobody has set a size.
-    var lookupBtn = (d.can_edit && fin.apollo && !d.size_known)
-      ? '<button type="button" class="lx-link lxc-lookup"'+(st.sizing?' disabled':'')+' onclick="event.stopPropagation();leadPocLookupSize(\''+id+'\')">'+(st.sizing?'Looking up…':'Look up with Apollo')+' <span class="lxc-cost">· up to 1 credit</span></button>'
+    var lookupBtn = (d.can_edit && fin.apollo && cdCan('enrichOrganization') && !d.size_known)
+      ? '<button type="button" class="lx-link lxc-lookup"'+(st.sizing?' disabled':'')+' onclick="event.stopPropagation();leadPocLookupSize(\''+id+'\')">'+(st.sizing?'Looking up…':'Look up with '+cdn())+' <span class="lxc-cost">· up to 1 credit</span></button>'
       : '';
     var sizeCtl = d.can_edit
       ? '<select class="lx-sel lxc-size" aria-label="Company size" onclick="event.stopPropagation()" onchange="event.stopPropagation();leadPocSize(\''+id+'\',this.value)">'+
@@ -242,10 +242,10 @@
 
   // What the size line says: where the size came from, and what it means.
   function sizeNote(d){
-    var from = d.size_source==='apollo' && d.employee_count
-      ? 'From Apollo: about '+Number(d.employee_count).toLocaleString('en-US')+' people. ' : '';
+    var from = d.size_source && d.size_source!=='manual' && d.employee_count
+      ? 'From '+cdn()+': about '+Number(d.employee_count).toLocaleString('en-US')+' people. ' : '';
     if (!d.size_known){
-      return (d.size_checked_at ? 'Apollo had no size for this company. ' : '')+
+      return (d.size_checked_at ? cdnCap()+' had no size for this company. ' : '')+
         'Assuming 20–50 people until it is set — it decides which titles to look for.';
     }
     return from + (d.size==='1-20'
@@ -256,10 +256,10 @@
     var fin = d.finder || {};
     if (fin.apollo){
       var c = fin.credits || {};
-      return '<div class="lxc-credits">Apollo: '+(c.used||0)+' of '+(c.limit||0)+' credit'+(c.limit===1?'':'s')+' used today · an email built from the company’s own format costs nothing</div>';
+      return '<div class="lxc-credits">'+esc(cdOr('Credits'))+': '+(c.used||0)+' of '+(c.limit||0)+' credit'+(c.limit===1?'':'s')+' used today · an email built from the company’s own format costs nothing</div>';
     }
-    // Only an admin can connect it, so only an admin is told how.
-    return fin.is_admin ? '<div class="lxc-credits">Connect Apollo in Admin → Integrations and PACE can find the people still missing here.</div>' : '';
+    // Nothing connected: say what is needed, and who can do it (only an admin can connect one, so only an admin is told where).
+    return '<div class="lxc-credits">'+(fin.is_admin ? 'Connect a contact database in Admin → Integrations and PACE can find the people still missing here.' : 'Ask an admin to connect a contact database and PACE can find the people still missing here.')+'</div>';
   }
 
   // A person found and waiting for a yes or no.
@@ -269,11 +269,11 @@
   function found(id, x, d){
     var st = C[id], busy = st.acting === x.id;
     var name = [x.first_name, x.last_name].filter(Boolean).join(' ');
-    var chip = x.email_confidence==='confirmed' ? '<span class="lxc-conf is-confirmed" title="Apollo verified this address">Confirmed</span>'
+    var chip = x.email_confidence==='confirmed' ? '<span class="lxc-conf is-confirmed" title="'+esc(cdnCap())+' verified this address">Confirmed</span>'
       : x.email_confidence==='likely' ? '<span class="lxc-conf is-likely" title="Built from the company’s own email format, learned from real addresses there">Likely</span>'
       : '';
     var fmt = d.format && d.format.pattern ? (FORMAT_SHORT[d.format.pattern]||d.format.pattern) : null;
-    var why = x.email_confidence==='confirmed' ? 'email verified by Apollo'
+    var why = x.email_confidence==='confirmed' ? 'email verified by '+cdn()
       : x.email_confidence==='likely' ? 'email built from their format'+(fmt?' ('+esc(fmt)+')':'')+' — likely, not checked'
       : 'no email PACE can stand behind — it will not guess one';
     var li = safeLinkedIn(x.linkedin_url);
@@ -282,7 +282,7 @@
         '<div class="lxc-found-main">'+
           '<div class="lxc-found-name">'+esc(name)+(x.title?'<span class="lxc-found-title"> · '+esc(x.title)+'</span>':'')+'</div>'+
           '<div class="lxc-found-mail">'+(x.email ? '<span class="lxc-mail">'+esc(x.email)+'</span>' : '<span class="lx-muted">No email</span>')+chip+'</div>'+
-          '<div class="lxc-found-src">Found on Apollo · '+why+
+          '<div class="lxc-found-src">Found on '+cdn()+' · '+why+
             (li ? ' · <a href="'+esc(li)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">LinkedIn</a>' : '')+'</div>'+
         '</div>'+
         (d.can_edit ? '<div class="lxc-found-acts">'+

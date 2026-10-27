@@ -233,8 +233,8 @@ const SETTINGS_SCHEMA = [
   // can build from the company's own learned format costs nothing and is used
   // first, so this ceiling is only ever spent where PACE has no other way.
   {
-    key: 'poc_apollo_daily_credits', label: 'Apollo credits a day for the contact finder', unit: 'credits (0 = none)', group: 'Contact finder',
-    description: "The most Apollo credits the contact finder may spend in one day, across everyone (Search contact, Uncover, and company size). One credit shows one person's full name and work email, or one company's size; searching is free, and an email PACE can build from the company's own format costs nothing. Also set on the Apollo card in Admin → Integrations. At 0 nothing is spent.",
+    key: 'poc_apollo_daily_credits', label: 'Contact-database credits a day for the contact finder', unit: 'credits (0 = none)', group: 'Contact finder',
+    description: "The most contact-database credits (one lookup = one credit) the contact finder may spend in one day, across everyone (Search contact, Uncover, and company size). One credit shows one person's full name and work email, or one company's size; searching is free, and an email PACE can build from the company's own format costs nothing. Also set on the contact-database card in Admin → Integrations. At 0 nothing is spent.",
     // Raised from 1,000 on 2026-09-28 (D-0054: "I want to increase the credit
     // usage of the apollo") — the owner's test account alone holds 183.3k.
     default: 20, min: 0, max: 10000,
@@ -250,7 +250,7 @@ const SETTINGS_SCHEMA = [
   },
   {
     key: 'finder_cards_per_run', label: 'Lead Finder: most cards one "Find leads now" search can bring', unit: 'cards (0 = off)', group: 'Lead Finder',
-    description: 'A one-off search (Find leads now) is not part of the daily number above, so it has its own ceiling for each press of Find. It still uses one Apollo credit from the organisation\'s daily limit.',
+    description: 'A one-off search (Find leads now) is not part of the daily number above, so it has its own ceiling for each press of Find. It still uses one contact-database credit from the organisation\'s daily limit.',
     default: 25, min: 0, max: 200,
   },
   {
@@ -264,13 +264,13 @@ const SETTINGS_SCHEMA = [
     default: 5, min: 1, max: 30,
   },
   {
-    key: 'finder_apollo_daily_credits', label: 'Lead Finder: Apollo credits a day', unit: 'credits (0 = none)', group: 'Lead Finder',
-    description: 'The most Apollo credits the Lead Finder may spend in one day across everyone: one per page of companies searched, one per company whose postings are opened, one per email revealed. Searching for people is free.',
+    key: 'finder_apollo_daily_credits', label: 'Lead Finder: contact-database credits a day', unit: 'credits (0 = none)', group: 'Lead Finder',
+    description: 'The most contact-database credits the Lead Finder may spend in one day across everyone: one per page of companies searched, one per company whose postings are opened, one per email revealed. Searching for people is free.',
     default: 300, min: 0, max: 100000,
   },
   {
     key: 'finder_reveals_per_day', label: 'Lead Finder: emails each person may reveal a day', unit: 'emails (0 = none)', group: 'Lead Finder',
-    description: 'How many people\'s work emails one person may reveal (1 Apollo credit each) in a day. This is the number a charge could later attach to.',
+    description: 'How many people\'s work emails one person may reveal (1 contact-database credit each) in a day. This is the number a charge could later attach to.',
     default: 30, min: 0, max: 1000,
   },
   {

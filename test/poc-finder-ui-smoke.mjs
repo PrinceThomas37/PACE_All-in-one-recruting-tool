@@ -136,7 +136,7 @@ function pocPayload(id){
     size_source: co.size_source || null, employee_count: co.employee_count || null, size_checked_at: co.size_checked_at || null,
     suggestions: suggs.filter(x => x.job_id === id && x.status === 'suggested').map(x => ({ id:x.id, slot_key:x.slot_key, first_name:x.first_name,
       last_name:x.last_name, title:x.title, email:x.email, email_confidence:x.email_confidence, email_source:x.email_source, source:x.source, linkedin_url:x.linkedin_url })),
-    finder:{ apollo:FINDER.apollo, credits:{ used:FINDER.used, limit:FINDER.limit }, is_admin:FINDER.is_admin },
+    finder:{ apollo:FINDER.apollo, contact_data: { provider:'apollo', label:'Apollo.io', name:'Apollo', connected:FINDER.apollo, capabilities: { searchPeople:{offered:true,credits:0}, revealPerson:{offered:true,credits:1}, enrichOrganization:{offered:true,credits:1}, searchOrganizations:{offered:true,credits:1}, organizationJobPostings:{offered:true,credits:1}, checkPeopleSearch:{offered:true,credits:0} } }, credits:{ used:FINDER.used, limit:FINDER.limit }, is_admin:FINDER.is_admin },
     can_edit:CAN_EDIT[id] };
 }
 function rawJobs(){
@@ -454,7 +454,16 @@ try{
   await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');
   await page.waitForTimeout(400);
   const adm = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? b.innerText : ''; });
-  step('an admin with Apollo not connected is told where to connect it', /Connect Apollo in Admin → Integrations/.test(adm));
+  step('an admin with no contact database connected is told where to connect one (D-0175: no vendor named)', /Connect a contact database in Admin → Integrations/.test(adm));
+  FINDER.is_admin = false;
+  await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');        // closes the open row
+  await page.waitForTimeout(200);
+  await page.evaluate(()=>{ STATE.leadPoc = {}; });
+  await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');
+  await page.waitForTimeout(500);
+  const non = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? b.innerText : ''; });
+  step('someone who is not an admin is told to ask one — a clear "connect a contact database" prompt, not silence (owner, 27 Oct)', /Ask an admin to connect a contact database/.test(non) && !/Admin → Integrations/.test(non), non.slice(0, 200));
+  FINDER.is_admin = true;
   FINDER.apollo = true; FINDER.is_admin = false;
   await page.evaluate(()=>{ STATE.leadPoc = {}; });
 

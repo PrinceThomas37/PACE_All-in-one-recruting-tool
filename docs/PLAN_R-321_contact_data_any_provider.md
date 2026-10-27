@@ -1,6 +1,6 @@
 # R-321 — Contact data from ANY provider (plan, 27 Oct 2026, Session 54)
 
-**Status: PLAN ONLY. Nothing is built. Waits on the owner's answers to the four questions at the end.**
+**Status: steps 1–3 BUILT on the dev branch 27 Oct (owner answered the four questions: D-0180). Step 4 (a real second vendor) waits on the owner naming it + a test key.**
 Rule behind it: **D-0175** — no contact-data vendor is hard-wired; every company brings its own provider and key.
 
 ## What is true today (read from the code, not remembered)

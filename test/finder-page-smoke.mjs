@@ -34,7 +34,7 @@ function findChromium() {
 
 const ACCESS = {
   limits: { jobs_per_lead: 3, contacts_per_lead: 3 },
-  enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
+  enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, contact_data: { provider:'apollo', label:'Apollo.io', name:'Apollo', connected:true, capabilities: { searchPeople:{offered:true,credits:0}, revealPerson:{offered:true,credits:1}, enrichOrganization:{offered:true,credits:1}, searchOrganizations:{offered:true,credits:1}, organizationJobPostings:{offered:true,credits:1}, checkPeopleSearch:{offered:true,credits:0} } }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
   wait_days: 14, card_days: 5, goes_to: 'pool', jobsource: { connected: false, used: 0, limit: 10, per_run: 3 },
   sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
   sizes: [{ id: 'small', label: '11–50' }, { id: 'mid', label: '51–500' }], posted: { min: 0, max: 30, def: 14 },
@@ -376,7 +376,12 @@ try {
   step('Apollo alone shows neither the warning nor the free-source note', !/Free job sources are not connected yet/.test(await html()) && !/apply to Apollo only/.test(await html()));
   await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = false; a.jobsource.connected = true; window.fdNewSearch(); });
   h = await html();
-  step('an organisation with no Apollo but a job-source key starts on Free job sources, and an Apollo pick warns that Apollo is not connected', /value="free" checked/.test(h) && (await page.evaluate(() => { window.fdPickSource('apollo'); return true; })) && /Apollo is not connected, so Apollo cannot be searched/.test(await html()));
+  step('an organisation with no Apollo but a job-source key starts on Free job sources, and an Apollo pick warns that Apollo is not connected', /value="free" checked/.test(h) && (await page.evaluate(() => { window.fdPickSource('apollo'); return true; })) && /Apollo is not connected, so it cannot be searched/.test(await html()));
+  // R-321 (D-0175): the screen speaks of the organisation's OWN provider, and offers only what that provider has
+  await page.evaluate(() => { window.STATE.contactData = Object.assign({}, window.STATE.contactData, { name: 'Zeta Data', label: 'Zeta Data', connected: false, capabilities: Object.assign({}, window.STATE.contactData.capabilities, { searchOrganizations: { offered: false, credits: null } }) }); window.fdPickSource('apollo'); });
+  const zh = await html();
+  step('R-321: another provider is named by ITS name, never Apollo — "Zeta Data is not connected", and no Apollo anywhere on the form', /Zeta Data is not connected, so it cannot be searched/.test(zh) && !/Apollo/.test(zh), (zh.match(/.{40}Apollo.{40}/) || [''])[0]);
+  await page.evaluate(() => { window.STATE.contactData = Object.assign({}, window.STATE.contactData, { name: 'Apollo', label: 'Apollo.io', connected: true, capabilities: Object.assign({}, window.STATE.contactData.capabilities, { searchOrganizations: { offered: true, credits: 1 } }) }); });
   await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = true; a.jobsource.connected = false; window.fdNewSearch(); });
   h = await html();
   step('before any industry is picked the page says how to get titles to tick, and nothing is chosen', /Pick an industry for titles to tick/.test(h) && /\(0 of 40\)/.test(h));
@@ -409,6 +414,11 @@ try {
   step('the search form shows ONE line for the rarely used filters ("More filters ▾") — no size, industry-words or company box until opened', /More filters ▾/.test(await html()) && await page.evaluate(() => !document.getElementById('fd-f-co') && !document.getElementById('fd-f-keywords') && !document.querySelector('.fd-size-box')));
   await page.evaluate(() => window.fdMore());
   step('"More filters" opens them: company size, industry words and preferred companies', await page.evaluate(() => !!document.getElementById('fd-f-co') && !!document.getElementById('fd-f-keywords') && document.querySelectorAll('.fd-size-box').length === 2) && /Fewer filters ▴/.test(await html()));
+  // R-321 (D-0175): a provider that cannot look a company up by name gets no Look up button — the form says to paste the website instead
+  const keepCaps = await page.evaluate(() => { const cd = window.STATE.contactData; window.__capsWas = JSON.stringify(cd); window.STATE.contactData = Object.assign({}, cd, { name: 'Zeta Data', capabilities: Object.assign({}, cd.capabilities, { searchOrganizations: { offered: false, credits: null } }) }); window.fdMore(); window.fdMore(); return true; });
+  const zco = await html();
+  step('R-321: a provider that cannot look companies up by name gets no Look up button, and the form says to paste the website', !/onclick="fdCoLookup\(\)"/.test(zco) && /Zeta Data does not look companies up by name/.test(zco), (zco.match(/.{30}fd-f-co.{30}/) || [''])[0]);
+  await page.evaluate(() => { window.STATE.contactData = JSON.parse(window.__capsWas); window.fdMore(); window.fdMore(); });
   await page.evaluate(() => { document.getElementById('fd-f-co').value = 'acme'; window.fdCoLookup(); });
   await page.waitForTimeout(150);
   h = await html();

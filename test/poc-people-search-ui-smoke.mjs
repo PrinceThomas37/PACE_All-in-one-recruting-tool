@@ -85,7 +85,7 @@ function pocPayload(){
     others:f.others, found:f.slots.filter(s => s.contact_id).length,
     format:{ domain:fmt.domain, pattern:fmt.pattern, learned_from:fmt.learned_from, example:fmt.pattern ? poc.emailFor('Jane','Smith',fmt) : null },
     size_source:null, employee_count:null, size_checked_at:null,
-    suggestions: suggs.slice(), finder:{ apollo:true, credits:{ used:credits.used, limit:credits.limit }, is_admin:false }, can_edit:true };
+    suggestions: suggs.slice(), finder:{ apollo:true, contact_data: { provider:'apollo', label:'Apollo.io', name:'Apollo', connected:true, capabilities: { searchPeople:{offered:true,credits:0}, revealPerson:{offered:true,credits:1}, enrichOrganization:{offered:true,credits:1}, searchOrganizations:{offered:true,credits:1}, organizationJobPostings:{offered:true,credits:1}, checkPeopleSearch:{offered:true,credits:0} } }, credits:{ used:credits.used, limit:credits.limit }, is_admin:false }, can_edit:true };
 }
 function rawJobs(){
   return [{ id:job.id, company_id:'co1', company:{ name:company.name, industry:job.industry, website:company.website }, position:job.position,
@@ -129,7 +129,7 @@ async function api(route){
   }
   // Admin → Integrations
   if (m==='GET' && p==='/admin/integrations') {
-    return reply(route, { categories:[{ category:'Contact database', items:[{ id:'apollo', category:'Contact database', label:'Apollo.io',
+    return reply(route, { categories:[{ category:'Contact database', items:[{ id:'apollo', contact:true, category:'Contact database', label:'Apollo.io',
       description:'Finds the people to reach on a lead.', docs:'https://docs.apollo.io/docs/create-api-key', verifier:false, ai:false, has_test:true,
       fields:[{ key:'api_key', label:'API key', configured:true, hint:'••••••9f8e', value:null, secret:true, from_env:false }], configured:true }] }] });
   }

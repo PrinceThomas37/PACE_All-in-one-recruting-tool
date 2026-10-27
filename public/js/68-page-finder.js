@@ -73,7 +73,7 @@
 
   // ── data ──────────────────────────────────────────────────────────────────
   function loadAccess(then){
-    apiGet('/finder/access').then(function(r){ F.access=r||{enabled:false}; F.accessFor=STATE.user&&STATE.user.id; bgPaint(); if(then) then(); })
+    apiGet('/finder/access').then(function(r){ F.access=r||{enabled:false}; cdSet(r&&r.contact_data); F.accessFor=STATE.user&&STATE.user.id; bgPaint(); if(then) then(); })
       .catch(function(e){ showToast('Could not load: '+e.message,'error'); });
   }
   function loadCards(){
@@ -189,7 +189,7 @@
       var have={}; keep.forEach(function(p){ have[p.id]=true; });
       var added=fresh.filter(function(p){ return !have[p.id]; });
       a.people=keep.concat(added);
-      if(!added.length) a.err = fresh.length ? 'Nobody new with those titles — the people already shown are the ones Apollo has.' : 'Nobody with those titles at this company. Try other titles — or add someone by hand below.';
+      if(!added.length) a.err = fresh.length ? 'Nobody new with those titles — the people already shown are the ones '+cdn()+' has.' : 'Nobody with those titles at this company. Try other titles — or add someone by hand below.';
       paintAccept();
     }).catch(function(e){ a.finding=false; a.err=e.message; paintAccept(); });
   };
@@ -353,7 +353,7 @@
         ? '<div class="fd-row"><input id="fd-titleq" class="inp fd-grow" placeholder="Job titles, e.g. HR Manager, Plant Manager (blank = the usual suspects)" value="'+esc(a.titleQ)+'" onkeydown="if(event.key===\'Enter\'){fdFindPeople()}">'+
           '<button class="btn btn-sm btn-primary" '+(a.finding?'disabled':'')+' onclick="fdFindPeople()">'+(a.finding?'Looking…':'Find people')+'</button></div>'+
           '<div class="fd-hint">Finding people is free. An email costs 1 credit, and only a verified address is kept.</div>'
-        : '<div class="ld-box is-info" role="status">'+(!apolloOn?'Apollo is not connected here, so people cannot be looked up for you. ':'This company\'s website is not known, so people cannot be looked up for it. ')+'Add the contact by hand below — a name, a job title and an email.</div>')+
+        : '<div class="ld-box is-info" role="status">'+(!apolloOn?cdnCap()+' is not connected here, so people cannot be looked up for you. Ask an admin to connect a contact database. ':'This company\'s website is not known, so people cannot be looked up for it. ')+'Add the contact by hand below — a name, a job title and an email.</div>')+
       rows+manualRows+
       '<details class="fd-manual"'+((a.mdraft||!canFind)?' open':'')+'><summary>Add someone by hand</summary>'+
         '<div class="fd-grid"><input id="fd-m-first" class="inp" placeholder="First name" value="'+esc(md.first||'')+'"><input id="fd-m-last" class="inp" placeholder="Last name" value="'+esc(md.last||'')+'">'+
@@ -384,7 +384,7 @@
   // The form's state. Titles are a list (ticked from the picked industries' suggestions, or typed); companies are the
   // ones the person chose by name, each with where it is, so the chip can say "Acme Corp · Austin, TX".
   var MAX_TITLES = 40, MAX_COMPANIES = 30, MAX_SECTORS = 8;
-  // Where a new search looks by default: Apollo, unless the organisation has no Apollo but does have a free job-source key.
+  // Where a new search looks by default: the contact database, unless the organisation has none but does have a free job-source key.
   function defaultSource(){ var a=F.access||{}; var ap=a.apollo&&a.apollo.connected, js=a.jobsource&&a.jobsource.connected; return (!ap&&js)?'free':'apollo'; }
   function blankForm(){ return { id:null, name:'', source:defaultSource(), sectors:[], titles:[], places:[], locations:'', sizes:[], posted_days:14, keywords:'', companies:[] }; }
   function blankCo(){ return { q:'', busy:false, list:null, note:'' }; }
@@ -594,7 +594,7 @@
     apiDelete('/finder/searches/'+id).then(function(){ showToast('Search deleted','info'); loadSearches(); }).catch(function(e){ showToast(e.message,'error'); });
   };
 
-  var SOURCE_LABEL = { apollo:'Apollo', free:'Free job sources', both:'Apollo + free job sources' };
+  var SOURCE_LABEL = { get apollo(){ return cdnCap(); }, free:'Free job sources', get both(){ return cdnCap()+' + free job sources'; } };   // 'apollo' is the stored token for "the contact database" (R-321)
   function coLine(c){ return [[c.city,c.state].filter(Boolean).join(', '), c.domain, c.employees?('about '+c.employees+' people'):''].filter(Boolean).join(' · '); }
   function renderIndustries(f){
     var picked=f.sectors.map(function(id){ var s=sectorById(id); return s?'<span class="fd-chip">'+esc(s.label)+' <button type="button" class="fd-x" aria-label="Remove '+esc(s.label)+'" onclick="fdDropSector(\''+esc(id)+'\')">×</button></span>':''; }).join('');
@@ -634,7 +634,7 @@
     return '<div class="fd-label">Preferred companies <span class="fd-hint">(only these are searched)</span></div>'+
       (chips?'<div class="fd-pills">'+chips+'</div>':'')+
       '<div class="fd-row"><input id="fd-f-co" class="inp fd-grow" placeholder="A company name, or paste its website" value="'+esc(F.co.q)+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fdCoLookup();}">'+
-      '<button type="button" class="btn btn-outline btn-sm" '+(F.co.busy?'disabled':'')+' onclick="fdCoLookup()" title="Asks Apollo for the real companies with that name and where they are (1 Apollo credit when it finds some). A website like acme.com is added directly, free.">'+(F.co.busy?'Looking…':'Look up')+'</button></div>'+
+      (cdCan('searchOrganizations')?'<button type="button" class="btn btn-outline btn-sm" '+(F.co.busy?'disabled':'')+' onclick="fdCoLookup()" title="Asks '+esc(cdn())+' for the real companies with that name and where they are (1 credit when it finds some). A website like acme.com is added directly, free.">'+(F.co.busy?'Looking…':'Look up')+'</button>':'<span class="fd-hint">'+esc(cdnCap())+' does not look companies up by name — paste the company\'s website.</span>')+'</div>'+
       (F.co.note?'<div class="ld-box is-info" role="status">'+esc(F.co.note)+'</div>':'')+list;
   }
 
@@ -643,18 +643,18 @@
     // The longer words are tooltips: the screen keeps the three plain names.
     function opt(v,label,tip){ return '<label class="fd-use" title="'+esc(tip)+'"><input type="radio" name="fd-src" class="fd-src-box" value="'+v+'" '+(src===v?'checked':'')+' onclick="fdPickSource(\''+v+'\')"> <strong>'+label+'</strong></label>'; }
     var warn='';
-    if (src!=='free' && !ap) warn+='<div class="ld-box is-stop" role="status">Apollo is not connected, so Apollo cannot be searched. An admin adds its key in Admin → Integrations &amp; API Keys.</div>';
-    if (src!=='apollo' && !js.connected) warn+='<div class="ld-box is-stop" role="status">Free job sources are not connected yet. An admin adds the job-search key in Admin → Integrations &amp; API Keys, under Apollo.</div>';
-    var note = src==='apollo' ? '' : '<div class="fd-hint">Company size and industry words apply to Apollo only. Free job sources bring companies and jobs, not people.</div>';
+    if (src!=='free' && !ap) warn+='<div class="ld-box is-stop" role="status">'+esc(cdnCap())+' is not connected, so it cannot be searched. An admin connects a contact database in Admin → Integrations &amp; API Keys.</div>';
+    if (src!=='apollo' && !js.connected) warn+='<div class="ld-box is-stop" role="status">Free job sources are not connected yet. An admin adds the job-search key in Admin → Integrations &amp; API Keys, beside the contact database.</div>';
+    var note = src==='apollo' ? '' : '<div class="fd-hint">Company size and industry words apply to '+esc(cdn())+' only. Free job sources bring companies and jobs, not people.</div>';
     return '<div class="fd-label">Search with</div><div class="fd-row">'+
-      opt('apollo','Apollo','The company database — uses your Apollo credits')+
-      opt('free','Free job sources','Searches job sites by title — no Apollo credits')+
-      opt('both','Both','Apollo plus the free sources, each company once')+'</div>'+warn+note;
+      opt('apollo',cdnCap(),'The company database — uses your credits')+
+      opt('free','Free job sources','Searches job sites by title — no credits')+
+      opt('both','Both',cdnCap()+' plus the free sources, each company once')+'</div>'+warn+note;
   }
   // What pressing Find costs, said where the button is (it used to be a paragraph under the title).
   function costLine(f){
     var js=(F.access&&F.access.jobsource)||{}, src=f.source||'apollo', bits=[];
-    if (src!=='free') bits.push('1 Apollo credit');
+    if (src!=='free') bits.push('1 '+cdOr('')+(cdOr('')?' ':'')+'credit');
     if (src!=='apollo') bits.push('up to '+(js.per_run||3)+' job-source requests');
     return 'Uses '+bits.join(' + ')+'.';
   }
@@ -700,7 +700,7 @@
   }
   function summaryOf(s){
     var n=(s.companies&&s.companies.length)||(s.domains||[]).length;
-    var bits=[(s.titles||[]).slice(0,4).join(', ')+((s.titles||[]).length>4?'…':''), (s.locations||[]).join(', '), 'posted '+postedText(s.posted_days), n?('only '+plural(n,'chosen company','chosen companies')):'', 'looks in: '+(SOURCE_LABEL[s.source||'apollo']||'Apollo')];
+    var bits=[(s.titles||[]).slice(0,4).join(', ')+((s.titles||[]).length>4?'…':''), (s.locations||[]).join(', '), 'posted '+postedText(s.posted_days), n?('only '+plural(n,'chosen company','chosen companies')):'', 'looks in: '+(SOURCE_LABEL[s.source||'apollo']||cdnCap())];
     return bits.filter(Boolean).join(' · ');
   }
   function renderSearches(){
@@ -736,8 +736,8 @@
       ? '<div class="fd-posts">'+(posts.length?posts.slice(0,8).map(function(p){
           return '<div>• '+(p.url?'<a href="'+esc(p.url)+'" target="_blank" rel="noopener">'+esc(p.title)+'</a>':esc(p.title))+
             '<span class="fd-hint"> '+esc([[p.city,p.state].filter(Boolean).join(', '), p.age_days!=null?p.age_days+'d ago':'', p.source].filter(Boolean).join(' · '))+'</span></div>';
-        }).join(''):'<span class="fd-hint">Apollo lists no open jobs for this company right now.</span>')+'</div>'
-      : '<button class="btn btn-sm btn-outline" onclick="fdPostings(\''+c.id+'\',this)">See their open jobs · 1 credit</button>';
+        }).join(''):'<span class="fd-hint">'+esc(cdnCap())+' lists no open jobs for this company right now.</span>')+'</div>'
+      : (cdCan('organizationJobPostings') ? '<button class="btn btn-sm btn-outline" onclick="fdPostings(\''+c.id+'\',this)">See their open jobs · 1 credit</button>' : '<span class="fd-hint">'+esc(cdnCap())+' does not list a company\'s open jobs.</span>');
     return '<div class="card fd-card'+(blocked?' is-blocked':'')+'">'+
       '<div class="fd-row fd-between"><div class="fd-grow">'+
         '<div class="fs-15 fd-strong">'+esc(c.company_name)+'</div>'+
@@ -1020,7 +1020,7 @@
       ((an.x.lead&&an.x.lead.more_people)||[]).forEach(function(p){ have[p.person_id]=true; });
       var added=fresh.filter(function(p){ return !have[p.id]; });
       an.people=keep.concat(added);
-      if(!added.length) an.err=fresh.length?'Nobody new with those titles — the people already shown are the ones Apollo has.':'Nobody with those titles at this company. Try other titles — or add someone by hand below.';
+      if(!added.length) an.err=fresh.length?'Nobody new with those titles — the people already shown are the ones '+cdn()+' has.':'Nobody with those titles at this company. Try other titles — or add someone by hand below.';
       STATE.modal=renderAnotherModal(); render();
     }).catch(function(e){ an.finding=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
   };
@@ -1114,7 +1114,7 @@
         '<div class="fd-row"><input id="fd-an-titleq" class="inp fd-grow" placeholder="Job titles, e.g. HR Manager, Plant Manager (blank = the usual suspects)" value="'+esc(an.titleQ)+'" onkeydown="if(event.key===\'Enter\'){fdAnFind()}">'+
         '<button class="btn btn-sm btn-primary" '+(an.finding?'disabled':'')+' onclick="fdAnFind()">'+(an.finding?'Looking…':'Find people')+'</button></div>'+
         '<div class="fd-hint">Finding people is free. An email costs 1 credit, and only a verified address is kept.</div>'+found
-      : '<div class="fd-hint" style="margin-top:12px">'+(!apolloOn?'Apollo is not connected here, so more people cannot be looked up. ':'This company\'s website is not known, so more people cannot be looked up. ')+'Add someone by hand below.</div>';
+      : '<div class="fd-hint" style="margin-top:12px">'+(!apolloOn?cdnCap()+' is not connected here, so more people cannot be looked up. Ask an admin to connect a contact database. ':'This company\'s website is not known, so more people cannot be looked up. ')+'Add someone by hand below.</div>';
     var from='';
     if (an.writeNow){
       if (an.mailboxes===null) from='<div class="fd-hint">Loading your email IDs…</div>';
@@ -1168,7 +1168,7 @@
     return '<div class="fd-row fd-between"><div class="fd-grow">'+statusBar+'</div><input id="fd-hq" class="inp" placeholder="Search by company name" value="'+esc(F.histQ)+'" oninput="fdHistQ(this.value)"></div>'+searchBar+list+foot;
   }
 
-  // ── admin: who may use it, and Apollo's reach ────────────────────────────
+  // ── admin: who may use it, and the contact database's reach ────────────────────────────
   window.fdAdminSave = function(id){
     var on=document.getElementById('fd-on-'+id), n=document.getElementById('fd-n-'+id);
     apiPut('/finder/admin/users/'+id, { enabled:!!(on&&on.checked), daily:(n&&String(n.value).trim()!=='')?Number(n.value):null }).then(function(){
@@ -1177,7 +1177,7 @@
   };
   window.fdDiagnose = function(){
     if (F.diagBusy) return;
-    if (!confirm('This tests Apollo with three tiny searches and uses about 2 of your credits. Go ahead?')) return;
+    if (!confirm('This tests '+cdn()+' with three tiny searches and uses about 2 of your credits. Go ahead?')) return;
     F.diagBusy=true; F.diag=null; paint();
     apiGet('/finder/diagnose').then(function(r){ F.diagBusy=false; F.diag=r; if(r&&r.credits&&F.access) F.access.credits={ used:r.credits.used, limit:r.credits.limit }; paint(); })
       .catch(function(e){ F.diagBusy=false; F.diag={ checks:[{ ok:false, text:e.message }] }; paint(); });
@@ -1192,15 +1192,15 @@
         '<button class="btn btn-sm btn-primary" onclick="fdAdminSave(\''+u.id+'\')">Save</button></div></div>';
     }).join('');
     var js=acc.jobsource||{}, jsOn=!!js.connected;
-    // The key itself lives under Admin → Integrations & API Keys, beside Apollo's (owner, 8 Oct) — here only whether it is there.
+    // The key itself lives under Admin → Integrations & API Keys, beside the contact database's (owner, 8 Oct) — here only whether it is there.
     var jsCard='<div class="card fd-form"><div class="fs-14 fd-strong">Free job sources (JSearch)</div>'+
-      '<div class="fs-12_5">'+(jsOn?'<span class="c-green">✓ Connected.</span>':'<span class="c-red">Not connected.</span> People cannot search by job title without Apollo until a key is saved.')+
+      '<div class="fs-12_5">'+(jsOn?'<span class="c-green">✓ Connected.</span>':'<span class="c-red">Not connected.</span> People cannot search by job title without a contact database until a key is saved.')+
       ' Today: '+esc(String(js.used||0))+' of '+esc(String(js.limit||0))+' requests used by your organisation. The daily numbers are under Admin → Settings → Lead Finder.</div>'+
       '<div class="fd-row"><button class="btn btn-sm btn-outline" onclick="openIntegrationsModal()">'+(jsOn?'Manage the key':'Add the key')+' in Integrations &amp; API Keys</button></div></div>';
-    return jsCard+'<div class="card fd-form"><div class="fs-14 fd-strong">Apollo</div>'+
-      '<div class="fs-12_5 c-text2">'+(acc.apollo&&acc.apollo.connected?'An Apollo key is saved.':'<span class="c-red">Apollo is not connected.</span> Add its key in Admin → Integrations &amp; API Keys.')+
+    return jsCard+'<div class="card fd-form"><div class="fs-14 fd-strong">'+esc(cdnCap())+'</div>'+
+      '<div class="fs-12_5 c-text2">'+(acc.apollo&&acc.apollo.connected?'A key is saved for '+esc(cdn())+'.':'<span class="c-red">No contact database is connected.</span> An admin adds one in Admin → Integrations &amp; API Keys.')+
       ' Today: '+esc(String(acc.credits?acc.credits.used:0))+' of '+esc(String(acc.credits?acc.credits.limit:0))+' credits used by your organisation. The daily limits and the wait time are under Admin → Settings → Lead Finder.</div>'+
-      '<div class="fd-row"><button class="btn btn-sm btn-outline" '+(F.diagBusy?'disabled':'')+' onclick="fdDiagnose()">'+(F.diagBusy?'Checking…':'Check what my Apollo key can do (about 2 credits)')+'</button></div>'+diag+'</div>'+
+      '<div class="fd-row"><button class="btn btn-sm btn-outline" '+(F.diagBusy?'disabled':'')+' onclick="fdDiagnose()">'+(F.diagBusy?'Checking…':'Check what my key can do (about 2 credits)')+'</button></div>'+diag+'</div>'+
       '<div class="fs-14 fd-strong fd-pad">Who may use Find Leads</div>'+
       '<div class="fd-hint">Admins always can. Everyone else needs to be switched on here. Leave “cards/day” empty to use the organisation\'s number'+(a?' ('+a.default_daily+')':'')+'.</div>'+users;
   }
@@ -1208,7 +1208,7 @@
   // ── the page ─────────────────────────────────────────────────────────────
   // The day's meters, in one quiet line where the long sentence used to be (the stat strip is gone — owner, 8 Oct: too much on screen).
   function meters(acc){
-    var bits=['Apollo '+(acc.credits?acc.credits.used:0)+'/'+(acc.credits?acc.credits.limit:0),'emails '+(acc.reveals?acc.reveals.used:0)+'/'+(acc.reveals?acc.reveals.limit:0)];
+    var bits=[cdOr('credits')+' '+(acc.credits?acc.credits.used:0)+'/'+(acc.credits?acc.credits.limit:0),'emails '+(acc.reveals?acc.reveals.used:0)+'/'+(acc.reveals?acc.reveals.limit:0)];
     if (acc.jobsource&&acc.jobsource.connected) bits.push('job sources '+(acc.jobsource.used||0)+'/'+(acc.jobsource.limit||0));
     return '<span class="fs-12 c-ink3" title="What your organisation has used today, out of its daily limits">Today: '+esc(bits.join(' · '))+'</span>';
   }

@@ -75,9 +75,9 @@ function pocCheck(r) {
   // migration 054: a person picked from the title search may sit outside the four slots
   if (!['hr1', 'hr2', 'mgr1', 'mgr2', 'other'].includes(r.slot_key)) return 'slot_key';
   if (!r.first_name || r.first_name.length > 100) return 'first_name';
-  if (!['apollo', 'website', 'posting'].includes(r.source)) return 'source';
+  if (!/^[a-z][a-z0-9_]{1,39}$/.test(r.source || '')) return 'source';   // migration 068: a provider's id (apollo, website, posting, …)
   if (r.email_confidence != null && !['confirmed', 'likely'].includes(r.email_confidence)) return 'email_confidence';
-  if (r.email_source != null && !['apollo', 'format'].includes(r.email_source)) return 'email_source';
+  if (r.email_source != null && !/^[a-z][a-z0-9_]{1,39}$/.test(r.email_source)) return 'email_source';   // migration 068
   if (!['suggested', 'accepted', 'rejected'].includes(r.status)) return 'status';
   if ((r.email == null) !== (r.email_confidence == null)) return 'poc_suggestions_email_has_confidence';
   if ((r.status === 'suggested') !== (r.decided_at == null)) return 'poc_suggestions_decided_has_time';
@@ -646,6 +646,46 @@ try {
   step('the admin sees today\'s Apollo use and the limit (0 – 10,000)', us.status === 200 && us.body.used === meter() && us.body.limit === meter() && us.body.max === 10000 && us.body.min === 0, JSON.stringify(us.body));
   step('…nobody else does (403)', us403.status === 403);
 
+
+  // ── R-321 (D-0175): ANOTHER contact database — its own key, its own name, its own provenance; nothing Apollo-shaped left in the route ──
+  // The harness router above is handed a fake Apollo (ctx.apollo). This one is given NOTHING: it must find the organisation's chosen
+  // provider in the registry, read THAT provider's key, call THAT provider's adapter, name it in its sentences and record it as the source.
+  const cdata = require('../services/contact-data.js'), integ = require('../config/integrations.js');
+  const zetaCalls = [];
+  integ.INTEGRATIONS.push({ id: 'zeta', category: 'Contact database', label: 'Zeta Data', description: 'x', contact: true, fields: [{ key: 'api_key', label: 'API key' }], test: null });
+  integ.BY_ID.set('zeta', integ.INTEGRATIONS[integ.INTEGRATIONS.length - 1]);
+  cdata.register({
+    id: 'zeta', label: 'Zeta Data', name: 'Zeta',
+    adapter: {
+      async searchPeople(a) { zetaCalls.push(['search', a.key, a.domains, a.titles]); return { ok: true, status: 200, total: 5, people: [{ id: 'zeta-1', first_name: 'Zoe', last_name: '', last_name_masked: true, last_name_hint: 'Qu***n', title: 'Office Manager', has_email: true }] }; },
+      async revealPerson(a) { zetaCalls.push(['reveal', a.key, a.id]); return { ok: true, status: 200, first_name: 'Zoe', last_name: 'Quinn', title: 'Office Manager', email: 'zoe.quinn@lakeviewlaw.com', email_verified: true, email_status: 'verified' }; },
+    },
+    capabilities: { searchPeople: { offered: true, credits: 0 }, revealPerson: { offered: true, credits: 1 } },
+  });
+  tables.app_settings.push({ key: `int_contact_active__org_${ORG}`, value: 'zeta' }, { key: `int_zeta_api_key__org_${ORG}`, value: 'zeta-key' });
+  const app2 = express(); app2.use(express.json());
+  app2.use(require('../routes/poc.js')({ supabase, auth, hasRole, canTouchJob, orgIdFor: (req) => req.orgId, logActivity }));       // NO ctx.apollo
+  const server2 = http.createServer(app2);
+  const PORT2 = await new Promise(r => server2.listen(0, '127.0.0.1', () => r(server2.address().port)));
+  const call2 = async (method, path, user, body) => { const r = await fetch(`http://127.0.0.1:${PORT2}${path}`, { method, headers: { 'content-type': 'application/json', 'x-user': user }, body: body ? JSON.stringify(body) : undefined }); let json = null; try { json = await r.json(); } catch (_) {} return { status: r.status, body: json, text: JSON.stringify(json) }; };
+  const apolloBefore = apolloCalls.search.length + apolloCalls.reveal.length;
+  const zs = await call2('GET', '/jobs/j11/poc', 'bd1');
+  step('R-321: the page is told which contact database the organisation uses, whether it is connected, and what it can do', zs.status === 200 && zs.body.finder.contact_data.provider === 'zeta' && zs.body.finder.contact_data.name === 'Zeta' && zs.body.finder.contact_data.connected === true && zs.body.finder.contact_data.capabilities.revealPerson.offered === true && zs.body.finder.contact_data.capabilities.searchOrganizations.offered === false && zs.body.finder.apollo === true, JSON.stringify(zs.body.finder && zs.body.finder.contact_data));
+  const zp = await call2('POST', '/jobs/j11/poc/people', 'bd1', { title: '' });
+  step('R-321: a title search goes to the ORGANISATION\'S provider with THAT provider\'s key — Apollo is not asked', zp.status === 200 && zetaCalls.some(c => c[0] === 'search' && c[1] === 'zeta-key' && JSON.stringify(c[2]) === '["lakeviewlaw.com"]') && apolloCalls.search.length + apolloCalls.reveal.length === apolloBefore, JSON.stringify(zetaCalls[0]));
+  step('R-321: the sentence names the provider the organisation chose, not a vendor written into the code', /Zeta knows at Lakeview Law/.test(zp.body.message) && !/Apollo/.test(zp.body.message), zp.body.message);
+  await settings.setSettings(supabase, { poc_apollo_daily_credits: meter() + 5 });
+  const zu = await call2('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'zeta-1' });
+  const zrow = tables.poc_suggestions.find(x => x.source_ref === 'zeta-1');
+  step('R-321: an uncovered person is looked up through the chosen provider (its key), and the suggestion records THAT provider as its source', zu.status === 200 && zetaCalls.some(c => c[0] === 'reveal' && c[1] === 'zeta-key' && c[2] === 'zeta-1') && zrow && zrow.source === 'zeta' && zrow.email_source === 'zeta' && zrow.email_confidence === 'confirmed' && /with an email Zeta verified/.test(zu.body.message || zu.text), (zu.body && zu.body.message) + ' | ' + JSON.stringify(zrow));
+  const zk = await call2('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'zeta-1' });
+  step('R-321: asking again costs no second lookup at the provider (the same person is refused as already suggested)', zk.status === 409 && zetaCalls.filter(c => c[0] === 'reveal').length === 1, zk.status + ' ' + (zk.body && zk.body.error));
+  // a provider that does not offer a verb answers in words, never a crash
+  const noOrg = await cdata.resolve(supabase, ORG);
+  const nr = await noOrg.adapter.enrichOrganization({ key: 'k', domain: 'x.com' });
+  step('R-321: a verb the provider does not offer says so in plain words (never undefined, never a crash)', noOrg.id === 'zeta' && nr.ok === false && /Zeta does not offer that/.test(nr.error), JSON.stringify(nr));
+  tables.app_settings = tables.app_settings.filter(x => !/^int_contact_active__org_|^int_zeta_/.test(x.key));
+  server2.close();
   step('no write broke migration 052\'s own rules', dbRefused.length === 0, dbRefused.join(', '));
 } catch (e) {
   step('the run reached its end', false, String(e && e.stack || e).slice(0, 300));

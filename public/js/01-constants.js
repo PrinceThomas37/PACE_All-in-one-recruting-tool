@@ -73,3 +73,14 @@ function uname(id,users){var u=(users||[]).find(function(x){return x.id===id});r
 
 // Stage → CSS class, e.g. "Out of Office" → "st-Out_of_Office".
 function stageClass(s){return"st-"+String(s||"").replace(/ /g,"_")}
+
+// ── The organisation's contact database (R-321, D-0175) ──────────────────────────────────────────────────────────────────────────────
+// What the server last said about it: { provider, label, name, connected, capabilities } — set by the screens that fetch it
+// (`cdSet`). The NAME is the provider the organisation chose, never a vendor written into a screen; until the server has said, it is
+// the plain words. `cdCan(verb)` is "may the screen offer this?": a provider that does not offer a verb does not get the button.
+// Unknown (nothing fetched yet) = yes — the server answers in words if it cannot.
+function cdSet(c){ if(c && typeof c==='object') STATE.contactData=c; }
+function cdn(){ var c=STATE.contactData; return (c&&c.name)||'the contact database'; }
+function cdnCap(){ var n=cdn(); return n.charAt(0).toUpperCase()+n.slice(1); }
+function cdCan(verb){ var c=STATE.contactData; if(!c||!c.capabilities||!c.capabilities[verb]) return true; return !!c.capabilities[verb].offered; }
+function cdOr(plain){ var c=STATE.contactData; return (c&&c.name)||plain; }   // the provider's own name when the server has said it, else the plain word

@@ -851,5 +851,44 @@ st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== 'int_apo
 r = await call('/finder/diagnose', 'get', 'adm');
 step('with no key saved it says so and spends nothing', r.out.connected === false && /Admin → Integrations/.test(r.out.checks[0].text));
 
+// ═════ R-321 (D-0175): ANOTHER contact database — the organisation's own provider, key, query language and name ════════════════
+console.log('\nAnother contact database');
+{
+  const cdata = require('../services/contact-data.js'), integ = require('../config/integrations.js');
+  const zetaCalls = [];
+  integ.INTEGRATIONS.push({ id: 'zeta', category: 'Contact database', label: 'Zeta Data', description: 'x', contact: true, fields: [{ key: 'api_key', label: 'API key' }], test: null });
+  integ.BY_ID.set('zeta', integ.INTEGRATIONS[integ.INTEGRATIONS.length - 1]);
+  cdata.register({
+    id: 'zeta', label: 'Zeta Data', name: 'Zeta',
+    adapter: {
+      async searchOrganizations(a) { zetaCalls.push(a); return { ok: true, status: 200, organizations: [{ id: 'zz1', name: 'Zeta Found Machining', primary_domain: 'zetafound.example', website_url: 'http://zetafound.example', organization_headcount_twelve_month_growth: 0.1 }], total: 1 }; },
+    },
+    capabilities: { searchOrganizations: { offered: true, credits: 1 } },
+    // Zeta's own query language — not Apollo's field names:
+    criteria: { translate(c) { return c.kind === 'search' ? { zeta_titles: c.search.titles, zeta_where: c.search.locations } : c.kind === 'domains' ? { zeta_domains: c.domains } : { zeta_name: c.name }; } },
+  });
+  const st2 = makeStore();
+  st2.tables.app_settings = st2.tables.app_settings.filter((x) => !/^int_apollo_api_key/.test(x.key));
+  st2.tables.app_settings.push({ key: 'int_contact_active__org_o1', value: 'zeta' }, { key: 'int_zeta_api_key__org_o1', value: 'zeta-key' });
+  const logged2 = [];
+  const router2 = require('../routes/finder.js')({
+    supabase: st2.supabase, db: st2.db, auth: (_a, _b, n) => n(), hasRole, jsearch: makeJsearch(), now: () => NOW, noRerunGap: true,   // NO ctx.apollo
+    withOrg: (q) => q, logActivity: async (...a) => { logged2.push(a); }, getTimezoneFromLocation: () => 'CST',
+  });
+  leadCheck._resetForTests();
+  const call2 = callOn(router2);
+  await resetCredits(st2, 300);
+  let r2 = await call2('/finder/access', 'get', 'adm');
+  step('R-321: the Find Leads page is told the organisation uses Zeta, connected, and what it can and cannot do', r2.out.contact_data && r2.out.contact_data.provider === 'zeta' && r2.out.contact_data.name === 'Zeta' && r2.out.contact_data.connected === true && r2.out.contact_data.capabilities.searchOrganizations.offered === true && r2.out.contact_data.capabilities.organizationJobPostings.offered === false && r2.out.apollo.connected === true, JSON.stringify(r2.out.contact_data));
+  r2 = await call2('/finder/find', 'post', 'adm', Object.assign({}, SEARCH, { source: 'apollo' }));
+  const za = zetaCalls[0] || {};
+  step('R-321: a search asks THE ORGANISATION\'S provider, with its key, in ITS OWN query language — no Apollo field name leaves the layer', r2.code === 200 && za.key === 'zeta-key' && JSON.stringify(za.filters) === '{"zeta_titles":["CNC Machinist","Welder"],"zeta_where":["Texas"]}' && !/q_organization|organization_/.test(JSON.stringify(za)), JSON.stringify(za));
+  step('R-321: the answer comes back as cards for the companies Zeta found', r2.out.results && r2.out.results[0].cards >= 1 && /Zeta Found Machining/.test(JSON.stringify(st2.tables.finder_cards)), JSON.stringify(r2.out.results && r2.out.results[0]));
+  r2 = await call2('/finder/diagnose', 'get', 'adm');
+  step('R-321: the admin\'s key check says what Zeta cannot do, in words naming Zeta (never Apollo)', !/Apollo/.test(JSON.stringify(r2.out)) && /Zeta/.test(JSON.stringify(r2.out.checks)), JSON.stringify(r2.out.checks.map((c) => c.text)));
+  r2 = await call2('/finder/cards/:id/postings', 'post', 'adm', {}, { id: (st2.tables.finder_cards[0] || {}).id });
+  step('R-321: a provider that does not list open jobs says so in plain words (no crash, no credit spent)', r2.code === 502 && /Zeta does not offer that \(organizationJobPostings\)/.test(r2.out.error), r2.code + ' ' + JSON.stringify(r2.out));
+}
+
 console.log('\nSUMMARY: ' + results.filter(Boolean).length + '/' + results.length + ' passed');
 process.exit(results.every(Boolean) ? 0 : 1);

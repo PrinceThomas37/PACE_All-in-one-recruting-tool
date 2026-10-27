@@ -69,9 +69,10 @@ const PROVIDERS = [
     blocker: 'an Indeed employer account with API access, which Indeed grants selectively.',
   },
   {
-    id: 'apollo', label: 'Apollo', kind: 'api', built: false,
+    // `id` stays 'apollo' (what the page and its test key this row by); the words are the kind of tool, not a vendor (R-321, D-0175).
+    id: 'apollo', label: 'Contact database', kind: 'api', built: false,
     note: 'Contact search. Finds people and work emails — aimed at sales contacts rather than job seekers.',
-    blocker: 'a paid Apollo plan. Their free plan no longer includes API access \u2014 it starts at the Organization plan, 3 users minimum. Saving an Apollo key on the Integrations page does nothing today: nothing in PACE calls it.',
+    blocker: 'a contact-database plan with API access. A key saved on the Integrations page already powers the contact and lead finders (people and companies at a company you are selling to); it does not search for candidates, so it is not offered here.',
   },
   {
     id: 'linkedin', label: 'LinkedIn', kind: 'api', built: false,

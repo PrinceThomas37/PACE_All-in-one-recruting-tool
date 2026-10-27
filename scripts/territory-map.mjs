@@ -92,7 +92,7 @@ const TERRITORIES = [
           // Shared by the public apply page and the "re-write job description"
           // button, so the two cannot disagree about what is safe to publish.
           'services/jd-scrub.js',
-          'company-classifier.js', 'enrichment.js', 'services/poc-targets.js', 'services/people-apollo.js', 'skill-dictionaries.js',
+          'company-classifier.js', 'enrichment.js', 'services/poc-targets.js', 'services/people-apollo.js', 'services/contact-data.js', 'skill-dictionaries.js',
           'learned-skills.js', 'routes/ai.js', 'routes/ai-style.js', 'services/ai-style.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'services/next-action-dismissals.js'],

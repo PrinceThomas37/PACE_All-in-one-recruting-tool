@@ -4,6 +4,10 @@
 
 **Updated**: 2026-10-27 (Session 54). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
 
+## START HERE (27 Oct, Session 54, R-321) — contact data from any provider: steps 1–3 BUILT on the dev branch (D-0180), merging after the clean runs
+
+Owner said "R-321", answered the four plan questions (D-0180: build 1–3; second provider = slot only; "connect a contact database" prompt; read vendor terms before go-live). **Built:** `services/contact-data.js` (contract + registry + per-organisation choice; Apollo = `people-apollo.js` unchanged), routes/screens through it, a picker in Integrations. **NOT applied: migration 068** (needed before the first non-Apollo adapter; owner's go). **Next if asked:** R-329 (apply 068; the real second vendor needs the owner to name it + docs + a test key; data-level Apollo names), then **R-320 (P4: compose rebuilt around contact search) is now unblocked** — it builds on this layer. Plan doc: `docs/PLAN_R-321_contact_data_any_provider.md`.
+
 ## START HERE (27 Oct, Session 54, last) — the owner parked a security list for the NEW Render service (R-328)
 
 `docs/TODO_SECURITY_AT_NEW_RENDER_SERVICE.md` is the checklist (owner's steps A, my fixes B, checks C, decisions D). Read it when the owner says the new service is ready; first things then: the secret key (R-205), the new web address in the sign-in settings, a database backup. Nothing is built.
