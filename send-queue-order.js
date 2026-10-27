@@ -15,6 +15,8 @@
 // assigned lead cannot afford. A third-touch follow-up on a two-week-old thread
 // can wait a day; a lead a recruiter just picked up cannot.
 //
+// Within the follow-ups the order is fu1, then fu2, then fu3–fu5, then reminders (see BAND_ORDER).
+//
 // This only decides WHO GOES FIRST. It never drops an email, never changes the
 // daily cap, the send window, the pacing, or the domain spacing.
 
@@ -46,15 +48,23 @@ function isInitialOutreach(email) {
   return !email?.followup_type || email.followup_type === 'initial';
 }
 
-/**
- * Initial outreach first, follow-ups after; mailbox interleaving preserved
- * inside each band. Input order is otherwise kept, so the caller's ordering
- * (oldest first) still decides who goes first within a band.
- */
-function orderPendingForSend(emails) {
-  const initial = [], followups = [];
-  (emails || []).forEach((e) => (isInitialOutreach(e) ? initial : followups).push(e));
-  return interleaveByMailbox(initial).concat(interleaveByMailbox(followups));
+// The business order of a day's basket (owner, 27 Oct 2026): first outreach, then follow-up 1, then follow-up 2, then 3, 4, 5, then
+// reminders — REGARDLESS of when each email was generated. Anything with a type not listed here goes last, never dropped.
+const BAND_ORDER = ['initial', 'fu1', 'fu2', 'fu3', 'fu4', 'fu5', 'reminder'];
+function bandOf(email) {
+  if (isInitialOutreach(email)) return 0;
+  const i = BAND_ORDER.indexOf(String(email.followup_type).toLowerCase());
+  return i < 0 ? BAND_ORDER.length : i;
 }
 
-module.exports = { interleaveByMailbox, isInitialOutreach, orderPendingForSend };
+/**
+ * One band at a time in BAND_ORDER (first outreach, fu1, fu2 …); mailbox interleaving preserved inside each band. Input order is
+ * otherwise kept, so the caller's ordering (oldest first) still decides who goes first within a band.
+ */
+function orderPendingForSend(emails) {
+  const bands = BAND_ORDER.map(() => []).concat([[]]);
+  (emails || []).forEach((e) => bands[bandOf(e)].push(e));
+  return bands.reduce((out, b) => out.concat(interleaveByMailbox(b)), []);
+}
+
+module.exports = { interleaveByMailbox, isInitialOutreach, orderPendingForSend, bandOf, BAND_ORDER };

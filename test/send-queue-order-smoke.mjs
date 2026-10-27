@@ -24,7 +24,7 @@ const assignedLater = [mk('new-1', null), mk('new-2', null)];
 const arrivalOrder = [...morningBatch, ...assignedLater];
 
 const ordered = orderPendingForSend(arrivalOrder);
-step('the leads assigned later go out first', ids(ordered) === 'new-1,new-2,fu-1,fu-2,fu-3', ids(ordered));
+step('the leads assigned later go out first, then fu1 BEFORE fu2 although it arrived last', ids(ordered) === 'new-1,new-2,fu-3,fu-1,fu-2', ids(ordered));
 step('both follow-up types queue behind initial outreach',
   ordered.findIndex(e => e.id === 'new-2') < ordered.findIndex(e => e.id === 'fu-3'));
 
@@ -37,6 +37,21 @@ const realOrdered = orderPendingForSend(real);
 step('20 new leads all precede 36 follow-ups',
   realOrdered.slice(0, 20).every(e => e.followup_type === null)
   && realOrdered.slice(20).every(e => e.followup_type === 'fu2'));
+
+// ── the owner's basket (27 Oct 2026): first outreach, then fu1, then fu2 — whenever each was generated ─────────────────────
+const basket = [
+  ...Array.from({ length: 100 }, (_, i) => mk('fu2-' + i, 'fu2')),      // generated first
+  ...Array.from({ length: 100 }, (_, i) => mk('fu1-' + i, 'fu1')),
+  ...Array.from({ length: 100 }, (_, i) => mk('o-' + i, null)),          // generated last
+];
+const bk = orderPendingForSend(basket);
+step('300 in a basket: all 100 first emails, then all 100 fu1, then all 100 fu2',
+  bk.slice(0, 100).every(e => e.id.startsWith('o-')) && bk.slice(100, 200).every(e => e.id.startsWith('fu1-')) && bk.slice(200).every(e => e.id.startsWith('fu2-')));
+step('fu3, fu4, fu5 follow fu2, then reminders, then an unknown type — in that order and none dropped',
+  ids(orderPendingForSend([mk('x', 'weird'), mk('r', 'reminder'), mk('f5', 'fu5'), mk('f3', 'fu3'), mk('f4', 'fu4'), mk('f2', 'fu2'), mk('f1', 'fu1'), mk('o', null)])) === 'o,f1,f2,f3,f4,f5,r,x');
+step('the type is matched whatever its capitals', ids(orderPendingForSend([mk('b', 'FU2'), mk('a', 'Fu1')])) === 'a,b');
+step('mailboxes still alternate inside the fu1 band',
+  ids(orderPendingForSend([mk('a1', 'fu1', 'mb-a'), mk('a2', 'fu1', 'mb-a'), mk('b1', 'fu1', 'mb-b')])) === 'a1,b1,a2');
 
 // ── nothing is lost ──────────────────────────────────────────────────────────
 step('ordering neither drops nor duplicates an email',
