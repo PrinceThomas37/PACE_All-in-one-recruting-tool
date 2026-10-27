@@ -25,6 +25,11 @@ const rule = require('./lead-decision');
 const SECTORS = {
   it: { label: 'IT & software', titles: ['Software Engineer', 'Data Analyst', 'Systems Administrator', 'QA Engineer', 'Network Engineer', 'DevOps Engineer', 'Help Desk Technician', 'IT Support Specialist', 'Database Administrator', 'Cybersecurity Analyst', 'Business Analyst', 'Project Manager', 'Web Developer', 'Cloud Engineer'] },
   medical: { label: 'Medical & healthcare', titles: ['Registered Nurse', 'Medical Assistant', 'Medical Billing Specialist', 'Dental Hygienist', 'Physical Therapist', 'Patient Care Coordinator', 'Licensed Practical Nurse', 'Nurse Practitioner', 'Medical Receptionist', 'Radiology Technician', 'Phlebotomist', 'Medical Coder', 'Respiratory Therapist', 'Surgical Technologist'] },
+  // Hospitals (owner, 27 Oct 2026: "add hospital and healthcare … it is very hard to get that industry in particular"). Unlike the
+  // others this one is a real FILTER as well as a shortcut: `naics` are the industry codes Apollo is asked to match (NAICS 622 =
+  // hospitals — Apollo's Organization Search takes `organization_naics_codes`, matched by prefix, docs.apollo.io). A title search
+  // for "Registered Nurse" otherwise fills its pages with staffing firms and clinics, and every page costs a credit.
+  hospital: { label: 'Hospitals & health care', naics: ['622'], titles: ['Registered Nurse', 'Charge Nurse', 'Nurse Manager', 'ICU Nurse', 'Emergency Room Nurse', 'Respiratory Therapist', 'Surgical Technologist', 'Medical Laboratory Technologist', 'Radiologic Technologist', 'Patient Access Representative', 'Case Manager', 'Clinical Nurse Specialist', 'Pharmacy Technician', 'Occupational Therapist', 'Speech-Language Pathologist', 'Unit Secretary', 'Patient Care Technician', 'Certified Nursing Assistant', 'Health Information Technician', 'Sterile Processing Technician', 'Physician Assistant', 'Medical Technologist'] },
   manufacturing: { label: 'Manufacturing', titles: ['CNC Machinist', 'Production Supervisor', 'Quality Inspector', 'Maintenance Technician', 'Welder', 'Industrial Engineer', 'Machine Operator', 'Assembler', 'Production Manager', 'Quality Engineer', 'Plant Manager', 'Tool and Die Maker', 'Process Engineer', 'Manufacturing Engineer'] },
   construction: { label: 'Construction', titles: ['Project Manager', 'Site Superintendent', 'Estimator', 'Safety Coordinator', 'Project Engineer', 'Construction Manager', 'Foreman', 'Carpenter', 'Heavy Equipment Operator', 'Project Coordinator', 'Civil Inspector', 'Scheduler', 'Laborer'] },
   legal: { label: 'Legal', titles: ['Paralegal', 'Legal Assistant', 'Contracts Administrator', 'Legal Secretary', 'Compliance Specialist', 'Litigation Support', 'Associate Attorney', 'Legal Counsel', 'Court Clerk', 'Legal Nurse Consultant', 'Law Clerk', 'Contract Manager'] },
@@ -148,6 +153,18 @@ function normalizeSearch(input, caps) {
   };
 }
 
+/**
+ * The industry codes a search asks Apollo to match. Only when EVERY industry picked defines codes (hospitals today): picking
+ * Hospitals together with IT must not drop the IT companies, so one without codes means no code filter at all.
+ */
+function industryCodes(search) {
+  const ids = (search && search.sectors) || [];
+  if (!ids.length) return [];
+  const defs = ids.map((id) => SECTORS[id]);
+  if (!defs.every((d) => d && Array.isArray(d.naics) && d.naics.length)) return [];
+  return Array.from(new Set(defs.reduce((a, d) => a.concat(d.naics), [])));
+}
+
 /** Apollo's own filter names for a saved search (docs.apollo.io "Organization Search"). */
 function apolloFilters(search, now) {
   const s = search || {};
@@ -160,6 +177,8 @@ function apolloFilters(search, now) {
   if (ranges.length) f.organization_num_employees_ranges = ranges;
   if ((s.keywords || []).length) f.q_organization_keyword_tags = s.keywords;
   if ((s.domains || []).length) f.q_organization_domains_list = s.domains;
+  const codes = industryCodes(s);
+  if (codes.length) f.organization_naics_codes = codes;
   return f;
 }
 
@@ -535,7 +554,7 @@ function suggestMailbox(accounts, sentToday, defaultLimit) {
 }
 
 module.exports = {
-  SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS, SOURCES,
+  SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS, SOURCES, industryCodes,
   countryFor, datePostedFor, jsearchPlan, normalizeJob, titleMatches, jobsToOrgs, scoreFreeOrg, mergeSources, jsearchKey,
   normalizeSearch, normalizeCompanies, postedDays, apolloFilters, sizeRanges, sizeVerdict, applySizeChoice, websiteFrom, companyNameFilters, rankCompanySuggestions, normalizeOrg, isStaffingFirm, scoreOrg,
   normalizePostings, postingSignals, factsLines, sourceOf,

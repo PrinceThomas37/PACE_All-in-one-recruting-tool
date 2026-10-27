@@ -1364,3 +1364,6 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## 2026-10-27 (Session 54) — R-332 guard
 `test/settings-follow-company-smoke.mjs` scans source for `getSetting(x, 'key')` with no company (probe must see >30 readers; allow-list must stay real). It is a convention guard, backed by behavioural ones: `auto-pause-smoke`, and the company-cooldown steps in `lead-decision-smoke`.
+
+## 2026-10-27 (Session 54) — hospitals tests
+`lead-finder-smoke` (the codes are sent; not when an ordinary industry is mixed in; saved search keeps it) and `finder-page-smoke` (hint shows for hospitals alone only). The live-Apollo yield is unverified by design (a credit).

@@ -341,7 +341,7 @@ module.exports = (ctx) => {
         wait_days: await num('finder_wait_days', orgOf(req)), card_days: await num('finder_card_days', orgOf(req)),
         // what one lead may carry — this company's numbers (D-0124); the window shows them, the server enforces them
         limits: { jobs_per_lead: await num('finder_max_jobs_per_lead', orgOf(req)), contacts_per_lead: await num('finder_max_contacts_per_lead', orgOf(req)), places_per_search: await num('finder_max_places', orgOf(req)) },
-        sectors: Object.keys(finder.SECTORS).map((id) => ({ id, label: finder.SECTORS[id].label, titles: finder.SECTORS[id].titles })),
+        sectors: Object.keys(finder.SECTORS).map((id) => ({ id, label: finder.SECTORS[id].label, titles: finder.SECTORS[id].titles, filters: Array.isArray(finder.SECTORS[id].naics) && finder.SECTORS[id].naics.length > 0 })),
         sizes: finder.SIZE_BANDS.map((b) => ({ id: b.id, label: b.label })), posted: finder.POSTED_RANGE,
         goes_to: hasRole(req, 'bd', 'bd_lead') ? 'you' : 'pool',
       });

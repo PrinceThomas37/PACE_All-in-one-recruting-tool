@@ -600,8 +600,11 @@
     var picked=f.sectors.map(function(id){ var s=sectorById(id); return s?'<span class="fd-chip">'+esc(s.label)+' <button type="button" class="fd-x" aria-label="Remove '+esc(s.label)+'" onclick="fdDropSector(\''+esc(id)+'\')">×</button></span>':''; }).join('');
     var left=sectorList().filter(function(s){ return f.sectors.indexOf(s.id)<0; }).sort(function(a,b){ return a.label.localeCompare(b.label); })
       .map(function(s){ return '<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>'; }).join('');
+    // An industry that is a real filter (hospitals) says so: the search then returns only that kind of company, not every company posting those titles.
+    var strict=f.sectors.length>0&&f.sectors.every(function(id){ var s=sectorById(id); return s&&s.filters; });
     return '<div class="fd-label">Industries</div>'+
       (picked?'<div class="fd-pills">'+picked+'</div>':'')+
+      (strict&&(f.source||'apollo')==='apollo'?'<div class="fd-hint">Searches only companies classed in '+(f.sectors.length>1?'these industries':'this industry')+', not every company posting these titles.</div>':'')+
       (f.sectors.length<MAX_SECTORS?'<select id="fd-f-sector-add" class="sel fd-wide" onchange="fdAddSector(this.value)"><option value="">+ Add an industry…</option>'+left+'</select>':'<div class="fd-hint">That is the most industries at once ('+MAX_SECTORS+').</div>');
   }
   function renderTitles(f){

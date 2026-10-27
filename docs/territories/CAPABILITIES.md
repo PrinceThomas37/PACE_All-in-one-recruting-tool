@@ -817,3 +817,5 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 
 
 - **Paused-mailbox notice (27 Oct 2026, D-0183):** when PACE pauses a mailbox for bouncing too much, the Today screen says which mailbox, when and why — to its owner, managers above and the admin — and the send progress line names the mailbox. Actions to be defined.
+
+- **Hospitals & health care in Find Leads (27 Oct 2026, D-0185):** pick it as an industry and the search returns hospital companies (a real industry-code filter), with 22 hospital job titles to tick.
