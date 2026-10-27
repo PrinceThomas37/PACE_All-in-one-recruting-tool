@@ -399,9 +399,6 @@ body.ui-kit .nav-item.active .nav-icon{opacity:1;color:#1A1033}
 /* counts: an ink box (collapsed: a sun-yellow square on the icon) */
 body.ui-kit .nav-badge{border-radius:0;background:var(--sun);box-shadow:0 0 0 1.5px #000}
 body.ui-kit #sidebar.pinned .nav-badge{border-radius:0;background:#1A1033;color:#FFF6E6;box-shadow:none}
-@media (hover:hover) and (pointer:fine){
-  body.ui-kit #sidebar:hover .nav-badge{border-radius:0;background:#1A1033;color:#FFF6E6;box-shadow:none}
-}
 /* the sign-out row and the person stay quiet */
 body.ui-kit .sb-footer{border-top:2px solid var(--glass-brd)}
 body.ui-kit .sb-footer .nav-item{box-shadow:none;background:transparent;border-color:transparent}
@@ -429,10 +426,8 @@ body.ui-kit .u-role{color:var(--on-canvas)}
 /* ══ THE SIDEBAR AS DESIGNED (owner's sidebar mockup, R-122) ══════════════ */
 /* The logo tile: a taller slice of sky with the big pixel PACE. */
 body.ui-kit .sb-brand{height:84px;min-height:84px;padding-left:14px}
-/* R-319: the chevron mark stays beside the word when the menu is open (it used to give way to the word), and stands alone when folded. */
-body.ui-kit .rail-mark{display:flex;align-items:center;justify-content:center;color:#FFD84A;width:34px;height:34px}
-body.ui-kit .rail-mark svg{display:block}
-body.ui-kit .rail-word{font-size:24px;margin-left:10px}
+body.ui-kit #sidebar.pinned .rail-mark{display:none}
+body.ui-kit .rail-word{font-size:24px;margin-left:2px}
 /* collapsed: the P key sits centred in the 60px rail */
 body.ui-kit .sb-brand .rail-mark{margin-left:0}
 
@@ -473,7 +468,6 @@ body.ui-kit .me-setup svg{width:12px;height:12px}
 body.ui-kit .me-setup .nav-txt{margin-left:0}
 body.ui-kit #sidebar.pinned .me-setup{display:flex}
 body.ui-kit #sidebar.setup-open .me-setup{background:var(--sec-set)}
-@media (hover:hover) and (pointer:fine){ body.ui-kit #sidebar:hover .me-setup{display:flex} }
 /* the sign-out row stays a quiet line under the card */
 body.ui-kit .sb-footer>.nav-item{height:30px;margin:0}
 
@@ -536,7 +530,6 @@ body.ui-kit .rail-word.typing .tw-caret{display:inline-block}
 .sb-cloud svg{display:block}
 :root[data-sky="night"] .sb-cloud{color:#3A2F6B}
 body.ui-kit #sidebar:not(.pinned) .sb-cloud{display:none}
-@media (hover:hover) and (pointer:fine){ body.ui-kit #sidebar:hover .sb-cloud{display:block} }
 
 /* PHONE: the sky stacks — burger + title + icons, then the date line, then the
    counts and the New button (the concept's phone header). */
@@ -1325,33 +1318,36 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .sq-mbtab{font:inherit;font-size:12.5px;padding:7px 10px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
 .sq-mbtab.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}
 
-/* ══ THE SIDEBAR ARROW AND A SMOOTHER OPEN / FOLD (R-319, owner's 28 notes) ═══════════════════════════════════════════════
-   One square pixel button in the logo's slice of sky: folded it sits at the top of the 60px rail under nothing else; open it sits
-   bottom-right (the cloud keeps the top). It points LEFT while the menu is open ("fold it") and RIGHT while it is folded ("open it") —
-   decided by the sidebar's own `pinned` class, so the markup never changes and an idle repaint writes nothing.
-   Smoother: the sidebar's width, the page's left edge and the labels all move on ONE curve and ONE time, and only those properties
-   (never `transition: all`); people who asked their device for less motion get none. Below 861px the menu is the phone drawer (mobile.css). */
-body.ui-kit .sb-brand .rail-arrow{display:none}
+/* ══ THE SIDEBAR'S FOLD / OPEN BUTTON (R-319, owner's 28 notes + 27 Oct video) ════════════════════════════════════════════
+   The menu opens and folds ONLY when this button is pressed — a pointer resting on the rail does nothing. The button has its own
+   thin row under the logo (so it never sits on the logo or moves): centred on the 60px rail when folded, at the right edge when open.
+   Two arrows are always drawn; the sidebar's own `pinned` class decides which one shows (left = fold it, right = open it), so there is
+   no flipping and the markup never changes. Smooth: width, the page's left edge and the labels move on ONE curve and ONE time, only
+   those properties (never `transition: all`); people who asked their device for less motion get none. Below 861px the menu is the
+   phone drawer (mobile.css) and this row is not drawn. */
+body.ui-kit .rail-toggle{display:none}
 @media (min-width:861px){
-  body.ui-kit .sb-brand .rail-arrow{
-    display:flex;position:absolute;z-index:2;right:18px;top:3px;width:24px;height:24px;margin:0;padding:0;
-    align-items:center;justify-content:center;border-radius:0;border:2px solid #000;
-    background:#FFF6E6;color:#1A1033;box-shadow:2px 2px 0 #000;cursor:pointer;
+  body.ui-kit .rail-toggle{display:flex;align-items:center;justify-content:center;height:40px;flex:none;padding:0 12px;border-bottom:2px solid var(--glass-brd)}
+  body.ui-kit #sidebar.pinned .rail-toggle{justify-content:flex-end}
+  body.ui-kit .rail-toggle .rail-arrow{
+    display:flex;align-items:center;justify-content:center;width:30px;height:28px;margin:0;padding:0;border-radius:0;
+    border:2px solid #000;background:#FFF6E6;color:#1A1033;box-shadow:2px 2px 0 #000;cursor:pointer;
   }
-  body.ui-kit #sidebar.pinned .sb-brand .rail-arrow{right:8px;top:auto;bottom:8px;width:28px;height:28px}
-  body.ui-kit .rail-arrow svg{display:block;width:10px;height:14px;transition:transform .22s cubic-bezier(.2,.7,.2,1)}
-  body.ui-kit #sidebar:not(.pinned) .rail-arrow svg{transform:scaleX(-1)}
-  body.ui-kit .sb-brand .rail-arrow:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  body.ui-kit .rail-toggle .rail-arrow svg{display:block}
+  body.ui-kit .rail-toggle .ra-open{display:none}
+  body.ui-kit #sidebar:not(.pinned) .rail-toggle .ra-fold{display:none}
+  body.ui-kit #sidebar:not(.pinned) .rail-toggle .ra-open{display:flex}
+  body.ui-kit #sidebar.pinned .rail-toggle .ra-fold{display:flex}
+  body.ui-kit .rail-toggle .rail-arrow:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   body.ui-kit #sidebar ~ #main{transition:margin-left .22s cubic-bezier(.2,.7,.2,1)}
 }
-@media (min-width:861px) and (hover:hover) and (pointer:fine){
-  /* hovering a folded rail floats it open: the arrow moves to where the open menu keeps it, and still says "open it" until pinned */
-  body.ui-kit #sidebar:not(.pinned):hover .sb-brand .rail-arrow{right:8px;top:auto;bottom:8px;width:28px;height:28px}
+@media (hover:hover) and (pointer:fine){
+  body.ui-kit .rail-toggle .rail-arrow:hover{background:#E4D6FF}
 }
 @media (hover:none),(pointer:coarse){
-  body.ui-kit .rail-arrow:active{background:#E4D6FF}
+  body.ui-kit .rail-toggle .rail-arrow:active{background:#E4D6FF}
 }
 body.ui-kit #sidebar{transition:width .22s cubic-bezier(.2,.7,.2,1),box-shadow .22s cubic-bezier(.2,.7,.2,1)}
 @media (prefers-reduced-motion:reduce){
-  body.ui-kit #sidebar,body.ui-kit #sidebar ~ #main,body.ui-kit .rail-arrow svg{transition:none}
+  body.ui-kit #sidebar,body.ui-kit #sidebar ~ #main{transition:none}
 }

@@ -3,7 +3,7 @@
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
     "files": 701,
-    "lines": 144543,
+    "lines": 144531,
     "territories": 9,
     "unclaimedFiles": 55
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 84,
-      "lines": 39282,
+      "lines": 39270,
       "largest": [
         {
           "f": "public/js/47-page-mailbox.js",
@@ -37,7 +37,7 @@
         },
         {
           "f": "public/retro.css",
-          "n": 1358
+          "n": 1354
         },
         {
           "f": "public/js/68-page-finder.js",
@@ -123,7 +123,7 @@
         "services/storage-orphans.js"
       ],
       "files": 80,
-      "lines": 4540,
+      "lines": 4539,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -285,7 +285,7 @@
           "n": 1069
         }
       ],
-      "lastTouched": "2026-10-21",
+      "lastTouched": "2026-10-27",
       "openIn": 0,
       "openOut": 1
     },
@@ -417,7 +417,7 @@
         ".github/"
       ],
       "files": 322,
-      "lines": 53080,
+      "lines": 53081,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",

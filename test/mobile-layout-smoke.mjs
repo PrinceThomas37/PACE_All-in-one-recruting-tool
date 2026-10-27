@@ -333,21 +333,27 @@ try {
   await dpage.waitForTimeout(250);
   const arrowOpen = await dpage.evaluate(() => {
     const a = document.querySelector('#sidebar .rail-arrow'), r = a && a.getBoundingClientRect(), sb = document.getElementById('sidebar').getBoundingClientRect();
-    return { there: !!a, visible: !!a && getComputedStyle(a).display !== 'none' && r.width > 10, inside: !!a && r.left >= sb.left && r.right <= sb.right + 1, expanded: a && a.getAttribute('aria-expanded'), flipped: a && getComputedStyle(a.querySelector('svg')).transform !== 'none',
-      mark: !!document.querySelector('#sidebar .rail-mark svg') && getComputedStyle(document.querySelector('#sidebar .rail-mark')).display !== 'none', word: getComputedStyle(document.querySelector('#sidebar .rail-word')).opacity };
+    return { there: !!a, visible: !!a && getComputedStyle(a).display !== 'none' && r.width > 10, inside: !!a && r.left >= sb.left && r.right <= sb.right + 1, expanded: a && a.getAttribute('aria-expanded'), shown: a && ((v) => v && getComputedStyle(v).display !== 'none' ? 'fold' : 'open')(a.querySelector('.ra-fold')),
+      chevrons: !!document.querySelector('#sidebar .sb-brand svg:not(.sb-cloud svg)') && [...document.querySelectorAll('#sidebar .sb-brand > .rail-mark svg')].length > 0, word: getComputedStyle(document.querySelector('#sidebar .rail-word')).opacity };
   });
-  step('R-319: a full-size, open sidebar shows an arrow inside it, pointing left ("fold it"), with aria-expanded true', arrowOpen.there && arrowOpen.visible && arrowOpen.inside && arrowOpen.expanded === 'true' && !arrowOpen.flipped, JSON.stringify(arrowOpen));
-  step('R-319: the logo is the chevron mark AND the word, side by side, when open', arrowOpen.mark && arrowOpen.word === '1', JSON.stringify(arrowOpen));
+  step('R-319: a full-size, open sidebar shows an arrow inside it, pointing left ("fold it"), with aria-expanded true', arrowOpen.there && arrowOpen.visible && arrowOpen.inside && arrowOpen.expanded === 'true' && arrowOpen.shown === 'fold', JSON.stringify(arrowOpen));
+  step('R-319: the logo is the word alone when open — no chevron mark beside PACE (owner, 27 Oct)', !arrowOpen.chevrons && arrowOpen.word === '1', JSON.stringify(arrowOpen));
   await dpage.click('#sidebar .rail-arrow');
-  await dpage.mouse.move(900, 500);   // off the rail: a pointer resting on a folded rail floats it open (hover), which is not what is measured here
   await dpage.waitForTimeout(450);
   const arrowFolded = await dpage.evaluate(() => {
     const sb = document.getElementById('sidebar'), a = sb.querySelector('.rail-arrow');
     return { pinned: sb.classList.contains('pinned'), width: Math.round(sb.getBoundingClientRect().width), mainLeft: Math.round(document.getElementById('main').getBoundingClientRect().left),
-      expanded: a.getAttribute('aria-expanded'), flipped: getComputedStyle(a.querySelector('svg')).transform !== 'none', mem: localStorage.getItem('pace-rail-arrow'), typing: document.querySelector('#sidebar .rail-word').classList.contains('typing') && false };
+      expanded: a.getAttribute('aria-expanded'), shown: getComputedStyle(a.querySelector('.ra-open')).display !== 'none' && getComputedStyle(a.querySelector('.ra-fold')).display === 'none' ? 'open' : 'fold', mem: localStorage.getItem('pace-rail-arrow'), typing: document.querySelector('#sidebar .rail-word').classList.contains('typing') && false };
   });
   step('R-319: pressing the arrow folds the sidebar to the icon rail and the page moves over with it (no gap, no cover)', !arrowFolded.pinned && arrowFolded.width < 80 && Math.abs(arrowFolded.mainLeft - arrowFolded.width) <= 1, JSON.stringify(arrowFolded));
-  step('R-319: …the arrow now points right ("open it"), says aria-expanded false, and the choice is remembered', arrowFolded.flipped && arrowFolded.expanded === 'false' && arrowFolded.mem === 'closed', JSON.stringify(arrowFolded));
+  step('R-319: …the arrow now points right ("open it"), says aria-expanded false, and the choice is remembered', arrowFolded.shown === 'open' && arrowFolded.expanded === 'false' && arrowFolded.mem === 'closed', JSON.stringify(arrowFolded));
+  // OWNER, 27 Oct (video): "the push and pull is automatic … it should be manual". A pointer resting on the folded rail must NOT open it.
+  await dpage.hover('#sidebar .nav-item'); await dpage.waitForTimeout(400);
+  const restWidth = await dpage.evaluate(() => ({ w: Math.round(document.getElementById('sidebar').getBoundingClientRect().width), label: getComputedStyle(document.querySelector('.sb-lbl')).opacity, pinned: document.getElementById('sidebar').classList.contains('pinned') }));
+  step('R-319: a pointer resting on the folded rail does NOT open it — only the button does', restWidth.w < 80 && restWidth.label === '0' && !restWidth.pinned, JSON.stringify(restWidth));
+  const btnPos = await dpage.evaluate(() => { const r = document.querySelector('#sidebar .rail-arrow').getBoundingClientRect(), sb = document.getElementById('sidebar').getBoundingClientRect(), br = document.querySelector('#sidebar .sb-brand').getBoundingClientRect(); return { centred: Math.abs((r.left + r.right) / 2 - (sb.left + sb.right) / 2) <= 2, belowLogo: r.top >= br.bottom - 1 }; });
+  step('R-319: folded, the button is centred on the rail and sits under the logo (not on it)', btnPos.centred && btnPos.belowLogo, JSON.stringify(btnPos));
+  await dpage.mouse.move(900, 500);
   // The render engine writes nothing when the sidebar's html is unchanged, so a repaint cannot show what the NEXT visit will draw — build the html itself.
   const nextVisit = await dpage.evaluate(() => ({ closed: !/<div id="sidebar" class="[^"]*pinned/.test(renderSidebar()), expanded: /aria-expanded="false"/.test(renderSidebar()) }));
   step('R-319: the next visit draws it folded on a full-size screen (the person asked for it) — by the arrow\'s own memory, not the old logo one', nextVisit.closed && nextVisit.expanded, JSON.stringify(nextVisit));
@@ -392,22 +398,17 @@ try {
   step('…with the content still offset by it', deskState.mainLeft >= 55);
   step('the hamburger is not shown on a desktop', deskState.burgerHidden);
   step('the scrim is not in the way on a desktop', deskState.scrimHidden);
-  step('folded, the rail stays collapsed until hovered', deskState.label === '0');
+  step('folded, the rail stays collapsed', deskState.label === '0');
 
-  // The hover rail must still work where there IS a pointer — that is the half
-  // of the fix it would be easy to break by simply deleting the hover rules.
+  // OWNER, 27 Oct: opening is MANUAL. A mouse resting on the rail must not open it, at any width.
   await dpage.hover('#sidebar .nav-item');
-  await dpage.waitForTimeout(320);
+  await dpage.waitForTimeout(400);
   const hovered = await dpage.evaluate(() => ({
     width: Math.round(document.getElementById('sidebar').getBoundingClientRect().width),
     label: getComputedStyle(document.querySelector('.sb-lbl')).opacity,
-    txtInside: (() => {
-      const t = document.querySelector('.nav-txt');
-      return t.getBoundingClientRect().right <= document.getElementById('sidebar').getBoundingClientRect().right + 1;
-    })(),
   }));
-  step('a real pointer still expands the rail on hover', hovered.width > 180, hovered.width + 'px');
-  step('…and its labels fit inside it', hovered.label === '1' && hovered.txtInside);
+  step('a pointer resting on the folded rail does not expand it', hovered.width < 80 && hovered.label === '0', hovered.width + 'px');
+  await dpage.mouse.move(900, 500);
 
   // ── 6. A TOUCH DEVICE AT DESKTOP WIDTH ───────────────────────────────────
   // The rail expands on hover, gated on (hover:hover) — correct, because width
