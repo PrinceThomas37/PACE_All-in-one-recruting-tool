@@ -7138,3 +7138,6 @@ Verified live the same evening (owner: "do the real hospital search"; 1 credit, 
 
 ### 27 Oct 2026 (Session 54, evening close) — #374 / #375 / #376 merged
 Context rewritten; see the START HERE evening section. Every merge ran the full suite from a clean worktree on Node 22 and 26.11.1 (317/317 each for #375 and #376).
+
+### 27 Oct 2026, 17:16 UTC (Session 54, status check) — the owner asked for the context and what is left
+Checked live: the #375 fix is running (a mailbox at 9.8% bounces not paused at the owner's 10% limit; at the old 5% it would have been). Roadmap row R-334 added for hospitals (DONE). Notes PR #377 carries this; merged as docs-only (no code changed since the clean 317/317 runs on Node 22 and 26 for #376).

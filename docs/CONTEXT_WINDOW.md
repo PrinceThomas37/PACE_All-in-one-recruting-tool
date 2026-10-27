@@ -2,11 +2,11 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-27 (Session 54, evening). **Highest ids:** decision **D-0185** · contract C-0038 · roadmap **R-333** (next `R-334`) · next migration **069** (none added since 068).
+**Updated**: 2026-10-27 (Session 54, evening). **Highest ids:** decision **D-0185** · contract C-0038 · roadmap **R-334** (next `R-335`) · next migration **069** (none added since 068).
 
 ## START HERE (27 Oct, Session 54, evening) — #374, #375, #376 MERGED; clean-worktree 317/317 on Node 22 and Node 26.11.1 for each
 
-**Merged after the last note below:** #374 (sidebar manual only + send order fu1→fu2, D-0181/0182) · #375 (paused-mailbox notice D-0183; the company's own bounce limit; **every admin setting read for the company, D-0184/R-332**) · #376 (**Hospitals & health care industry in Find Leads, a real NAICS-622 filter, D-0185; verified on a live search: 74 hospital companies in Texas, none staffing**). **Not confirmed from this session:** that Render deployed these cleanly (the Render tools lost their workspace selection — ask the owner before choosing one).
+**Merged after the last note below:** #374 (sidebar manual only + send order fu1→fu2, D-0181/0182) · #375 (paused-mailbox notice D-0183; the company's own bounce limit; **every admin setting read for the company, D-0184/R-332**) · #376 (**Hospitals & health care industry in Find Leads, a real NAICS-622 filter, D-0185; verified on a live search: 74 hospital companies in Texas, none staffing**). **Deploy: live, shown by the data (28 Oct check, not by Render's own log — the Render tools lost their workspace selection, ask the owner before choosing one):** at 17:16 UTC sam.wilson@ had 6 bounces of 61 sent (9.8%) and spencer.brown@ 4 of 59 (6.8%) and NEITHER was paused — the old shared-5% code would have paused both; none of the five once-paused mailboxes is paused. Martin Smith's queue drained in the intended order: 0 first emails pending (309 sent), 5 fu1 and 34 fu2 left (264 fu2 / 54 fu1 sent).
 
 **Open for the owner:** the sidebar button (kept; "remove that arrow" read as the `››` mark only) · pause-limit sensitivity (2 bounces on ~30 sends paused five mailboxes; the owner set 10%, now honoured) · actions for the paused-mailbox notice (R-331) · which health categories count (clinics 621, nursing homes 623) and the other industries' codes (R-333) · plus the earlier list (R-328 at the new Render service, R-306, speed verdict R-324/R-303, R-325/R-326, R-329 second vendor, R-320).
 **Mine, offered:** `wf_tick_batch` belongs with the operator's settings (R-332 leftover); `POST /admin/mailbox/:id/resume` has no same-company check (rampart).
