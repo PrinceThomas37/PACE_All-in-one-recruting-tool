@@ -271,7 +271,7 @@ router.get('/insights/outreach/people', auth, async (req, res) => {
     // candidates: who they are (name, email, the job they were written about is not needed here)
     const candIds = [...new Set(L.candSends.map((s) => s.candidate_id).filter(Boolean))], candidates = {};
     for (const part of L.chunks(candIds)) {
-      (await fetchAll(() => L.org(supabase.from('candidates').select('id,first_name,last_name,email,current_title')).in('id', part).order('id'))).forEach((c) => {
+      (await fetchAll(() => { let cq = supabase.from('candidates').select('id,first_name,last_name,email,current_title').in('id', part); if (req.orgId) cq = cq.eq('org_id', req.orgId); return cq.order('id'); })).forEach((c) => {
         candidates[c.id] = { name: [c.first_name, c.last_name].filter(Boolean).join(' '), email: c.email || '', position: c.current_title || '' };
       });
     }
