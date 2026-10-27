@@ -1358,3 +1358,6 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## 2026-10-27 (Session 54) — paused-mailbox guards (D-0183)
 `mailbox-alerts-smoke` (57) covers the `auto_paused` state, the stored/forgotten reason, who is told (owner, manager above, admin; never another company or a colleague) and that the ask route refuses a paused mailbox; `mailbox-alerts-ui-smoke` (21) covers the card (named, dated, "paused", no Reconnect/Remind). Mutation: the paused branch switched off → 3 steps fail.
+
+## 2026-10-27 (Session 54) — auto-pause limits guard
+`test/auto-pause-smoke.mjs` uses the REAL settings reader against rows shaped like the live database (`sys_<key>@<org>`), so a call that forgets the organisation fails it.

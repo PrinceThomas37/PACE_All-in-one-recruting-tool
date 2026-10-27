@@ -1251,3 +1251,6 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## 2026-10-27 (Session 54) — paused-mailbox notice (D-0183)
 `routes/mailbox-alerts.js` `GET /mailboxes/alerts` now also returns `auto_paused` alerts (reads `user_emails.auto_paused_at` best-effort + the `mailbox_pause_note_<id>` app_settings row); `POST …/:mailboxId/ask` refuses a paused mailbox (403). `index.js`: `setMailboxAutoPaused(id, paused, reason, note)` stores/forgets the note via `services/mailbox-alerts.js`; the send-progress line is `heldByPauseLine`. Open: `POST /admin/mailbox/:id/resume` has no same-company check (rampart).
+
+## 2026-10-27 (Session 54) — bounce limits are the mailbox's ORGANISATION's (`services/auto-pause.js`)
+Any `getSetting(supabase, key)` with no organisation returns the deployment default and silently ignores what an admin saved for their company. Fixed for `bounce_rate_threshold_pct` / `bounce_min_sample`; the same pattern is still in other places (R-332).

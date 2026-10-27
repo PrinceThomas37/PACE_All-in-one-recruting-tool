@@ -79,6 +79,7 @@ const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mai
 const { createSmtpDelivery } = require('./services/smtp-delivery');
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
+const autoPause = require('./services/auto-pause');   // the bounce limits an organisation chose, and the pause decision
 const mailboxAlertsRules = require('./services/mailbox-alerts');   // what a paused mailbox's notice says (D-0183)
 const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
@@ -2959,11 +2960,9 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
   await supabase.from('app_settings').upsert({ key: bkey, value: String(bouncesToday), updated_at: new Date() }, { onConflict: 'key' });
   const { data: sRow } = await supabase.from('email_send_log').select('emails_sent').eq('user_email_id', userEmailId).eq('send_date', today()).maybeSingle();
   const sentToday = sRow?.emails_sent || 0;
-  const [thresholdPct, minSample] = await Promise.all([
-    settingsConfig.getSetting(supabase, 'bounce_rate_threshold_pct'),
-    settingsConfig.getSetting(supabase, 'bounce_min_sample'),
-  ]);
-  if (sentToday >= minSample && bouncesToday / sentToday > thresholdPct / 100) {
+  // The limits are THIS mailbox's organisation's own (Admin → Settings saves them per organisation) — services/auto-pause.js.
+  const { thresholdPct, minSample } = await autoPause.limitsFor(supabase, settingsConfig, userEmailId);
+  if (autoPause.shouldPause({ bouncesToday, sentToday, thresholdPct, minSample })) {
     await setMailboxAutoPaused(userEmailId, true, `bounce rate ${(bouncesToday / sentToday * 100).toFixed(1)}% (${bouncesToday}/${sentToday} today)`, mailboxAlertsRules.pauseNote(bouncesToday, sentToday));
   }
 }
