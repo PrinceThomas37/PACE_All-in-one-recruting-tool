@@ -42,7 +42,8 @@ const poc = require('../services/poc-targets');
 const own = require('../services/ownership');
 const integrations = require('../config/integrations');
 const settings = require('../config/settings');
-const peopleApollo = require('../services/people-apollo');
+const peopleApollo = require('../services/people-apollo');   // only for callRecord (provider-neutral: never carries a key)
+const cdata = require('../services/contact-data');
 const { addLeadContact, lookupExisting, findDuplicate, duplicateResponse, duplicatePayload } = require('../services/lead-contacts');
 const { createDb } = require('../models');
 
@@ -54,8 +55,15 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, canTouchJob, orgIdFor, logActivity } = ctx;
   const db = ctx.db || createDb(supabase);
-  // Tests hand in a fake Apollo; production calls the real one.
-  const apollo = ctx.apollo || peopleApollo;
+  // The organisation's contact database (R-321, D-0175): which provider, its key, its adapter. Resolved once per request and kept on
+  // the request (`req._cd`); tests still hand in a fake adapter as ctx.apollo. Provenance written to the database is the provider's id
+  // (for Apollo that is still 'apollo', so nothing stored changes). `pn(req)` is the provider's own short name for a sentence.
+  async function useContact(req) {
+    if (!req._cd) req._cd = await cdata.resolve(supabase, orgIdFor(req), ctx.apollo);
+    return req._cd;
+  }
+  const pn = (req) => (req && req._cd && req._cd.name) || 'The contact database';
+  const pid = (req) => { if (!(req && req._cd)) throw new Error('contact provider not resolved for this request'); return req._cd.id; };
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
   async function scopeFor(req) {
@@ -161,11 +169,11 @@ module.exports = (ctx) => {
     const domains = [poc.normalizeDomain(co.website), cx.format.domain].filter((d, i, a) => d && a.indexOf(d) === i);
     if (!domains.length) return { status: 'no_domain', sentence: 'Company size: PACE needs the company’s website to look it up.' };
     if (budget.used >= budget.limit) {
-      return { status: 'no_credits', sentence: `Company size not looked up — today's ${budget.limit} Apollo credit${budget.limit === 1 ? ' is' : 's are'} used up.` };
+      return { status: 'no_credits', sentence: `Company size not looked up — today's ${budget.limit} ${pn(req)} credit${budget.limit === 1 ? ' is' : 's are'} used up.` };
     }
     let hit = null, failed = null;
     for (const d of domains) {
-      const r = await apollo.enrichOrganization({ key, domain: d });
+      const r = await req._cd.adapter.enrichOrganization({ key, domain: d });
       await noteApollo('company_lookup', r);
       if (!r.ok) { failed = r; break; }
       if (r.found) {
@@ -179,24 +187,24 @@ module.exports = (ctx) => {
     const stamp = { size_checked_at: new Date(), updated_at: new Date() };
     if (!hit) {
       await db.forRequest(req).from('companies').update(stamp).eq('id', co.id);
-      return { status: 'not_found', sentence: `Apollo does not know ${domains[0]} — pick the company size yourself.` };
+      return { status: 'not_found', sentence: `${pn(req)} does not know ${domains[0]} — pick the company size yourself.` };
     }
     if (!poc.sameCompany(co.name, hit.name)) {
       await db.forRequest(req).from('companies').update(stamp).eq('id', co.id);
-      return { status: 'no_match', sentence: `Apollo’s record for ${hit.asked} is “${hit.name}”, not ${co.name}, so the size was left for you to pick.` };
+      return { status: 'no_match', sentence: `${pn(req)}’s record for ${hit.asked} is “${hit.name}”, not ${co.name}, so the size was left for you to pick.` };
     }
     const patch = Object.assign({}, stamp, { apollo_org_id: String(hit.id).slice(0, 100) });
     const band = poc.sizeBandFor(hit.employees);
     if (!band) {
       await db.forRequest(req).from('companies').update(patch).eq('id', co.id);
-      return { status: 'no_size', sentence: `Apollo knows ${co.name} but not how many people work there — pick the size yourself.` };
+      return { status: 'no_size', sentence: `${pn(req)} knows ${co.name} but not how many people work there — pick the size yourself.` };
     }
-    Object.assign(patch, { size_band: band, employee_count: hit.employees, size_source: 'apollo' });
+    Object.assign(patch, { size_band: band, employee_count: hit.employees, size_source: pid(req) });
     const { error } = await db.forRequest(req).from('companies').update(patch).eq('id', co.id);
     if (error) throw error;
     const label = (poc.SIZE_BANDS.find(b => b.id === band) || {}).label || band;
     return { status: 'set', band, employees: hit.employees,
-      sentence: `Company size from Apollo: about ${hit.employees.toLocaleString('en-US')} people (${label}).` };
+      sentence: `Company size from ${pn(req)}: about ${hit.employees.toLocaleString('en-US')} people (${label}).` };
   }
 
   // WHAT A CLICK CAN COST, STATED BEFORE IT IS PRESSED (owner, 2026-09-30, after
@@ -216,9 +224,11 @@ module.exports = (ctx) => {
   }
 
   async function finderState(req) {
-    const apolloOn = await integrations.isConfigured(supabase, 'apollo', orgIdFor(req));
+    const st = await cdata.statusFor(supabase, orgIdFor(req));
+    const apolloOn = st.connected;
     return {
-      apollo: apolloOn,
+      apollo: apolloOn,                  // the older name the screen read (kept, so nothing that reads it breaks); `contact_data` is the neutral one
+      contact_data: { provider: st.provider, label: st.label, name: st.name, connected: st.connected, capabilities: st.capabilities },
       credits: {
         used: apolloOn ? await creditsUsed(orgIdFor(req)) : 0,
         limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits', orgIdFor(req)),
@@ -278,14 +288,19 @@ module.exports = (ctx) => {
   // number of credit that can be used per day for all users"). The limit is
   // saved through System Settings' own validated write
   // (POST /admin/settings/numbers), so there is one place it lives.
-  router.get('/admin/apollo/usage', auth, async (req, res) => {
+  // Today's use of the contact database's credits and the ceiling (an admin's). Two names for one answer: the older Apollo-named path
+  // stays for anything that still calls it; `/admin/contact-data/usage` is the neutral one the screens now use (R-321).
+  const usage = async (req, res) => {
     try {
       if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
       const budget = await creditBudget(req);
       const def = settings.SETTINGS_SCHEMA.find(s => s.key === 'poc_apollo_daily_credits') || {};
-      res.json({ used: budget.used, limit: budget.limit, min: def.min, max: def.max, default: def.default });
+      const st = await cdata.statusFor(supabase, orgIdFor(req));
+      res.json({ used: budget.used, limit: budget.limit, min: def.min, max: def.max, default: def.default, provider: st.provider, label: st.label, name: st.name });
     } catch (err) { res.status(500).json({ error: err.message }); }
-  });
+  };
+  router.get('/admin/contact-data/usage', auth, usage);
+  router.get('/admin/apollo/usage', auth, usage);
 
   router.get('/jobs/:id/poc', auth, async (req, res) => {
     try {
@@ -319,7 +334,7 @@ module.exports = (ctx) => {
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can change it.' });
       if (!lead.company_id) return res.status(409).json({ error: 'This lead has no company to size.' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
+      const cdx = await useContact(req); const key = cdx.key;
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const budget = await creditBudget(req);
       const sz = await lookupSize(req, await leadContext(req, lead), key, budget, true);
@@ -331,8 +346,8 @@ module.exports = (ctx) => {
 
   function notConnected(req) {
     return hasRole(req, 'admin')
-      ? 'Apollo is not connected yet — add its key in Admin → Integrations.'
-      : 'Apollo is not connected yet — ask an admin to add its key in Admin → Integrations.';
+      ? `${pn(req)} is not connected yet — add its key in Admin → Integrations.`
+      : `${pn(req)} is not connected yet — ask an admin to add its key in Admin → Integrations.`;
   }
 
   // ── "Search contacts" / "Search contact" ────────────────────────────────
@@ -345,7 +360,7 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can look for people on it.' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
+      const cdx = await useContact(req); const key = cdx.key;
       if (!key) return res.status(409).json({ error: notConnected(req) });
       // One slot ("Search contact" on it) or every empty one ("Search contacts").
       const only = req.body && req.body.slot_key ? String(req.body.slot_key) : null;
@@ -384,7 +399,7 @@ module.exports = (ctx) => {
       }
 
       const titles = open.reduce((all, s) => all.concat(s.titles), []).filter((t, i, a) => a.indexOf(t) === i);
-      const search = await apollo.searchPeople({ key, domains, titles, perPage: 25 });
+      const search = await req._cd.adapter.searchPeople({ key, domains, titles, perPage: 25 });
       await noteApollo('people_search', search);
       if (!search.ok) return res.status(502).json({ error: noted(search.error) });
 
@@ -392,20 +407,20 @@ module.exports = (ctx) => {
       // Slots NOT being searched are skipped exactly like slots with somebody waiting.
       const skip = waitingSlots.concat(only ? cx.filled.slots.map(s => s.key).filter(k => k !== only) : []);
       const picks = poc.pickPeople(cx.filled.slots, search.people, {
-        ids: (prior || []).filter(p => p.source === 'apollo' && p.source_ref).map(p => p.source_ref),
+        ids: (prior || []).filter(p => p.source === pid(req) && p.source_ref).map(p => p.source_ref),
         names: onFile.map(c => [c.first_name, c.last_name].filter(Boolean).join(' ')),
       }, cx.targets.size, skip, cx.targets.firm);
       if (!picks.length) {
         return reply({ added: 0, message: noted(search.people.length
-          ? `Apollo knows people at ${(cx.company && cx.company.name) || domains[0]}, but nobody new in ${only ? 'that role' : 'the roles still open'}.`
-          : `Apollo has nobody at ${domains[0]} in ${only ? 'that role' : 'the roles still open'}.`) });
+          ? `${pn(req)} knows people at ${(cx.company && cx.company.name) || domains[0]}, but nobody new in ${only ? 'that role' : 'the roles still open'}.`
+          : `${pn(req)} has nobody at ${domains[0]} in ${only ? 'that role' : 'the roles still open'}.`) });
       }
 
       // A person already looked up for ANOTHER lead is never paid for twice.
       const pickIds = picks.map(x => String(x.person.id));
       const { data: seen } = await db.forRequest(req).from('poc_suggestions')
         .select('source_ref,first_name,last_name,title,email,email_confidence,email_source,linkedin_url')
-        .eq('source', 'apollo').in('source_ref', pickIds);
+        .eq('source', pid(req)).in('source_ref', pickIds);
       const looked = {};
       (seen || []).forEach(r => {
         if (!r.last_name) return;
@@ -438,7 +453,7 @@ module.exports = (ctx) => {
             // them for another day rather than store half a person.
             if (!p.last) { out.held_for_credits++; continue; }
           } else {
-            const r = await apollo.revealPerson({ key, id: person.id });
+            const r = await req._cd.adapter.revealPerson({ key, id: person.id });
             await noteApollo('person_lookup', r);
             if (r.ok) {
               budget.used++;
@@ -448,7 +463,7 @@ module.exports = (ctx) => {
               if (!p.email) {
                 // Only Apollo's "verified" is Confirmed. Its other statuses are
                 // guesses — dropped, and the company's own format used instead.
-                if (r.email && r.email_verified) { p.email = r.email; p.conf = 'confirmed'; p.esrc = 'apollo'; }
+                if (r.email && r.email_verified) { p.email = r.email; p.conf = 'confirmed'; p.esrc = pid(req); }
                 else if (p.last && cx.format.pattern) {
                   p.email = poc.emailFor(p.first, p.last, cx.format);
                   if (p.email) { p.conf = 'likely'; p.esrc = 'format'; }
@@ -482,7 +497,7 @@ module.exports = (ctx) => {
           first_name: String(p.first || '').slice(0, 100), last_name: p.last ? String(p.last).slice(0, 100) : null,
           title: p.title ? String(p.title).slice(0, 200) : null,
           email: null, email_confidence: null, email_source: null,
-          source: 'apollo', source_ref: p.ref.slice(0, 200),
+          source: pid(req), source_ref: p.ref.slice(0, 200),
           linkedin_url: p.linkedin ? String(p.linkedin).slice(0, 500) : null,
           status: 'suggested', created_by: req.user.id,
         };
@@ -514,9 +529,9 @@ module.exports = (ctx) => {
       if (out.opted_out) bits.push(`${out.opted_out} left out — asked not to be emailed.`);
       if (out.held_for_credits) bits.push(stopped
         ? `${out.held_for_credits} not looked up: ${stopped}`
-        : `${out.held_for_credits} more need an Apollo credit to see their full name, and today's ${limit} ${limit === 1 ? 'is' : 'are'} used up.`);
+        : `${out.held_for_credits} more need a ${pn(req)} credit to see their full name, and today's ${limit} ${limit === 1 ? 'is' : 'are'} used up.`);
       else if (stopped) bits.push(stopped);
-      if (out.failed) bits.push(`Apollo could not look up ${out.failed}.`);
+      if (out.failed) bits.push(`${pn(req)} could not look up ${out.failed}.`);
       return reply(Object.assign(out, { credits: { used: budget.used, limit: budget.limit }, message: bits.join(' ') }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -550,7 +565,7 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can search for people on it.' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
+      const cdx = await useContact(req); const key = cdx.key;
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const title = String((req.body && req.body.title) || '').trim().replace(/\s+/g, ' ');
       if (title.length > 100) return res.status(400).json({ error: 'That title is too long — 100 characters at most.' });
@@ -558,13 +573,13 @@ module.exports = (ctx) => {
       const domains = companyDomains(cx);
       if (!domains.length) return res.status(409).json({ error: 'PACE needs this company’s website, or one real email address there, to search by — add it to the company first.' });
 
-      const search = await apollo.searchPeople({ key, domains, titles: title ? [title] : [], perPage: 50 });
+      const search = await req._cd.adapter.searchPeople({ key, domains, titles: title ? [title] : [], perPage: 50 });
       await noteApollo('people_search_title', search);
       if (!search.ok) return res.status(502).json({ error: search.error });
 
       const refs = search.people.map(p => String(p.id));
       const { data: prior } = refs.length ? await db.forRequest(req).from('poc_suggestions')
-        .select('job_id,source_ref,status,last_name').eq('source', 'apollo').in('source_ref', refs) : { data: [] };
+        .select('job_id,source_ref,status,last_name').eq('source', pid(req)).in('source_ref', refs) : { data: [] };
       const here = {}, lookedUp = new Set();
       (prior || []).forEach(p => {
         if (p.job_id === lead.id) here[p.source_ref] = p.status;
@@ -590,8 +605,8 @@ module.exports = (ctx) => {
       const message = shown
         ? (title
           ? `${shown}${search.total && search.total > shown ? ' of ' + search.total : ''} ${shown === 1 ? 'person' : 'people'} at ${where} with a title like “${title}”.`
-          : `${shown}${search.total && search.total > shown ? ' of ' + search.total : ''} ${shown === 1 ? 'person' : 'people'} Apollo knows at ${where}${search.total && search.total > shown ? ' — type a title to narrow it' : ''}.`)
-        : (title ? `Apollo has nobody at ${where} with a title like “${title}”.` : `Apollo has nobody listed at ${where}.`);
+          : `${shown}${search.total && search.total > shown ? ' of ' + search.total : ''} ${shown === 1 ? 'person' : 'people'} ${pn(req)} knows at ${where}${search.total && search.total > shown ? ' — type a title to narrow it' : ''}.`)
+        : (title ? `${pn(req)} has nobody at ${where} with a title like “${title}”.` : `${pn(req)} has nobody listed at ${where}.`);
       const budget = await creditBudget(req);
       res.json({ title, people, total: search.total, message, credits: { used: budget.used, limit: budget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -602,13 +617,13 @@ module.exports = (ctx) => {
       const lead = await visibleLead(req, req.params.id);
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can uncover people for it.' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgIdFor(req));
+      const cdx = await useContact(req); const key = cdx.key;
       if (!key) return res.status(409).json({ error: notConnected(req) });
       const ref = String((req.body && req.body.ref) || '');
       if (!REF_RE.test(ref)) return res.status(400).json({ error: 'Pick somebody from the search first.' });
 
       const { data: mine } = await db.forRequest(req).from('poc_suggestions')
-        .select('status').eq('job_id', lead.id).eq('source', 'apollo').eq('source_ref', ref).maybeSingle();
+        .select('status').eq('job_id', lead.id).eq('source', pid(req)).eq('source_ref', ref).maybeSingle();
       if (mine) {
         return res.status(409).json({ error: mine.status === 'suggested' ? 'Already uncovered — they are waiting below for Accept or Not this person.'
           : mine.status === 'accepted' ? 'Already on this lead.' : 'You turned this person down for this lead earlier.' });
@@ -621,7 +636,7 @@ module.exports = (ctx) => {
       // Looked up before, for any lead in this company's account → free.
       const { data: seen } = await db.forRequest(req).from('poc_suggestions')
         .select('first_name,last_name,title,email,email_confidence,email_source,linkedin_url')
-        .eq('source', 'apollo').eq('source_ref', ref).limit(20);
+        .eq('source', pid(req)).eq('source_ref', ref).limit(20);
       const prev = (seen || []).filter(r => r.last_name).sort((a, b) => (b.email ? 1 : 0) - (a.email ? 1 : 0))[0] || null;
       const p = { first: '', last: '', title: '', linkedin: null, email: null, conf: null, esrc: null };
       let spent = false;
@@ -630,19 +645,19 @@ module.exports = (ctx) => {
         if (prev.email) Object.assign(p, { email: prev.email, conf: prev.email_confidence, esrc: prev.email_source });
       } else {
         if (budget.used >= budget.limit) {
-          return res.status(409).json({ error: `Today's ${budget.limit} Apollo credit${budget.limit === 1 ? ' is' : 's are'} used up. ` +
-            (hasRole(req, 'admin') ? 'You can raise the daily limit in Admin → Integrations → Apollo.' : 'An admin can raise the daily limit.') });
+          return res.status(409).json({ error: `Today's ${budget.limit} ${pn(req)} credit${budget.limit === 1 ? ' is' : 's are'} used up. ` +
+            (hasRole(req, 'admin') ? `You can raise the daily limit in Admin → Integrations → ${pn(req)}.` : 'An admin can raise the daily limit.') });
         }
-        const r = await apollo.revealPerson({ key, id: ref });
+        const r = await req._cd.adapter.revealPerson({ key, id: ref });
         await noteApollo('person_lookup', r);
-        if (!r.ok) return res.status(STOP_STATUSES.has(r.status) ? 502 : 404).json({ error: r.error || 'Apollo could not look this person up.' });
+        if (!r.ok) return res.status(STOP_STATUSES.has(r.status) ? 502 : 404).json({ error: r.error || `${pn(req)} could not look this person up.` });
         budget.used++; spent = true;
         await recordCredits(budget.orgId, budget.used);
         Object.assign(p, { first: r.first_name || '', last: r.last_name || '', title: r.title || '', linkedin: r.linkedin_url || null });
         // Only Apollo's "verified" is Confirmed; its other statuses are guesses.
-        if (r.email && r.email_verified) Object.assign(p, { email: r.email, conf: 'confirmed', esrc: 'apollo' });
+        if (r.email && r.email_verified) Object.assign(p, { email: r.email, conf: 'confirmed', esrc: pid(req) });
       }
-      if (!p.first) return res.status(404).json({ error: 'Apollo returned no name for this person.' });
+      if (!p.first) return res.status(404).json({ error: `${pn(req)} returned no name for this person.` });
       if (!p.email && p.last && cx.format.pattern) {
         p.email = poc.emailFor(p.first, p.last, cx.format);
         if (p.email) Object.assign(p, { conf: 'likely', esrc: 'format' });
@@ -652,7 +667,7 @@ module.exports = (ctx) => {
         job_id: lead.id, company_id: lead.company_id || null, slot_key: slotFor(cx, p.title),
         first_name: p.first.slice(0, 100), last_name: p.last ? p.last.slice(0, 100) : null,
         title: p.title ? p.title.slice(0, 200) : null, email: null, email_confidence: null, email_source: null,
-        source: 'apollo', source_ref: ref.slice(0, 200),
+        source: pid(req), source_ref: ref.slice(0, 200),
         linkedin_url: p.linkedin ? String(p.linkedin).slice(0, 500) : null,
         status: 'suggested', created_by: req.user.id,
       };
@@ -682,7 +697,7 @@ module.exports = (ctx) => {
       const { error } = await db.forRequest(req).from('poc_suggestions').insert(row);
       if (error && error.code !== '23505') throw error;
       const name = [p.first, p.last].filter(Boolean).join(' ');
-      const mail = row.email_confidence === 'confirmed' ? 'with an email Apollo verified'
+      const mail = row.email_confidence === 'confirmed' ? `with an email ${pn(req)} verified`
         : row.email_confidence === 'likely' ? 'with an email built from the company’s format (likely)' : 'with no email PACE can stand behind';
       return reply(`Uncovered ${name} ${mail}${spent ? ' — 1 credit' : ' — looked up before, no credit'}. Accept to add them to this lead.`);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -742,7 +757,7 @@ module.exports = (ctx) => {
       let contact = same || null;
       if (!contact) {
         try {
-          const how = s.source === 'apollo' ? 'Apollo' : s.source;
+          const how = (cdata.get(s.source) || {}).name || s.source;
           contact = await addLeadContact({
             db, req, logActivity, companyId: lead.company_id || null,
             fields: {

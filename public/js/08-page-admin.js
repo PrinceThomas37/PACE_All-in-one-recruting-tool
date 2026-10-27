@@ -118,6 +118,14 @@ window.openIntegrationsModal=function(){
     }
   }).catch(function(){});
 };
+// R-321: the contact-data provider the finders use is the organisation's choice (the one marked active, else the first on the list). The daily
+// limit and the free-job-source card belong beside it; a radio to choose appears only when there is more than one to choose between.
+function contactItems(){ var out=[]; ((STATE.integrations&&STATE.integrations.categories)||[]).forEach(function(c){ c.items.forEach(function(x){ if(x.contact) out.push(x); }); }); return out; }
+function contactHome(it){
+  if(!it||!it.contact) return false;
+  var act=STATE.integrations&&STATE.integrations.active_contact, items=contactItems();
+  return act ? it.id===act : (items[0]&&items[0].id===it.id);
+}
 function intgFind(id){ var out=null; ((STATE.integrations&&STATE.integrations.categories)||[]).forEach(function(c){c.items.forEach(function(x){if(x.id===id)out=x;});}); return out; }
 function renderIntegrationsModal(){
   var d=STATE.integrations; if(!d)return;
@@ -150,18 +158,20 @@ function renderIntegrationsModal(){
         ?'<label class="fs-11_5 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:2px"><input type="checkbox" '+(it.active_verifier?'checked':'')+' onchange="setActiveVerifier(\''+it.id+'\',this.checked)"> Use this verifier for pre-send checks</label>'
         :(it.ai
         ?'<label class="fs-11_5 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:2px"><input type="radio" name="intg-active-ai" '+(it.active_ai?'checked':'')+' onchange="setActiveAi(\''+it.id+'\')"> Use this provider first</label>'
-        :'');
+        :(it.contact&&contactItems().length>1
+        ?'<label class="fs-11_5 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:2px"><input type="radio" name="intg-active-contact" '+(contactHome(it)?'checked':'')+' onchange="setActiveContact(\''+it.id+'\')"> Use this contact database for finding people and companies</label>'
+        :''));
       return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div class="fs-13" style="font-weight:600">'+htmlEsc(it.label)+'</div>'+badge+'</div>'+
         '<div class="fs-11_5 c-text3" style="margin-bottom:8px">'+htmlEsc(it.description)+(it.docs?' · <a href="'+htmlEsc(it.docs)+'" target="_blank" rel="noopener" class="c-accent">Get key ↗</a>':'')+'</div>'+
-        fields+activeToggle+(it.id==='apollo'?apolloLimitBlock():'')+
+        fields+activeToggle+(contactHome(it)?apolloLimitBlock():'')+
         '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
           '<button class="btn btn-sm btn-primary" onclick="saveIntegration(\''+it.id+'\')">Save</button>'+
           (it.has_test?'<button class="btn btn-sm btn-outline" onclick="testIntegration(\''+it.id+'\')">Test</button>':'')+
           (it.configured?'<button onclick="disconnectIntegration(\''+it.id+'\')" style="font-size:11px;color:var(--red);background:transparent;border:0;cursor:pointer">Disconnect</button>':'')+
           testHtml+
         '</div>'+
-      '</div>'+(it.id==='apollo'?jsearchCard():'');
+      '</div>'+(contactHome(it)?jsearchCard():'');
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
@@ -206,7 +216,7 @@ function jsearchCard(){
   var msg=m?'<div class="fs-11_5 '+(m.ok?'c-green':'c-red')+'" role="status" style="margin-left:6px">'+(m.ok?'✓ ':'✗ ')+htmlEsc(m.text)+'</div>':'';
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" id="intg-jsearch-card">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div class="fs-13" style="font-weight:600">Free job sources (JSearch)</div>'+badge+'</div>'+
-    '<div class="fs-11_5 c-text3" style="margin-bottom:8px">Lets people on Find Leads search for companies <b>by job title</b> without Apollo — Google for Jobs (LinkedIn, Indeed, ZipRecruiter, Glassdoor, company career pages) through a licensed job-search service. '+
+    '<div class="fs-11_5 c-text3" style="margin-bottom:8px">Lets people on Find Leads search for companies <b>by job title</b> without a contact database — Google for Jobs (LinkedIn, Indeed, ZipRecruiter, Glassdoor, company career pages) through a licensed job-search service. '+
       '<b>This key is your organisation’s own</b>: you sign up with the service (it has a free plan of 200 requests a month at the time of writing) and the requests are counted on your plan, never shared with another organisation. It finds companies and jobs, not people. · <a href="https://www.openwebninja.com" target="_blank" rel="noopener" class="c-accent">Get key ↗</a></div>'+
     '<input class="inp" id="intg-jsearch-api_key" type="password" autocomplete="new-password" placeholder="'+(on?htmlEsc(j.hint||'configured'):'Paste your job-search key')+'" style="margin-bottom:6px"/>'+
     '<div class="intg-apollo-limit"><div class="intg-apollo-used">'+usage+'</div></div>'+
@@ -245,7 +255,7 @@ window.removeJsearchKey=function(){
     STATE._jsBusy=false; STATE.jobsourceAdmin=r; STATE._jsMsg={ ok:true, text:'Disconnected.' }; showToast('Disconnected','success'); renderIntegrationsModal();
   }).catch(function(e){ STATE._jsBusy=false; STATE._jsMsg={ ok:false, text:(e&&e.message)||String(e) }; renderIntegrationsModal(); });
 };
-// The Apollo card's daily limit (D-0054, R-066): one number for everybody in
+// The contact database card's daily limit (D-0054, R-066): one number for everybody in
 // the company, set here by an admin, beside what today has spent. It is the
 // same System Settings value ("Contact finder"), saved through that screen's
 // own validated write — one number, two ways to reach it, never two numbers.
@@ -274,7 +284,7 @@ window.saveApolloLimit=function(){
   var n=Number(el.value), u=STATE.apolloUsage||{}, max=u.max!=null?u.max:10000;
   if(el.value===''||!Number.isInteger(n)||n<0||n>max){ showToast('Enter a whole number from 0 to '+max.toLocaleString('en-US'),'warning'); return; }
   apiPost('/admin/settings/numbers',{values:{poc_apollo_daily_credits:n}}).then(function(){
-    showToast('Daily Apollo limit saved: '+n+' credit'+(n===1?'':'s')+' a day','success');
+    showToast('Daily contact-database limit saved: '+n+' credit'+(n===1?'':'s')+' a day','success');
     return loadApolloUsage();
   }).catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
 };
@@ -592,6 +602,10 @@ function aiProviderNote(){
 }
 window.setActiveAi=function(id){
   apiPost('/admin/integrations/'+id,{active:true}).then(function(r){ STATE.integrations=r; showToast('Provider preference saved','success'); renderIntegrationsModal(); })
+    .catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
+};
+window.setActiveContact=function(id){
+  apiPost('/admin/integrations/'+id,{active:true,kind:'contact'}).then(function(r){ STATE.integrations=r; showToast('Contact database saved','success'); renderIntegrationsModal(); loadApolloUsage(); })
     .catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
 };
 window.setActiveVerifier=function(id,on){

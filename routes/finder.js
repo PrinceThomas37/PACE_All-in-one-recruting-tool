@@ -34,7 +34,8 @@ const express = require('express');
 const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const finder = require('../services/lead-finder');
 const leadCheck = require('../services/lead-check');
-const peopleApollo = require('../services/people-apollo');
+const peopleApollo = require('../services/people-apollo');   // only for callRecord (provider-neutral: never carries a key)
+const cdata = require('../services/contact-data');
 const integrations = require('../config/integrations');
 const jobsJsearch = require('../services/jobs-jsearch');
 const settings = require('../config/settings');
@@ -54,7 +55,15 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, logActivity, getTimezoneFromLocation, withOrg, ownership, reportingChainIds, orgIdFor } = ctx;
   const db = ctx.db || createDb(supabase);
-  const apollo = ctx.apollo || peopleApollo;               // tests hand in a fake Apollo
+  // The organisation's contact database (R-321, D-0175): provider, key and adapter, resolved once per request and kept on it (`req._cd`);
+  // tests still hand in a fake adapter as ctx.apollo. `pn(req)` is the provider's own short name for a sentence; `pid(req)` its id (the
+  // provenance written to the database — for Apollo still 'apollo', so nothing stored changes).
+  async function useContact(req) {
+    if (!req._cd) req._cd = await cdata.resolve(supabase, orgOf(req), ctx.apollo);
+    return req._cd;
+  }
+  const pn = (req) => (req && req._cd && req._cd.name) || 'The contact database';
+  const pid = (req) => { if (!(req && req._cd)) throw new Error('contact provider not resolved for this request'); return req._cd.id; };
   const jsearch = ctx.jsearch || jobsJsearch;              // …and a fake job-search service
   const clock = ctx.now || (() => new Date());
 
@@ -87,7 +96,8 @@ module.exports = (ctx) => {
   // Apollo's last answer, kept so a failure somebody saw can be read from the database (the same row the POC finder keeps).
   async function noteApollo(call, result) {
     try {
-      const rec = apollo.callRecord ? apollo.callRecord(call, result, clock().toISOString()) : { call, ok: !!(result && result.ok) };
+      const cr = (ctx.apollo || peopleApollo).callRecord;
+      const rec = cr ? cr(call, result, clock().toISOString()) : { call, ok: !!(result && result.ok) };
       const rows = [{ key: 'apollo_last_call', value: JSON.stringify(rec), updated_at: new Date() }];
       if (!rec.ok) rows.push({ key: 'apollo_last_error', value: JSON.stringify(rec), updated_at: new Date() });
       await db.global.from('app_settings').upsert(rows, { onConflict: 'key' });
@@ -151,7 +161,7 @@ module.exports = (ctx) => {
   // One saved search → up to `remaining` new cards. Returns a summary; never throws for an Apollo problem (it says so).
   // Safe to repeat and safe to be killed half-way: a card is written one at a time and the unique index stops a repeat, and
   // `last_run_at` is only set at the end, so an interrupted run is simply run again.
-  async function runSearch({ scoped, orgId, userId, search, daily, key, budget, now, oneOff = false, jsKey = null, jsBudget = null }) {
+  async function runSearch({ scoped, orgId, userId, search, daily, key, cd, budget, now, oneOff = false, jsKey = null, jsBudget = null }) {
     const day = finder.dayOf(now);
     const out = { search_id: search.id, name: search.name, found: 0, cards: 0, staffing: 0, worked: 0, seen: 0, note: '', error: null };
     const finish = async (note) => {
@@ -173,18 +183,20 @@ module.exports = (ctx) => {
       remaining = daily - (made.data || []).filter((c) => c.search_id).length;
       if (remaining <= 0) return finish('You already have your ' + daily + ' cards for today.');
     }
+    // `source` is a stored choice ('apollo' = the contact database, 'free' = the free job sources, or both) — the token is data from before
+    // providers could be chosen; on screen it is the contact database's own name (R-321).
     const src = finder.SOURCES.includes(search.source) ? search.source : 'apollo';
     const useApollo = src !== 'free', useFree = src !== 'apollo';
     const notes = [];
     const orgs = []; const seenKeys = new Set();
     if (useApollo) {
-      const why = !key ? 'Apollo is not connected. An admin adds its key in Admin → Integrations.'
-        : (budget.left() < 1 ? 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').' : '');
+      const why = !key ? cd.name + ' is not connected. An admin adds its key in Admin → Integrations.'
+        : (budget.left() < 1 ? 'Your organisation has used today\'s ' + cd.name + ' credit limit (' + budget.limit + ').' : '');
       if (why) { if (!useFree) return finish(why); notes.push(why + ' Only the free job sources were searched.'); }
       else {
-        const r = await apollo.searchOrganizations({ key, filters: finder.apolloFilters(search, now), page: 1, perPage: 100 });
+        const r = await cd.adapter.searchOrganizations({ key, criteria: { kind: 'search', search }, now, page: 1, perPage: 100 });
         await noteApollo('finder_company_search', r);
-        if (!r.ok) { if (!useFree) { out.error = r.error; return finish(r.error); } notes.push('Apollo had a problem: ' + r.error); }
+        if (!r.ok) { if (!useFree) { out.error = r.error; return finish(r.error); } notes.push(cd.name + ' had a problem: ' + r.error); }
         else {
           if ((r.organizations || []).length) await budget.spend(1);          // 1 credit per page that returns results
           (r.organizations || []).forEach((raw) => {
@@ -214,10 +226,10 @@ module.exports = (ctx) => {
       const need = orgs.filter((o) => o.source === 'free' && o.employees == null && o.domain);   // Apollo's own rows were already filtered by Apollo; asking again would find nothing new
       let sizeChecked = true;   // R-276: unknown-size free companies are left out only when the lookup really ran
       if (need.length) {
-        const why = !key ? 'Apollo is not connected' : (budget.left() < 1 ? 'today\'s Apollo credit limit is used' : '');
+        const why = !key ? cd.name + ' is not connected' : (budget.left() < 1 ? 'today\'s ' + cd.name + ' credit limit is used' : '');
         if (why) { sizeChecked = false; notes.push('The size you chose could not be checked for companies found only in the free job sources (' + why + ').'); }
         else {
-          const r = await apollo.searchOrganizations({ key, filters: { q_organization_domains_list: need.slice(0, 100).map((o) => o.domain) }, page: 1, perPage: 100 });
+          const r = await cd.adapter.searchOrganizations({ key, criteria: { kind: 'domains', domains: need.slice(0, 100).map((o) => o.domain) }, page: 1, perPage: 100 });
           await noteApollo('finder_company_size', r);
           if (r.ok) {
             if ((r.organizations || []).length) await budget.spend(1);
@@ -290,7 +302,7 @@ module.exports = (ctx) => {
     const rows = await db.crossOrg('finder_searches').select('*').is('deleted_at', null).eq('active', true);
     if (rows.error) throw rows.error;
     const summary = { searches: 0, cards: 0, errors: 0 };
-    const apolloKeys = {};        // each organisation's OWN Apollo key (R-067) — a search never runs on another company's credits
+    const contacts = {};          // each organisation's OWN contact database and key (R-067, R-321) — a search never runs on another company's credits
     const budgets = {}, jsBudgets = {}, jsKeys = {}, defaults = await num('finder_cards_per_day');
     for (const s of (rows.data || [])) {
       try {
@@ -303,9 +315,9 @@ module.exports = (ctx) => {
         if (!(roles.includes('admin') || (acc.enabled && roles.some((r) => ADDERS.includes(r))))) continue;       // switched off since
         await housekeeping(scoped, s.user_id, now);
         budgets[s.org_id] = budgets[s.org_id] || await budgetFor(s.org_id, now);
-        if (!(s.org_id in apolloKeys)) apolloKeys[s.org_id] = await integrations.getSecret(supabase, 'apollo', 'api_key', s.org_id);
+        if (!(s.org_id in contacts)) contacts[s.org_id] = await cdata.resolve(supabase, s.org_id, ctx.apollo);
         if (s.source && s.source !== 'apollo' && !(s.org_id in jsKeys)) { jsKeys[s.org_id] = await jsKeyOf(s.org_id); jsBudgets[s.org_id] = await jsBudgetFor(s.org_id, now); }
-        const r = await runSearch({ scoped, orgId: s.org_id, userId: s.user_id, search: s, daily: finder.dailyFor(acc, defaults), key: apolloKeys[s.org_id] || null, budget: budgets[s.org_id], now, jsKey: jsKeys[s.org_id] || null, jsBudget: jsBudgets[s.org_id] || null });
+        const r = await runSearch({ scoped, orgId: s.org_id, userId: s.user_id, search: s, daily: finder.dailyFor(acc, defaults), key: contacts[s.org_id].key || null, cd: contacts[s.org_id], budget: budgets[s.org_id], now, jsKey: jsKeys[s.org_id] || null, jsBudget: jsBudgets[s.org_id] || null });
         summary.searches++; summary.cards += r.cards; if (r.error) summary.errors++;
       } catch (e) { summary.errors++; console.error('[LeadFinder] search ' + s.id + ' failed:', e.message); }
     }
@@ -321,7 +333,8 @@ module.exports = (ctx) => {
       const now = clock(), orgId = orgOf(req);
       res.json({
         enabled: true, is_admin: a.is_admin, daily: a.daily,
-        apollo: { connected: await integrations.isConfigured(supabase, 'apollo', orgOf(req)) },
+        apollo: { connected: (await cdata.statusFor(supabase, orgOf(req))).connected },     // the older name the screen read (kept)
+        contact_data: await (async () => { const st = await cdata.statusFor(supabase, orgOf(req)); return { provider: st.provider, label: st.label, name: st.name, connected: st.connected, capabilities: st.capabilities }; })(),
         jobsource: { connected: !!(await jsKeyOf(orgId)), used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests', orgId), per_run: await num('finder_jsearch_requests_per_run', orgId) },
         credits: { used: await readCount(finder.creditKey(orgId, now)), limit: await num('finder_apollo_daily_credits', orgId) },
         reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day', orgOf(req)) },
@@ -339,27 +352,26 @@ module.exports = (ctx) => {
   router.get('/finder/diagnose', auth, async (req, res) => {
     try {
       if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
-      if (!key) return res.json({ connected: false, checks: [{ id: 'key', ok: false, text: 'Apollo is not connected. Add its key in Admin → Integrations.' }] });
-      const now = clock(), budget = await budgetFor(orgOf(req), now), checks = [{ id: 'key', ok: true, text: 'An Apollo key is saved.' }];
-      const people = await apollo.checkPeopleSearch({ key });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.json({ connected: false, checks: [{ id: 'key', ok: false, text: pn(req) + ' is not connected. Add its key in Admin → Integrations.' }] });
+      const now = clock(), budget = await budgetFor(orgOf(req), now), checks = [{ id: 'key', ok: true, text: 'A' + (/^[aeiou]/i.test(pn(req)) ? 'n ' : ' ') + pn(req) + ' key is saved.' }];
+      const people = await req._cd.adapter.checkPeopleSearch({ key });
       await noteApollo('finder_check_people', people);
       checks.push({ id: 'people', ok: !!people.ok, text: people.ok ? 'Finding people by job title works (free).' : people.error });
       let orgId = null;
       if (budget.left() >= 2) {
-        const f = finder.apolloFilters({ titles: ['accountant'], locations: ['united states'], sizes: ['mid'], posted_days: 30 }, now);
-        const o = await apollo.searchOrganizations({ key, filters: f, page: 1, perPage: 1 });
+        const o = await req._cd.adapter.searchOrganizations({ key, criteria: { kind: 'search', search: { titles: ['accountant'], locations: ['united states'], sizes: ['mid'], posted_days: 30 } }, now, page: 1, perPage: 1 });
         await noteApollo('finder_check_companies', o);
         if (o.ok && o.organizations.length) await budget.spend(1);
         checks.push({ id: 'companies', ok: !!o.ok, text: o.ok ? 'Searching companies by the jobs they are hiring for works (1 credit used).' : o.error });
         if (o.ok && o.organizations.length) { const n = finder.normalizeOrg(o.organizations[0]); orgId = n.apollo_org_id; }
         if (orgId) {
-          const p = await apollo.organizationJobPostings({ key, orgId, perPage: 1 });
+          const p = await req._cd.adapter.organizationJobPostings({ key, orgId, perPage: 1 });
           await noteApollo('finder_check_postings', p);
           if (p.ok) await budget.spend(1);
           checks.push({ id: 'postings', ok: !!p.ok, text: p.ok ? 'Reading a company\'s job postings works (1 credit used).' : p.error });
         }
-      } else checks.push({ id: 'credits', ok: false, text: 'Not enough of today\'s Apollo credit limit is left to test company search.' });
+      } else checks.push({ id: 'credits', ok: false, text: 'Not enough of today\'s ' + pn(req) + ' credit limit is left to test company search.' });
       res.json({ connected: true, ok: checks.every((c) => c.ok), checks, credits: { used: budget.used, limit: budget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -504,11 +516,11 @@ module.exports = (ctx) => {
       const now = clock(), prev = lastLookup.get(req.user.id);
       if (prev && now.getTime() - prev < LOOKUP_GAP_MS && !ctx.noRerunGap) return res.json({ suggestions: [], used_credit: false, skipped: true, note: '' });
       lastLookup.set(req.user.id, now.getTime());
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
-      if (!key) return res.json({ suggestions: [], used_credit: false, note: 'Apollo is not connected, so company names cannot be looked up. An admin adds its key in Admin → Integrations. You can still paste the company\'s website.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.json({ suggestions: [], used_credit: false, note: pn(req) + ' is not connected, so company names cannot be looked up. An admin adds its key in Admin → Integrations. You can still paste the company\'s website.' });
       const budget = await budgetFor(orgOf(req), now);
-      if (budget.left() < 1) return res.json({ suggestions: [], used_credit: false, note: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + '). You can still paste the company\'s website.' });
-      const r = await apollo.searchOrganizations({ key, filters: finder.companyNameFilters(q), page: 1, perPage: 10 });
+      if (budget.left() < 1) return res.json({ suggestions: [], used_credit: false, note: 'Your organisation has used today\'s ' + pn(req) + ' credit limit (' + budget.limit + '). You can still paste the company\'s website.' });
+      const r = await req._cd.adapter.searchOrganizations({ key, criteria: { kind: 'name', name: q }, page: 1, perPage: 10 });
       await noteApollo('finder_company_lookup', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
       const found = (r.organizations || []).length > 0;
@@ -516,7 +528,7 @@ module.exports = (ctx) => {
       const suggestions = finder.rankCompanySuggestions(r.organizations, q);
       res.json({
         suggestions, used_credit: found, credits: { used: budget.used, limit: budget.limit },
-        note: suggestions.length ? '' : (found ? 'Apollo found companies with that name but none has a website on file. Paste the company\'s website instead.' : 'Apollo has no company with that name. Check the spelling, or paste its website.'),
+        note: suggestions.length ? '' : (found ? pn(req) + ' found companies with that name but none has a website on file. Paste the company\'s website instead.' : pn(req) + ' has no company with that name. Check the spelling, or paste its website.'),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -530,7 +542,7 @@ module.exports = (ctx) => {
     const list = (data || []).filter((s) => (only ? s.id === only : s.active));
     if (only && !list.length) return res.status(404).json({ error: 'Search not found' });
     if (!list.length) return res.status(400).json({ error: 'You have no saved searches to run. Save one first.' });
-    const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
+    const cdx = await useContact(req); const key = cdx.key;
     await housekeeping(scoped, req.user.id, now);
     const budget = await budgetFor(orgId, now);
     const jsKey = list.some((s) => s.source && s.source !== 'apollo') ? await jsKeyOf(orgId) : null, jsBudget = await jsBudgetFor(orgId, now);
@@ -539,7 +551,7 @@ module.exports = (ctx) => {
       if (s.last_run_at && now.getTime() - new Date(s.last_run_at).getTime() < RERUN_GAP_MS && !ctx.noRerunGap) {
         results.push({ search_id: s.id, name: s.name, cards: 0, note: 'Ran a moment ago. Give it a minute.', skipped: true }); continue;
       }
-      results.push(await runSearch({ scoped, orgId, userId: req.user.id, search: s, daily: access.daily, key, budget, now, jsKey, jsBudget }));
+      results.push(await runSearch({ scoped, orgId, userId: req.user.id, search: s, daily: access.daily, key, cd: cdx, budget, now, jsKey, jsBudget }));
     }
     res.json({ results, new_cards: results.reduce((n, r) => n + (r.cards || 0), 0), credits: { used: budget.used, limit: budget.limit }, jobsource: { used: jsBudget.used, limit: jsBudget.limit } });
   }
@@ -559,11 +571,11 @@ module.exports = (ctx) => {
       const sig = JSON.stringify(v.value), prev = lastFind.get(req.user.id);
       if (prev && prev.sig === sig && now.getTime() - prev.at < RERUN_GAP_MS && !ctx.noRerunGap) return res.json({ results: [{ search_id: null, name: 'One-off search', cards: 0, note: 'You just ran this exact search. Change something, or give it a minute.', skipped: true }], new_cards: 0 });
       lastFind.set(req.user.id, { at: now.getTime(), sig });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
+      const cdx = await useContact(req); const key = cdx.key;
       await housekeeping(scoped, req.user.id, now);
       const budget = await budgetFor(orgId, now);
       const jsKey = v.value.source !== 'apollo' ? await jsKeyOf(orgId) : null, jsBudget = await jsBudgetFor(orgId, now);
-      const r = await runSearch({ scoped, orgId, userId: req.user.id, search: Object.assign({ id: null }, v.value), daily: await num('finder_cards_per_run', orgId), key, budget, now, oneOff: true, jsKey, jsBudget });
+      const r = await runSearch({ scoped, orgId, userId: req.user.id, search: Object.assign({ id: null }, v.value), daily: await num('finder_cards_per_run', orgId), key, cd: cdx, budget, now, oneOff: true, jsKey, jsBudget });
       res.json({ results: [r], new_cards: r.cards || 0, credits: { used: budget.used, limit: budget.limit }, jobsource: { used: jsBudget.used, limit: jsBudget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -771,11 +783,11 @@ module.exports = (ctx) => {
       const card = await cardOf(req, req.params.id);
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
       if (Array.isArray(card.postings)) return res.json({ postings: card.postings, signals: finder.postingSignals(card.postings), cached: true });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
-      if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.status(409).json({ error: pn(req) + ' is not connected. An admin adds its key in Admin → Integrations.' });
       const now = clock(), budget = await budgetFor(orgOf(req), now);
-      if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').' });
-      const r = await apollo.organizationJobPostings({ key, orgId: card.apollo_org_id, perPage: 50 });
+      if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s ' + pn(req) + ' credit limit (' + budget.limit + ').' });
+      const r = await req._cd.adapter.organizationJobPostings({ key, orgId: card.apollo_org_id, perPage: 50 });
       await noteApollo('finder_postings', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
       await budget.spend(1);
@@ -793,12 +805,12 @@ module.exports = (ctx) => {
       const card = await cardOf(req, req.params.id);
       // A saved card too: "Email another job / person" looks for more people at the company the lead was made from (owner, 14 Oct).
       if (!card || !['new', 'accepted'].includes(card.status)) return res.status(404).json({ error: 'Card not found' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
-      if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.status(409).json({ error: pn(req) + ' is not connected. An admin adds its key in Admin → Integrations.' });
       const co = (card.payload && card.payload.company) || {};
       if (!co.domain) return res.status(409).json({ error: 'This company\'s website is not known, so people cannot be looked up for it. Add someone by hand below.' });
       const typed = String((req.body && req.body.title) || '').split(/[,;\n]+/).map((t) => t.trim()).filter(Boolean).slice(0, 10);
-      const r = await apollo.searchPeople({ key, domain: co.domain, titles: typed.length ? typed : DEFAULT_PEOPLE_TITLES, perPage: 25 });
+      const r = await req._cd.adapter.searchPeople({ key, domain: co.domain, titles: typed.length ? typed : DEFAULT_PEOPLE_TITLES, perPage: 25 });
       await noteApollo('finder_people_search', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
       const have = (card.payload && card.payload.people) || {};
@@ -828,12 +840,12 @@ module.exports = (ctx) => {
       const now = clock(), orgId = orgOf(req);
       const mineKey = finder.revealKey(req.user.id, now), used = await readCount(mineKey), limit = await num('finder_reveals_per_day', orgOf(req));
       if (used >= limit) return res.status(429).json({ error: 'You have revealed your ' + limit + ' emails for today. More tomorrow, or ask an admin to raise it.' });
-      const key = await integrations.getSecret(supabase, 'apollo', 'api_key', orgOf(req));
-      if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.status(409).json({ error: pn(req) + ' is not connected. An admin adds its key in Admin → Integrations.' });
       const budget = await budgetFor(orgId, now);
-      if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').' });
+      if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s ' + pn(req) + ' credit limit (' + budget.limit + ').' });
       await budget.spend(1); await writeSetting(mineKey, used + 1);              // counted BEFORE the answer is trusted
-      const r = await apollo.revealPerson({ key, id: personId });
+      const r = await req._cd.adapter.revealPerson({ key, id: personId });
       await noteApollo('finder_reveal', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
       const seen = (payload.found && payload.found[personId]) || {};      // what the search said, when the reveal says nothing
@@ -844,7 +856,7 @@ module.exports = (ctx) => {
       payload.people[personId] = person;
       const { error } = await db.forRequest(req).from('finder_cards').update({ payload }).eq('id', card.id);
       if (error) throw error;
-      res.json({ person, note: person.email ? null : 'Apollo has no verified email for this person.', credits: { used: budget.used, limit: budget.limit } });
+      res.json({ person, note: person.email ? null : pn(req) + ' has no verified email for this person.', credits: { used: budget.used, limit: budget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -854,6 +866,7 @@ module.exports = (ctx) => {
     const undo = async () => { if (claimed) { try { await db.forRequest(req).from('finder_cards').update({ status: 'new', decided_at: null }).eq('id', claimed); } catch (_) { /* the card simply stays accepted-less on a later look */ } } };
     try {
       if (!(await needAccess(req, res))) return;
+      await useContact(req);                                   // which provider found this lead: written into the lead's own record
       const scoped = db.forRequest(req), now = clock();
       const card = await cardOf(req, req.params.id);
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
@@ -913,7 +926,7 @@ module.exports = (ctx) => {
       if (!companyId) {
         const row = { name: card.company_name, website: co.website || (co.domain ? 'https://' + co.domain : null), location: [co.city, co.state].filter(Boolean).join(', ') || null, industry: co.industry || null, created_by: req.user.id, apollo_org_id: card.apollo_org_id || null };
         if (co.linkedin_url) row.linkedin_url = co.linkedin_url;
-        if (co.employees) { row.employee_count = co.employees; row.size_source = 'apollo'; const band = poc.sizeBandFor(co.employees); if (band) row.size_band = band; }
+        if (co.employees) { row.employee_count = co.employees; row.size_source = pid(req); const band = poc.sizeBandFor(co.employees); if (band) row.size_band = band; }
         const ins = await scoped.from('companies').insert(row).select('id').single();
         if (ins.error) throw ins.error;
         companyId = ins.data.id;
@@ -929,11 +942,11 @@ module.exports = (ctx) => {
         company: { expertise: '', notes: '', headcount: '', hiring_volume: '' }, outreach: { angle: facts[0] || '', avoid: '' }, contacts: [],
         // Only the title: the posting TEXT cannot be read from Apollo, so the AI writes a short email from facts, never invented duties (D-0087).
         jd_raw: 'Title: ' + position,
-        source: { kind: 'finder', provider: 'apollo', apollo_org_id: card.apollo_org_id || null, search_id: card.search_id || null, found_at: card.created_at, posting_url: (chosen && chosen.url) || null },
+        source: { kind: 'finder', provider: pid(req), apollo_org_id: card.apollo_org_id || null, search_id: card.search_id || null, found_at: card.created_at, posting_url: (chosen && chosen.url) || null },
         finder: { facts, also_hiring: alsoHiring, postings: posts.slice(0, 10).map((p) => ({ title: p.title, url: p.url, posted_at: p.posted_at, source: p.source })) },
       };
       const leadRow = {
-        company_id: companyId, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,
+        company_id: companyId, position, location, source: 'Finder · ' + pn(req), job_url: (chosen && chosen.url) || null,
         stage: 'Unassigned', notes: facts.join(' '), research, created_by: req.user.id,
         created_date: finder.dayOf(now), freshness: 'New', timezone: getTimezoneFromLocation ? getTimezoneFromLocation(location) : null,
       };
@@ -949,7 +962,7 @@ module.exports = (ctx) => {
       if (cIns.error) throw cIns.error;
 
       await scoped.from('finder_cards').update({ lead_id: lead.data.id, postings: null }).eq('id', card.id);
-      try { if (logActivity) await logActivity(lead.data.id, null, req.user.id, 'lead_found', 'Found with the Lead Finder (Apollo): ' + position); } catch (_) { /* the audit is a record, never the point */ }
+      try { if (logActivity) await logActivity(lead.data.id, null, req.user.id, 'lead_found', 'Found with the Lead Finder (' + pn(req) + '): ' + position); } catch (_) { /* the audit is a record, never the point */ }
       claimed = null;
       res.status(201).json({ lead_id: lead.data.id, company_id: companyId, goes_to: toMe ? 'you' : 'pool', stage: 'Unassigned', contacts: rows.length });
     } catch (err) { await undo(); res.status(500).json({ error: err.message }); }
@@ -964,6 +977,7 @@ module.exports = (ctx) => {
   router.post('/finder/cards/:id/another', auth, async (req, res) => {
     try {
       if (!(await needAccess(req, res))) return;
+      await useContact(req);                                   // which provider found this lead: written into the lead's own record
       const scoped = db.forRequest(req), now = clock();
       const card = await cardOf(req, req.params.id);
       if (!card || card.status !== 'accepted' || !card.lead_id) return res.status(404).json({ error: 'Card not found' });
@@ -1048,7 +1062,7 @@ module.exports = (ctx) => {
         finder: Object.assign({}, baseRes.finder || {}, { facts, also_hiring: alsoHiring }),
       });
       const row = {
-        company_id: lead.company_id, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,
+        company_id: lead.company_id, position, location, source: 'Finder · ' + pn(req), job_url: (chosen && chosen.url) || null,
         stage: 'Unassigned', notes: facts.join(' '), research, created_by: req.user.id, created_date: finder.dayOf(now), freshness: 'New',
         timezone: getTimezoneFromLocation ? getTimezoneFromLocation(location) : (lead.timezone || null), industry: lead.industry || null,
       };

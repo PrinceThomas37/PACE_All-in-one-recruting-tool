@@ -26,6 +26,7 @@
 const PREFIX = 'int_';
 const ACTIVE_VERIFIER_KEY = 'int_email_verify_active';
 const ACTIVE_AI_KEY = 'int_ai_active';
+const ACTIVE_CONTACT_KEY = 'int_contact_active';   // R-321: which contact-data provider this organisation uses (services/contact-data.js)
 
 // Registry. `test` names a provider-specific connection test (routes/integrations
 // implements them); `env_fallback` lets a value come from an env var if unset.
@@ -101,6 +102,7 @@ const INTEGRATIONS = [
     id: 'apollo', category: 'Contact database', label: 'Apollo.io',
     description: 'Finds the people to reach on a lead — Search contact, the title search and Uncover in the POC finder — and a company\'s size. Needs a plan with API access and a master API key. Searching is free; each person uncovered or company sized costs one credit, capped per day below.',
     docs: 'https://docs.apollo.io/docs/create-api-key',
+    contact: true,   // a contact-data provider the finders can use (services/contact-data.js registers its adapter)
     fields: [{ key: 'api_key', label: 'API key' }], test: 'apollo',
   },
 ];
@@ -180,8 +182,8 @@ async function getAll(supabase, orgId = null) {
     if (sc.org) wanted.push(orgField(def.id, f.key, sc.org));
     if (sc.inherits) wanted.push(keyName(def.id, f.key));
   }));
-  wanted.push(suffixed(ACTIVE_VERIFIER_KEY, sc.org), suffixed(ACTIVE_AI_KEY, sc.org));
-  if (sc.inherits) wanted.push(ACTIVE_VERIFIER_KEY, ACTIVE_AI_KEY);
+  wanted.push(suffixed(ACTIVE_VERIFIER_KEY, sc.org), suffixed(ACTIVE_AI_KEY, sc.org), suffixed(ACTIVE_CONTACT_KEY, sc.org));
+  if (sc.inherits) wanted.push(ACTIVE_VERIFIER_KEY, ACTIVE_AI_KEY, ACTIVE_CONTACT_KEY);
   let rows = [];
   try {
     const { data } = await supabase.from('app_settings').select('key,value').in('key', wanted);
@@ -191,6 +193,7 @@ async function getAll(supabase, orgId = null) {
   const pick = (id, field) => (sc.org && stored[orgField(id, field, sc.org)]) || (sc.inherits ? stored[keyName(id, field)] : undefined);
   const activeVerifier = (sc.org && stored[suffixed(ACTIVE_VERIFIER_KEY, sc.org)]) || (sc.inherits ? stored[ACTIVE_VERIFIER_KEY] : null) || null;
   const activeAi = (sc.org && stored[suffixed(ACTIVE_AI_KEY, sc.org)]) || (sc.inherits ? stored[ACTIVE_AI_KEY] : null) || null;
+  const activeContact = (sc.org && stored[suffixed(ACTIVE_CONTACT_KEY, sc.org)]) || (sc.inherits ? stored[ACTIVE_CONTACT_KEY] : null) || null;
 
   const items = INTEGRATIONS.map((def) => {
     const fields = def.fields.map((f) => {
@@ -215,13 +218,15 @@ async function getAll(supabase, orgId = null) {
       fields, configured: fields.every((f) => f.optional || f.configured),
       active_verifier: def.verifier ? (activeVerifier === def.id) : undefined,
       active_ai: def.ai ? (activeAi === def.id) : undefined,
+      contact: !!def.contact,
+      active_contact: def.contact ? (activeContact === def.id) : undefined,
     };
   });
 
   // group by category, preserving registry order
   const order = []; const groups = {};
   items.forEach((it) => { if (!groups[it.category]) { groups[it.category] = []; order.push(it.category); } groups[it.category].push(it); });
-  return { categories: order.map((c) => ({ category: c, items: groups[c] })), active_verifier: activeVerifier, active_ai: activeAi };
+  return { categories: order.map((c) => ({ category: c, items: groups[c] })), active_verifier: activeVerifier, active_ai: activeAi, active_contact: activeContact };
 }
 
 // Where a write goes: the organisation's own key. A caller that names no organisation writes the old key, but only on a
@@ -304,6 +309,16 @@ async function getActiveAi(supabase, orgId = null) {
   return readActive(supabase, ACTIVE_AI_KEY, orgId);
 }
 
+// R-321: the contact-data provider this organisation chose (only a CHOICE is stored; services/contact-data.js decides what is usable).
+async function setActiveContact(supabase, id, orgId = null) {
+  const def = id ? BY_ID.get(id) : null;
+  if (id && (!def || !def.contact)) return { error: 'Not a contact-data provider' };
+  return setActive(supabase, ACTIVE_CONTACT_KEY, id, orgId);
+}
+async function getActiveContact(supabase, orgId = null) {
+  return readActive(supabase, ACTIVE_CONTACT_KEY, orgId);
+}
+
 // The verifier the send-time hook should use: the explicitly-active one if its
 // key is set, else the first configured verifier. Returns { id, key } or null.
 async function getActiveVerifier(supabase, orgId = null) {
@@ -345,6 +360,7 @@ module.exports = {
   getSecret, isConfigured, getAll, setIntegration, clearIntegration,
   setActiveVerifier, getActiveVerifier,
   setActiveAi, getActiveAi,
+  setActiveContact, getActiveContact,
   orgKeyName, getOrgSecret, setOrgSecret, orgMask,
   noteOrgCreated, scopeFor, _resetForTests,
 };

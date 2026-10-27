@@ -2,8 +2,8 @@
   "generated": "2026-10-27",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 695,
-    "lines": 143275,
+    "files": 701,
+    "lines": 144543,
     "territories": 9,
     "unclaimedFiles": 55
   },
@@ -25,11 +25,11 @@
         "services/view-horizon.js"
       ],
       "files": 84,
-      "lines": 39038,
+      "lines": 39282,
       "largest": [
         {
           "f": "public/js/47-page-mailbox.js",
-          "n": 2682
+          "n": 2748
         },
         {
           "f": "public/js/25-workflow-bd.js",
@@ -37,7 +37,7 @@
         },
         {
           "f": "public/retro.css",
-          "n": 1323
+          "n": 1358
         },
         {
           "f": "public/js/68-page-finder.js",
@@ -80,7 +80,7 @@
         "services/error-report.js"
       ],
       "files": 45,
-      "lines": 15663,
+      "lines": 15712,
       "largest": [
         {
           "f": "index.js",
@@ -88,11 +88,11 @@
         },
         {
           "f": "routes/finder.js",
-          "n": 1067
+          "n": 1081
         },
         {
           "f": "routes/poc.js",
-          "n": 805
+          "n": 820
         },
         {
           "f": "routes/ownership-requests.js",
@@ -122,8 +122,8 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 79,
-      "lines": 4504,
+      "files": 80,
+      "lines": 4540,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -142,7 +142,7 @@
           "n": 174
         }
       ],
-      "lastTouched": "2026-10-26",
+      "lastTouched": "2026-10-27",
       "openIn": 2,
       "openOut": 0
     },
@@ -196,7 +196,7 @@
         "routes/deliverability.js"
       ],
       "files": 34,
-      "lines": 6810,
+      "lines": 6855,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -204,7 +204,7 @@
         },
         {
           "f": "routes/mailbox.js",
-          "n": 706
+          "n": 751
         },
         {
           "f": "email-vars.js",
@@ -215,7 +215,7 @@
           "n": 565
         }
       ],
-      "lastTouched": "2026-10-21",
+      "lastTouched": "2026-10-27",
       "openIn": 1,
       "openOut": 0
     },
@@ -254,6 +254,7 @@
         "enrichment.js",
         "services/poc-targets.js",
         "services/people-apollo.js",
+        "services/contact-data.js",
         "skill-dictionaries.js",
         "learned-skills.js",
         "routes/ai.js",
@@ -264,8 +265,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 31,
-      "lines": 12023,
+      "files": 32,
+      "lines": 12174,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -415,24 +416,24 @@
         "test/",
         ".github/"
       ],
-      "files": 318,
-      "lines": 52337,
+      "files": 322,
+      "lines": 53080,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",
-          "n": 856
+          "n": 895
         },
         {
           "f": "test/finder-page-smoke.mjs",
-          "n": 751
+          "n": 795
         },
         {
           "f": "test/ownership-requests-smoke.mjs",
           "n": 728
         },
         {
-          "f": "test/mailbox-smoke.mjs",
-          "n": 666
+          "f": "test/poc-routes-smoke.mjs",
+          "n": 699
         }
       ],
       "lastTouched": "2026-10-27",

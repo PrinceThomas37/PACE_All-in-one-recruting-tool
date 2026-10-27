@@ -23,11 +23,17 @@ function findChromium(){ if(process.env.PLAYWRIGHT_CHROMIUM) return process.env.
 const KEY = 'JS-KEY-ABCDEFGH1234';
 let js = { connected:false, hint:null, used:1, limit:6, per_run:3 };
 const calls = [];
-const apollo = () => ({ id:'apollo', category:'Contact database', label:'Apollo.io', description:'people', docs:'x', verifier:false, ai:false, has_test:true, configured:true,
+const apollo = () => ({ id:'apollo', contact:true, category:'Contact database', label:'Apollo.io', description:'people', docs:'x', verifier:false, ai:false, has_test:true, configured:true,
   fields:[{ key:'api_key', label:'API key', configured:true, hint:'••••••9999', value:null, secret:true, from_env:false }] });
 const groq = () => ({ id:'groq', category:'AI', label:'Groq', description:'x', docs:'x', verifier:false, ai:true, has_test:true, configured:true, active_ai:true,
   fields:[{ key:'api_key', label:'API key', configured:true, hint:'••••••1111', value:null, secret:true, from_env:false }] });
-const payload = () => ({ categories:[{ category:'AI', items:[groq()] }, { category:'Contact database', items:[apollo()] }], active_verifier:null, active_ai:'groq' });
+let TWO = false, ACTIVE_CONTACT = null;      // R-321: a second contact database on the list, and which one the organisation chose
+const zeta = () => ({ id:'zeta', contact:true, category:'Contact database', label:'Zeta Data', description:'people too', docs:'x', verifier:false, ai:false, has_test:true, configured:true,
+  fields:[{ key:'api_key', label:'API key', configured:true, hint:'••••••7777', value:null, secret:true, from_env:false }] });
+const payload = () => {
+  const items = TWO ? [Object.assign(apollo(), { active_contact: ACTIVE_CONTACT==='apollo' }), Object.assign(zeta(), { active_contact: ACTIVE_CONTACT==='zeta' })] : [apollo()];
+  return { categories:[{ category:'AI', items:[groq()] }, { category:'Contact database', items }], active_verifier:null, active_ai:'groq', active_contact: ACTIVE_CONTACT };
+};
 const FAIL_ATTEMPT = { provider:'groq', model:'openai/gpt-oss-120b', ok:false, tier:'quality', error:'HTTP 429 — Rate limit reached for model', available_models:['llama-3.3-70b','whisper-large-v3'] };
 const budget = () => ({ caps:{ tokens:100000, calls:500 }, spent:{ tokens:10, calls:1 }, features:[], provider_limits:[],
   last_test:{ at:'2026-10-07T15:20:00Z', working:false, attempts:[FAIL_ATTEMPT] },
@@ -43,6 +49,7 @@ async function api(route){
   if (m==='GET' && p==='/finder/admin/jobsource') return reply(route, js);
   if (m==='PUT' && p==='/finder/admin/jobsource') { const k=String((body&&body.api_key)||''); js = { connected:!!k, hint:k?'••••••'+k.slice(-4):null, used:js.used, limit:js.limit, per_run:3 }; return reply(route, js); }
   if (m==='POST' && p==='/finder/admin/jobsource/test') { js.used += 1; return reply(route, { ok:true, text:'The key works (1 request used; 3 jobs came back).', used:js.used, limit:js.limit }); }
+  if (m==='POST' && /^\/admin\/integrations\/(apollo|zeta)$/.test(p) && body && body.kind==='contact') { ACTIVE_CONTACT = body.active ? p.split('/').pop() : null; return reply(route, payload()); }
   if (m==='POST' && p==='/admin/integrations/ai-test') return reply(route, { configured:true, working:false, attempts:[Object.assign({}, FAIL_ATTEMPT, { error:'HTTP 429 — fresh test result' })], providers:[] });
   return reply(route, m==='GET'?[]:{});
 }
@@ -115,6 +122,22 @@ try{
   step('the AI intro is two sentences, and the per-feature numbers are folded until asked for', /AI is optional: every feature has a built-in version/.test(t) && !/Per request/.test(t) && /Show the per-feature numbers/.test(t) && !/Loading|built-in non-AI version that runs when/.test(t));
   await page.evaluate(()=>toggleAiBudgetDetail()); await page.waitForTimeout(150);
   step('…and open when asked (and folded again on the next visit)', /Per request/.test(await text()) && (await open(), !/Per request/.test(await text())));
+  // ── R-321: more than one contact database — the organisation picks which the finders use ──
+  await open();
+  step('with ONE contact database there is nothing to choose: no radio', await page.evaluate(()=>!document.querySelector('input[name="intg-active-contact"]')));
+  TWO = true; ACTIVE_CONTACT = 'zeta'; await open();
+  const pick = await page.evaluate(()=>{ const r=[...document.querySelectorAll('input[name="intg-active-contact"]')]; const cards=document.querySelector('.modal').innerHTML;
+    return { n:r.length, checked:r.filter(x=>x.checked).map(x=>x.getAttribute('onchange')), limitAt:cards.indexOf('intg-apollo-limit"'), jsAt:cards.indexOf('intg-jsearch-card'), zetaAt:cards.indexOf('Zeta Data'), apolloAt:cards.indexOf('Apollo.io') }; });
+  step('two contact databases: each card has a "use this one" radio, and the chosen one (Zeta) is the ticked one', pick.n===2 && pick.checked.length===1 && /setActiveContact\('zeta'\)/.test(pick.checked[0]), JSON.stringify(pick));
+  step('the daily limit and the free-job-sources card sit under the CHOSEN provider\'s card (after Zeta, not after Apollo), each once', pick.limitAt > pick.zetaAt && pick.jsAt > pick.zetaAt && pick.apolloAt < pick.zetaAt && (await page.evaluate(()=>document.querySelectorAll('#intg-jsearch-card').length))===1, JSON.stringify(pick));
+  if (SHOTS) { await page.setViewportSize({ width:1280, height:2600 }); await page.waitForTimeout(300); const el = await page.$('.modal'); if (el) await el.screenshot({ path: path.join(SHOTS,'integrations-two-contact-databases.png') }); await page.setViewportSize({ width:1280, height:1000 }); }
+  calls.length = 0;
+  await page.evaluate(()=>setActiveContact('apollo')); await page.waitForTimeout(400);
+  const posted = calls.find(c=>c[0]==='POST' && c[1]==='/admin/integrations/apollo');
+  step('choosing Apollo sends the contact choice for that provider (and says it is the contact choice, not the verifier\'s)', posted && posted[2] && posted[2].active===true && posted[2].kind==='contact', JSON.stringify(posted));
+  const moved = await page.evaluate(()=>{ const cards=document.querySelector('.modal').innerHTML; return { apolloAt:cards.indexOf('Apollo.io'), zetaAt:cards.indexOf('Zeta Data'), jsAt:cards.indexOf('intg-jsearch-card'), checked:[...document.querySelectorAll('input[name="intg-active-contact"]')].filter(x=>x.checked).map(x=>x.getAttribute('onchange')) }; });
+  step('…and the limit and the job-sources card MOVE to Apollo\'s card; Apollo is now the ticked one', moved.jsAt > moved.apolloAt && moved.jsAt < moved.zetaAt && /setActiveContact\('apollo'\)/.test(moved.checked[0]||''), JSON.stringify(moved));
+  TWO = false; ACTIVE_CONTACT = null;
   step('no page errors', pageErrors.length===0, pageErrors.join(' | '));
 } catch(e){ step('test ran without throwing', false, String(e&&e.stack||e)); }
 finally{ if(browser) await browser.close(); server.close(); }

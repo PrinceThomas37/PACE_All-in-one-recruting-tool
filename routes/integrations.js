@@ -12,7 +12,7 @@ const aiBudget = require('../services/ai-budget');
 const aiProvider = require('../services/ai-provider');
 const { verifyEmailAddress } = require('../email-verify');
 const httpClient = require('../http-client');
-const peopleApollo = require('../services/people-apollo');
+const cdata = require('../services/contact-data');
 
 // Thin adapter over the shared client, keeping this file's (url, ms, options)
 // argument order so the provider tests below are unchanged. No retry: these are
@@ -75,12 +75,11 @@ async function testProvider(id, key, extra = {}) {
       const r = await pingJson(`https://api.hunter.io/v2/account?api_key=${encodeURIComponent(key)}`);
       return r.ok ? { ok: true, detail: r.data?.data?.plan_name ? `Plan: ${r.data.data.plan_name}` : 'Key valid' } : { ok: false, error: r.data?.errors?.[0]?.details || 'Invalid key' };
     }
-    if (id === 'apollo') {
-      // The question that matters is not "is the key valid" but "can it do
-      // the POC finder's job" — a valid key on a plan without API access
-      // answers the first yes and fails every real search (the owner's plan
-      // on 2026-09-27 did exactly that). People search is free, so ask it.
-      const r = await peopleApollo.checkPeopleSearch({ key });
+    if (integrations.BY_ID.get(id) && integrations.BY_ID.get(id).contact && cdata.has(id)) {
+      // A contact-data provider (R-321). The question that matters is not "is the key valid" but "can it do the finders' job" — a valid
+      // key on a plan without API access answers the first yes and fails every real search (the owner's plan on 2026-09-27 did exactly
+      // that). People search is the cheap question, so ask it — through the provider's own adapter, whichever provider this is.
+      const r = await cdata.adapterFor(id).checkPeopleSearch({ key });
       return r.ok ? { ok: true, detail: 'Key valid · people search allowed' } : { ok: false, error: r.error };
     }
     return { ok: true, detail: 'Saved — no automated test for this provider' };
@@ -168,9 +167,13 @@ module.exports = (ctx) => {
         // One "active" flag, two registries: an AI provider and an email
         // verifier are each chosen from their own group.
         const def = integrations.BY_ID.get(req.params.id);
-        const r = def && def.ai
-          ? await integrations.setActiveAi(supabase, b.active ? req.params.id : null, orgOf(req))
-          : await integrations.setActiveVerifier(supabase, b.active ? req.params.id : null, orgOf(req));
+        const target = b.active ? req.params.id : null;
+        // `kind` says which choice when a provider serves more than one (a verifier that is also a contact database); without it, an AI
+        // provider is the AI choice, a contact-data provider the contact choice, anything else the verifier choice.
+        const kind = b.kind || (def && def.ai ? 'ai' : (def && def.contact ? 'contact' : 'verifier'));
+        const r = kind === 'ai' ? await integrations.setActiveAi(supabase, target, orgOf(req))
+          : kind === 'contact' ? await integrations.setActiveContact(supabase, target, orgOf(req))
+          : await integrations.setActiveVerifier(supabase, target, orgOf(req));
         if (r.error) return res.status(400).json({ error: r.error });
       }
       res.json(await integrations.getAll(supabase, orgOf(req)));
@@ -195,11 +198,11 @@ module.exports = (ctx) => {
       const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key', orgOf(req));
       const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url', orgOf(req));
       const result = await testProvider(req.params.id, key, { base_url });
-      // Apollo's answer is kept (never the key) beside the POC finder's own
-      // calls, so "I pressed Test and it said…" can be read from the database.
-      if (req.params.id === 'apollo') {
+      // The contact database's answer is kept (never the key) beside the POC finder's own calls, so "I pressed Test and it said…" can be
+      // read from the database.
+      if (integrations.BY_ID.get(req.params.id) && integrations.BY_ID.get(req.params.id).contact && cdata.has(req.params.id)) {
         try {
-          const rec = peopleApollo.callRecord('key_test', { ok: !!result.ok, error: result.error }, new Date().toISOString());
+          const rec = cdata.adapterFor(req.params.id).callRecord('key_test', { ok: !!result.ok, error: result.error }, new Date().toISOString());
           const rows = [{ key: 'apollo_last_call', value: JSON.stringify(rec), updated_at: new Date() }];
           if (!rec.ok) rows.push({ key: 'apollo_last_error', value: JSON.stringify(rec), updated_at: new Date() });
           await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });

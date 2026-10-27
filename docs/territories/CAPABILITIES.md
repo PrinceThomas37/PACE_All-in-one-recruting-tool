@@ -810,3 +810,8 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **Click a draft in a mailbox's Drafts folder to keep writing it** — Gmail or Outlook, in either view (27 Oct).
 - **The lead beside its email** — an email from (or to) a person PACE knows as a lead's contact shows who they are, the company, and the leads with job, place, stage and owner — only leads you may see (27 Oct).
 
+## Contact data from any provider (Session 54, R-321, D-0175, D-0180 — on the branch)
+- **Each company picks which contact-data tool finds its people and companies** (Apollo today) — and keeps its own key. When a company has more than one, Integrations shows a "use this one" choice; the daily credit limit and the free-job-sources card sit beside the chosen one (27 Oct).
+- **Screens name the company's own provider and offer only what it can do** — no "Apollo" written into the app for a company that chose another; a button the provider does not have (look a company up by name, see its open jobs) is not shown, and says so (27 Oct).
+- **A company with no contact database connected is told what to do** — an admin: where to connect one; anyone else: to ask an admin (27 Oct).
+
