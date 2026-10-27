@@ -70,6 +70,15 @@ try {
     await page.waitForFunction(() => STATE.userEmailsCache && STATE.userEmailsCache.u9, null, { timeout: 5000 });
     step('Profile: a password typed before the email IDs arrive survives the repaint', (await page.$eval('#ud-pw', e => e.value)) === 'typed-before-load');
     await eyeCycle('Profile', 'ud-pw');
+    // R-322 (seen twice in full runs: the box held "typed-before-loadwelcome-2026"): a repaint landing while the person has the
+    // old text SELECTED to type over it. The kept value used to be put back AFTER the selection, which moves the caret to the
+    // end — so the new password was added to the old one. Made to happen on purpose here, not left to timing.
+    await page.$eval('#ud-pw', (e) => { e.value = 'old-password'; e.focus(); e.setSelectionRange(0, e.value.length); });
+    await page.evaluate(() => { STATE.userEmailsCache.u9 = [{ id: 'mb-late', email_address: 'late@box.test' }]; render(); });
+    const sel = await page.$eval('#ud-pw', (e) => [e.value, e.selectionStart, e.selectionEnd, document.activeElement === e]);
+    step('Profile: a repaint while the old password is selected keeps it selected (and focused)', sel[0] === 'old-password' && sel[1] === 0 && sel[2] === 12 && sel[3], JSON.stringify(sel));
+    await page.keyboard.type('brand-new-2026');
+    step('…so typing over it REPLACES it, never adds to it', (await page.$eval('#ud-pw', (e) => e.value)) === 'brand-new-2026', await page.$eval('#ud-pw', (e) => e.value));
   } else step('Profile: the Sign-in password box rendered', false, 'ud-pw not found');
   step('no page errors', errors.length === 0, errors.join(' | ').slice(0, 200));
 } finally { await browser.close(); server.close(); }
