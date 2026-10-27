@@ -326,7 +326,14 @@ function render(){
   STATE._rendering=false;
   bindApp();
   startClock();
-  Object.keys(_kept).forEach(function(id){ var el=document.getElementById(id); if(el&&el.hasAttribute('data-keep-typed')&&!el.value) el.value=_kept[id]; });
+  // Putting a value back moves the caret to the end, so a box that is being typed in gets its selection back AFTER its value
+  // (R-322: the old password selected to type over, a repaint in between → the new one was added to the old one).
+  Object.keys(_kept).forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el||!el.hasAttribute('data-keep-typed')||el.value) return;
+    el.value=_kept[id];
+    if(id===_focusId&&_selStart>=0&&el.setSelectionRange){ try{ if(el!==document.activeElement) el.focus(); el.setSelectionRange(_selStart,_selEnd); }catch(e){} }
+  });
   // Restore scroll positions after re-render
   var newContent=document.getElementById("content");
   if(newContent){

@@ -2,6 +2,7 @@ require('dotenv').config();
 const { formatter: dtf, isZone } = require('./services/date-format');   // one formatter per kind, made once (R-298: per-row formatters filled the server's memory)
 const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
 const { loadLeadList } = require('./services/lead-list');   // the lead list carries no posting text (R-301)
+const leadListCache = require('./services/lead-list-cache');   // one lead-list load at a time; dropped only by writes that can change a lead (R-324)
 const sequenceTemplates = require('./services/sequence-templates');
 const sequenceV2 = require('./services/sequence-v2');
 const express = require('express');
@@ -785,8 +786,10 @@ app.use(express.static('public', {
 // Any successful write may change jobs/contacts, so drop the /jobs cache — this
 // is what keeps the cache invisible to users (their own edits show up on the
 // very next poll). Internal mutations (send loop, sweeps) are covered by the TTL.
+// R-324: only a write that CAN change a lead drops it (services/lead-list-cache.js writeMayChangeLeads) — a sign-in, a Find Leads
+// search or reading mail used to throw the whole list away, so it was reloaded (20-30 s, +100 MB) several times a minute.
 app.use(function(req, res, next) {
-  if (['POST','PUT','PATCH','DELETE'].includes(req.method)) {
+  if (leadListCache.writeMayChangeLeads(req.method, req.path)) {
     res.on('finish', () => { if (res.statusCode < 400) invalidateJobsCache(); });
   }
   next();
@@ -816,20 +819,20 @@ const JOB_SELECT = `*, research, company:companies(id,name,website,industry,loca
 // always see their own changes immediately.
 // Keyed per org_id so one tenant's leads are never served out of another
 // tenant's cache entry once a second org exists.
-let jobsCacheByOrg = new Map();
-const JOBS_CACHE_TTL_MS = 60 * 1000;
+// R-304/R-324: kept 5 minutes, not 1. Every change made THROUGH PACE (a person saving a lead, a contact, a company, an Accept,
+// writing emails) still drops it at once (writeMayChangeLeads), so people see their own changes immediately; only changes the
+// background engine makes (the send loop marking a contact emailed, a reply sweep) can show up to 5 minutes late. The tabs poll
+// every 3 minutes, so with a 1-minute copy nearly every poll — even a "nothing changed" one — rebuilt the whole list.
+const JOBS_CACHE_TTL_MS = 5 * 60 * 1000;
 const JOBS_PAGE = 500;   // rows per read while loading the list — 3 trips to the database for today's leads, each page cut before the next (a technical batch size, not a customer limit)
-function invalidateJobsCache() { jobsCacheByOrg.clear(); }
-
-async function loadAllJobs(orgId) {
-  const key = orgId || '__all__';
-  const cached = jobsCacheByOrg.get(key);
-  if (cached && (Date.now() - cached.at) < JOBS_CACHE_TTL_MS) return cached.data;
-  // R-301: read in pages, each lead's posting text dropped as its page arrives (services/lead-list.js).
-  const rows = await loadLeadList({ supabase, select: JOB_SELECT, orgId, pageSize: JOBS_PAGE });
-  jobsCacheByOrg.set(key, { data: rows, at: Date.now() });
-  return rows;
-}
+// R-324: one load per organisation at a time — everyone asking meanwhile shares it (services/lead-list-cache.js).
+// R-301: read in pages, each lead's posting text dropped as its page arrives (services/lead-list.js).
+const jobsCache = leadListCache.createLeadListCache({
+  ttlMs: JOBS_CACHE_TTL_MS,
+  load: (orgId) => loadLeadList({ supabase, select: JOB_SELECT, orgId, pageSize: JOBS_PAGE }),
+});
+function invalidateJobsCache() { jobsCache.invalidate(); }
+function loadAllJobs(orgId) { return jobsCache.get(orgId); }
 
 // Jobs routes (list/detail/create/bulk/update/delete/export, JD parsing,
 // research, /jobs/:job_id/contacts) → extracted to routes/jobs.js (mounted

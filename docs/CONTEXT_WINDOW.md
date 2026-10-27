@@ -4,6 +4,10 @@
 
 **Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0178** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
 
+## START HERE (26 Oct, Session 53, very last) — #369 merging (clean-worktree runs); R-324 speed step 1 built, next PR
+
+R-324 step 1 (lead-list cache: skip unrelated writes, shared load, parallel pages, 5-min copy) is built and tested in the working tree, committed only after #369 merges, on the branch restarted from main. Then: re-read Render [SlowReq] for GET /jobs after it is live; if still slow → R-303.
+
 ## START HERE (26 Oct, Session 53, last) — D-0177 managers open jobs (owner's pipeline); D-0178 reminder → your lead
 
 Both built on #369 with tests; #369 waits on the owner's "merge" (it now carries P1, D-0174/0176/0177, R-323, R-309/D-0178). Find Leads ownership left as D-0111 — owner told it is my reading; re-open if they meant ownership at save time.
