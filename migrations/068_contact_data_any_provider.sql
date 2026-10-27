@@ -1,4 +1,4 @@
--- 068 — CONTACT DATA FROM ANY PROVIDER (R-321, D-0175, D-0180). NOT APPLIED to the live database yet.
+-- 068 — CONTACT DATA FROM ANY PROVIDER (R-321, D-0175, D-0180). APPLIED to the live database 27 Oct 2026 on the owner's go-ahead ("apply migration and merge it"); the three constraints were read back and the 21 suggestions / 46 sized companies already stored were untouched.
 --
 -- Until now three columns only accepted the one vendor that was hard-wired:
 --   poc_suggestions.source        CHECK IN ('apollo', 'website', 'posting')        (migration 052)
@@ -8,8 +8,7 @@
 -- digits and underscores), so those lists become a pattern. Every value already stored ('apollo', 'website', 'posting', 'format',
 -- 'manual') matches it, so nothing existing changes and nothing is rewritten.
 --
--- WHEN TO APPLY: before the first non-Apollo adapter is registered (the code writes the provider's id as the source). With only Apollo
--- registered nothing needs it. Apply with the owner's go-ahead; safe to run twice. The old named constraints are dropped by looking up
+-- WHEN TO APPLY: before the first non-Apollo adapter is registered (the code writes the provider's id as the source). Safe to run twice. The old named constraints are dropped by looking up
 -- whatever check mentions the column, so it does not depend on a generated name.
 
 DO $$
