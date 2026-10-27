@@ -298,6 +298,18 @@ customer-facing text.**
 Leads: 08:00–16:00 in the lead's timezone. Candidates: **no window** since
 D-0010 (switch off by default). One resolver, `getTimezoneFromLocation`.
 
+### See who is behind an Outreach Insights number
+**Status:** BUILT (R-316) · owner `surface` + `observatory`
+Click People emailed / Opened / Replied / Interested / Bounced to list exactly those people (name, email, company, position, industry, time zone, sends, opened, replied, stage, bounce kind), download the list for Excel, and see the numbers by industry and by time zone. Bounced = invalid or blocked addresses, shown separately (D-0179).
+
+### Interview emails for each person
+**Status:** BUILT (R-317) · owner `harbour` + `surface`
+When an interview is scheduled, separate emails go to the candidate (when, how to join, interviewers and titles, the job description), the client (the candidate's name, email and phone, when and how, résumé attached) and/or the BD manager — from the mailbox the person picks.
+
+### Mailbox: undo send, star, pop out, wider list
+**Status:** BUILT (R-318) · owner `surface` + `harbour`
+Send waits 5 seconds with an Undo button; Star sets the same star in Gmail / flag in Outlook; Pop out opens a long email in its own window; the line between the list and the email can be dragged and is remembered.
+
 ### Turn a reminder into a lead
 **Status:** BUILT (dev branch, R-309 / D-0178) · owner `surface` + `gateway`
 A reminder about someone PACE does not know shows "Add as lead": the Add Lead window opens filled in from the reminder, the person adds the position, and the lead is theirs straight away (Assigned, from their main mailbox), with the reminder tied to it.

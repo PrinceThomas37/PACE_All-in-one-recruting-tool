@@ -185,62 +185,99 @@ router.get('/insights/bd-team', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// R-316: the summary and the people behind each number read the SAME rows (loadOutreach) and count with the SAME rules
+// (services/outreach-insights.js summarise / peopleBehind / breakdown), so a list can never disagree with the tile it opened from.
+async function loadOutreach(req) {
+  const me = req.user.id, q = req.query || {}, tz = bdInsights.validZone(q.tz), w = bdInsights.windows(new Date(), tz);
+  const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+  let from = isDay(q.from) ? q.from : w.monthFrom, to = isDay(q.to) ? q.to : w.today;
+  if (from > to) [from, to] = [to, from];
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) from = new Date(Date.parse(to) - 366 * 864e5).toISOString().slice(0, 10);
+  const dayIn = (ts) => bdInsights.dayOf(ts, tz);
+  const readFrom = new Date(Date.parse(from + 'T00:00:00Z') - 36 * 3600e3).toISOString();      // a zone ahead of UTC starts its day early
+  const readTo = new Date(Date.parse(to + 'T00:00:00Z') + 60 * 3600e3).toISOString();
+  const org = (qq) => (req.orgId ? qq.eq('org_id', req.orgId) : qq);
+  const chunks = (ids, n = 150) => { const out = []; for (let i = 0; i < ids.length; i += n) out.push(ids.slice(i, i + n)); return out; };
+
+  // my sequences in this organisation, and their steps' records of what they sent
+  const defs = await fetchAll(() => org(supabase.from('workflow_definitions').select('id,name,created_by')).order('id'));
+  const seqNames = {}; defs.forEach((d) => { seqNames[d.id] = d.name; });
+  const defIds = defs.map((d) => d.id);
+  const runs = [];
+  for (const part of chunks(defIds, 100)) {
+    runs.push(...await fetchAll(() => supabase.from('workflow_step_runs').select('workflow_id,detail,run_at').in('workflow_id', part)
+      .eq('outcome', 'done').gte('run_at', readFrom).lte('run_at', readTo).order('id')));
+  }
+  const seqOfEmail = {}, seqOfToken = {};
+  runs.forEach((r) => { const d = r.detail || {}; if (d.email_id) seqOfEmail[d.email_id] = r.workflow_id; if (d.token) seqOfToken[d.token] = r.workflow_id; });
+
+  // the lead emails I sent (emails.sent_at is the UTC DAY of the send)
+  const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id').eq('sent_by', me).eq('status', 'sent')
+    .gte('sent_at', new Date(Date.parse(from) - 864e5).toISOString().slice(0, 10)).lte('sent_at', new Date(Date.parse(to) + 864e5).toISOString().slice(0, 10))).order('id'));
+  const leadSends = emails.map((e) => ({ id: e.id, day: String(e.sent_at || '').slice(0, 10), contact_id: e.contact_id, seq: seqOfEmail[e.id] || null }));
+  const tracking = [], contacts = {};
+  for (const part of chunks(emails.map((e) => e.id))) tracking.push(...await fetchAll(() => org(supabase.from('email_tracking').select('email_id,open_count').in('email_id', part)).order('id')));
+  const cids = [...new Set(emails.map((e) => e.contact_id).filter(Boolean))], jobOf = {};
+  for (const part of chunks(cids)) {
+    (await fetchAll(() => org(supabase.from('contacts').select('id,first_name,last_name,email,email_status,replied_at,job_id').in('id', part)).order('id'))).forEach((c) => {
+      contacts[c.id] = { email_status: c.email_status, replied_day: c.replied_at ? dayIn(c.replied_at) : null, job_id: c.job_id,
+        name: [c.first_name, c.last_name].filter(Boolean).join(' '), email: c.email || '' };
+    });
+  }
+  const jids = [...new Set(Object.values(contacts).map((c) => c.job_id).filter(Boolean))];
+  for (const part of chunks(jids)) {
+    (await fetchAll(() => org(supabase.from('jobs').select('id,stage,position,industry,timezone,company:companies(name,industry)').in('id', part)).order('id'))).forEach((j) => { jobOf[j.id] = j; });
+  }
+  Object.values(contacts).forEach((c) => {
+    const j = jobOf[c.job_id] || {};
+    c.stage = j.stage || null; c.position = j.position || ''; c.company = (j.company && j.company.name) || '';
+    c.industry = j.industry || (j.company && j.company.industry) || ''; c.timezone = j.timezone || '';
+  });
+
+  // the candidate sequence emails I sent (tracked rows)
+  const cand = await fetchAll(() => org(supabase.from('email_tracking').select('id,token,candidate_id,open_count,replied_at,sent_at')
+    .eq('sent_by', me).eq('channel', 'candidate_sequence').gte('sent_at', readFrom).lte('sent_at', readTo)).order('id'));
+  const candSends = cand.map((t) => ({ id: t.id, day: dayIn(t.sent_at), candidate_id: t.candidate_id, open_count: t.open_count,
+    replied_day: t.replied_at ? dayIn(t.replied_at) : null, seq: seqOfToken[t.token] || null }));
+
+  return { me, q, tz, from, to, defs, seqNames, leadSends, tracking, contacts, candSends, chunks, org };
+}
+
 // OUTREACH INSIGHTS — the caller's own sequences, each number once (R-278, D-0160). services/outreach-insights.js counts; this reads.
 // ?from=&to= (YYYY-MM-DD, the viewer's days; default the last 30) · ?bucket=day|week · ?seq=all|outreach|<workflow id> · ?tz=
 const outreachInsights = require('../services/outreach-insights');
 router.get('/insights/outreach', auth, async (req, res) => {
   try {
-    const me = req.user.id, q = req.query || {}, tz = bdInsights.validZone(q.tz), w = bdInsights.windows(new Date(), tz);
-    const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
-    let from = isDay(q.from) ? q.from : w.monthFrom, to = isDay(q.to) ? q.to : w.today;
-    if (from > to) [from, to] = [to, from];
-    if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) from = new Date(Date.parse(to) - 366 * 864e5).toISOString().slice(0, 10);
-    const dayIn = (ts) => bdInsights.dayOf(ts, tz);
-    const readFrom = new Date(Date.parse(from + 'T00:00:00Z') - 36 * 3600e3).toISOString();      // a zone ahead of UTC starts its day early
-    const readTo = new Date(Date.parse(to + 'T00:00:00Z') + 60 * 3600e3).toISOString();
-    const org = (qq) => (req.orgId ? qq.eq('org_id', req.orgId) : qq);
-    const chunks = (ids, n = 150) => { const out = []; for (let i = 0; i < ids.length; i += n) out.push(ids.slice(i, i + n)); return out; };
-
-    // my sequences in this organisation, and their steps' records of what they sent
-    const defs = await fetchAll(() => org(supabase.from('workflow_definitions').select('id,name,created_by')).order('id'));
-    const seqNames = {}; defs.forEach((d) => { seqNames[d.id] = d.name; });
-    const defIds = defs.map((d) => d.id);
-    const runs = [];
-    for (const part of chunks(defIds, 100)) {
-      runs.push(...await fetchAll(() => supabase.from('workflow_step_runs').select('workflow_id,detail,run_at').in('workflow_id', part)
-        .eq('outcome', 'done').gte('run_at', readFrom).lte('run_at', readTo).order('id')));
-    }
-    const seqOfEmail = {}, seqOfToken = {};
-    runs.forEach((r) => { const d = r.detail || {}; if (d.email_id) seqOfEmail[d.email_id] = r.workflow_id; if (d.token) seqOfToken[d.token] = r.workflow_id; });
-
-    // the lead emails I sent (emails.sent_at is the UTC DAY of the send)
-    const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id').eq('sent_by', me).eq('status', 'sent')
-      .gte('sent_at', new Date(Date.parse(from) - 864e5).toISOString().slice(0, 10)).lte('sent_at', new Date(Date.parse(to) + 864e5).toISOString().slice(0, 10))).order('id'));
-    const leadSends = emails.map((e) => ({ id: e.id, day: String(e.sent_at || '').slice(0, 10), contact_id: e.contact_id, seq: seqOfEmail[e.id] || null }));
-    const tracking = [], contacts = {};
-    for (const part of chunks(emails.map((e) => e.id))) tracking.push(...await fetchAll(() => org(supabase.from('email_tracking').select('email_id,open_count').in('email_id', part)).order('id')));
-    const cids = [...new Set(emails.map((e) => e.contact_id).filter(Boolean))], jobOf = {};
-    for (const part of chunks(cids)) {
-      (await fetchAll(() => org(supabase.from('contacts').select('id,email_status,replied_at,job_id').in('id', part)).order('id'))).forEach((c) => {
-        contacts[c.id] = { email_status: c.email_status, replied_day: c.replied_at ? dayIn(c.replied_at) : null, job_id: c.job_id };
-      });
-    }
-    const jids = [...new Set(Object.values(contacts).map((c) => c.job_id).filter(Boolean))];
-    for (const part of chunks(jids)) (await fetchAll(() => org(supabase.from('jobs').select('id,stage').in('id', part)).order('id'))).forEach((j) => { jobOf[j.id] = j.stage; });
-    Object.values(contacts).forEach((c) => { c.stage = jobOf[c.job_id] || null; });
-
-    // the candidate sequence emails I sent (tracked rows)
-    const cand = await fetchAll(() => org(supabase.from('email_tracking').select('id,token,candidate_id,open_count,replied_at,sent_at')
-      .eq('sent_by', me).eq('channel', 'candidate_sequence').gte('sent_at', readFrom).lte('sent_at', readTo)).order('id'));
-    const candSends = cand.map((t) => ({ id: t.id, day: dayIn(t.sent_at), candidate_id: t.candidate_id, open_count: t.open_count,
-      replied_day: t.replied_at ? dayIn(t.replied_at) : null, seq: seqOfToken[t.token] || null }));
-
-    const out = outreachInsights.summarise({ from, to, bucket: q.bucket, leadSends, tracking, contacts, candSends, seqNames, only: q.seq });
+    const L = await loadOutreach(req);
+    const inputs = { from: L.from, to: L.to, bucket: L.q.bucket, leadSends: L.leadSends, tracking: L.tracking, contacts: L.contacts, candSends: L.candSends, seqNames: L.seqNames, only: L.q.seq };
+    const out = outreachInsights.summarise(inputs);
+    // R-316: the same numbers by industry and by time zone (leads only — a candidate has neither)
+    out.by_industry = outreachInsights.breakdown(inputs, 'industry');
+    out.by_timezone = outreachInsights.breakdown(inputs, 'timezone');
     // the picker: Your outreach + every sequence of this person (a lead/admin sees the ones they made)
     out.choices = [{ id: 'all', name: 'All sequences' }, { id: outreachInsights.OUTREACH, name: 'Your outreach' }]
-      .concat(defs.filter((d) => d.created_by === me).map((d) => ({ id: d.id, name: d.name })));
-    out.tz = tz;
+      .concat(L.defs.filter((d) => d.created_by === L.me).map((d) => ({ id: d.id, name: d.name })));
+    out.tz = L.tz;
     res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// R-316: the people behind one number — ?kind=emailed|opened|replied|interested|bounced, same filters as above.
+// Only ever the caller's own sends (loadOutreach reads sent_by = me), so it shows nobody the summary would not count.
+router.get('/insights/outreach/people', auth, async (req, res) => {
+  try {
+    const L = await loadOutreach(req);
+    const kind = outreachInsights.KINDS.includes(L.q.kind) ? L.q.kind : 'emailed';
+    // candidates: who they are (name, email, the job they were written about is not needed here)
+    const candIds = [...new Set(L.candSends.map((s) => s.candidate_id).filter(Boolean))], candidates = {};
+    for (const part of L.chunks(candIds)) {
+      (await fetchAll(() => { let cq = supabase.from('candidates').select('id,first_name,last_name,email,current_title').in('id', part); if (req.orgId) cq = cq.eq('org_id', req.orgId); return cq.order('id'); })).forEach((c) => {
+        candidates[c.id] = { name: [c.first_name, c.last_name].filter(Boolean).join(' '), email: c.email || '', position: c.current_title || '' };
+      });
+    }
+    const rows = outreachInsights.peopleBehind({ from: L.from, to: L.to, leadSends: L.leadSends, tracking: L.tracking, contacts: L.contacts,
+      candSends: L.candSends, candidates, seqNames: L.seqNames, only: L.q.seq }, kind);
+    res.json({ from: L.from, to: L.to, kind, count: rows.length, people: rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

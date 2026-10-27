@@ -114,7 +114,7 @@ step('candidate email: a mailbox that is not yours is refused before anything is
 
 // ═══ part 3 — the interview confirmation ════════════════════════════════
 const job = { id: 'jo1', job_title: 'HVAC Service Technician', client: 'Griffith Energy', city: 'Westminster', state: 'MD',
-  job_type: 'Full-time', remote: 'No', job_description: 'Service and repair commercial HVAC systems.  Hold EPA 608. ' + 'Work with a small crew. '.repeat(60),
+  job_type: 'Full-time', remote: 'No', job_description: 'Service and repair commercial HVAC systems.  Hold EPA 608. ' + 'Work with a small crew. '.repeat(200),
   company: { name: 'Griffith Energy' }, bd_manager: { id: 'bd1', name: 'Neil Patrick', email: 'neil@ours.com' } };
 const sub = (over) => Object.assign({ id: 'sub1', org_id: ORG, interview_at: '2026-10-05T14:00:00Z', interview_type: 'phone', interview_link: '+1 555 010 0000',
   interviewers: ['Jane Smith'], candidate_id: 'cd1', job_order_id: 'jo1', candidate: { id: 'cd1', full_name: 'Sarah Chen', email: 'sarah@x.test' }, job }, over || {});
@@ -124,13 +124,14 @@ r = await call('POST /submissions/:id/interview-invite', { params: { id: 'sub1' 
 step('interview invite from a GMAIL mailbox now sends (it used to call Microsoft directly and fail)', r.status === 200 && r.body.sent === 1 && sent.length === 1 && sent[0].via === 'gmail', JSON.stringify(r.body));
 const cand = sent[0] ? sent[0].html : '';
 step('a PHONE interview still gets its confirmation, saying it is a phone call and the number', /Phone call/.test(cand) && /555 010 0000/.test(cand));
-step('the candidate\'s copy carries the job details: place, job type, what the role is', /Westminster, MD/.test(cand) && /Full-time/.test(cand) && /About the role: Service and repair commercial HVAC/.test(cand), cand.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
-step('…the description is cut short, never dumped whole', !/(Work with a small crew\. ){40}/.test(cand));
+step('the candidate\'s copy carries the job details: place, job type, what the role is', /Westminster, MD/.test(cand) && /Full-time/.test(cand) && /Job description\s+(<[^>]+>\s*)*Service and repair commercial HVAC/.test(cand), cand.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 400));
+// R-317 (owner 26 Oct): the candidate gets the JOB DESCRIPTION, not a 600-character blurb — still cut at ~3,000 characters.
+step('…the description is cut short, never dumped whole (the JD up to ~3,000 characters)', (cand.match(/Work with a small crew\./g) || []).length > 60 && !/(Work with a small crew\. ){150}/.test(cand) && /…/.test(cand));
 step('…and it states no pay figure', !/\$|per hour|salary|pay rate/i.test(cand));
 sent.length = 0;
 r = await call('POST /submissions/:id/interview-invite', { params: { id: 'sub1' }, body: { recipients: ['bd_manager'] } });
 const bd = sent[0] ? sent[0].html : '';
-step('the BD manager\'s copy does not carry the candidate-facing job blurb', r.body.sent === 1 && !/About the role/.test(bd) && /Sarah Chen/.test(bd));
+step('the BD manager\'s copy does not carry the candidate-facing job blurb', r.body.sent === 1 && !/Job description/.test(bd) && /Sarah Chen/.test(bd));
 sent.length = 0;
 r = await call('POST /submissions/:id/interview-invite', { params: { id: 'sub1' }, body: { recipients: ['candidate'], mailbox_id: 'mb-theirs' } });
 step('an invite from a mailbox that is not yours is refused before anything is sent', r.status === 404 && sent.length === 0);

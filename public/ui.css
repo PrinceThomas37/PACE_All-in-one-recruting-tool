@@ -618,11 +618,19 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 .mb{display:flex;flex-direction:column;height:100%;min-height:0}
 .mb-panes{flex:1;display:flex;min-height:0}
 .mb-list{
-  width:340px;min-width:300px;flex-shrink:0;
+  width:var(--mb-list-w,340px);min-width:240px;flex-shrink:0;
   border-right:1px solid var(--line);background:var(--card);overflow-y:auto;
 }
 .mb-list.wide{width:auto;flex:1}
 .mb-read{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+/* R-318: the line between the list and the message can be dragged */
+.mb-resize{flex:none;width:6px;margin-left:-3px;margin-right:-3px;position:relative;z-index:2;cursor:col-resize;background:transparent}
+@media (hover:hover) and (pointer:fine){.mb-resize:hover{background:var(--accent)}}
+.mb-resize:focus-visible{background:var(--accent);outline:none}
+.mb-list.wide+.mb-resize{display:none}
+body.mb-resizing{cursor:col-resize;user-select:none}
+body.mb-resizing iframe{pointer-events:none}
+.mb-star.on{color:var(--amber)}
 
 .mb-row{
   display:flex;gap:10px;padding:11px 14px;cursor:pointer;
@@ -747,6 +755,7 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 }
 .mb-empty svg{width:36px;height:36px;opacity:.5}
 @media(max-width:960px){
+  .mb-resize{display:none}
   .mb-list{width:100%;min-width:0}
   .mb-read{display:none}
   .mb-panes.reading .mb-list{display:none}

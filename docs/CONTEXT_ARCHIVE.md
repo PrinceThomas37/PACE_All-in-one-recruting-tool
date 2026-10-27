@@ -7094,3 +7094,9 @@ Owner said merge #369. I had told them "Node 22: 305/305" — WRONG: I grepped a
 
 ### 27 Oct 2026 — #369 live (23:59 UTC); #370 opened (R-324 step 1); R-322 found and fixed on it
 #369 merged after clean-worktree runs (306/307 each; the one failure was a test anchored on `function loadAppData(){`, fixed in 0c8636c) — deploy dep-dbfuia4s728c73ena230 live 23:59:19 UTC. Branch restarted from main, speed fix restored from the stash, #370 opened. Its clean run: Node 26 308/308, Node 22 306/307 (password-eye — R-322, second sighting). Fixed R-322 on #370 (repaint restored the kept value after the selection). Owner's order: speed fix → P2 (R-316 first) → R-321 plan → P3.
+
+### 27 Oct 2026 — P2 started: Outreach Insights click-through (R-316), built while #370's full run goes
+Tiles open the people behind each number (same counting rules, one shared loader), Excel (CSV) download, by industry / by time zone. Caught by my own screenshot, not the first test: tile numbers invisible in the dark theme (button `color:inherit`) — fixed and a contrast check added. Kept uncommitted until #370 merges (one PR at a time on the session branch).
+
+### 27 Oct 2026 — #370 live (02:42 UTC); P2 finished (R-316 incl. D-0179, R-317, R-318); hand-off written
+Owner: "Complete p2 and merge the files and update the context … I don't want the discussion that we had at the first to lose out", then "Yes merge all these changes". #370 merged after clean-worktree 308/308 on both Nodes. The session worker restarted mid-work (uncommitted P2 survived in the tree; plan mode came on and was approved). P2: Outreach Insights click-through + bounce split (D-0179), interview emails per person with the client copy and résumé, mailbox Undo (held in the window) / Star (provider's own) / Pop out / drag-to-resize. The opening discussion (model/cost answer, the 28 notes, P0–P4) is now `docs/PLAN_2026-10-26_28_NOTES.md`. Owner advised to continue in a NEW chat (not compacting).

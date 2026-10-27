@@ -2,7 +2,25 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0178** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+**Updated**: 2026-10-26 (Session 53). **Highest ids:** decision **D-0179** · contract C-0038 · roadmap **R-324** (next `R-325`) · next migration **068** (none added this session).
+
+## START HERE (27 Oct, end of Session 53) — the 28-note doc: P0, P1, P2 done; the owner continues in a NEW chat
+
+**Read first:** `docs/PLAN_2026-10-26_28_NOTES.md` — the owner's 28 notes, the P0–P4 ranking, the model/cost answer (agents save
+context, not money; Haiku `scout` only for read-only look-ups; Opus on mail/data/security/AI), what shipped in which PR, and the
+rulings D-0174…D-0179.
+
+**Live:** #368 (P0), #369 (P1 + client-owner rules + sign-in survives a slow server + reminder → lead), #370 (R-324 speed step 1 +
+R-322) — live 27 Oct 02:42 UTC. **P2** (R-316 Outreach Insights click-through + D-0179 bounce split, R-317 interview emails per
+person with the client copy + résumé, R-318 mailbox Undo / Star / Pop out / resize) — the P2 PR merges after its clean-worktree runs.
+
+**Next, in the owner's order:** (1) read Render `[SlowReq]` for GET /jobs after a working day on #370; if loads are still 15 s+, plan
+R-303 (a list that never loads everything); (2) **plan R-321** (contact data from any provider — ~370 Apollo references in 17 files;
+needs vendor docs + a customer key per vendor) and bring the plan to the owner before building; (3) P3 (R-319) items; then R-320 on
+top of R-321. Small open bugs: R-306 (95 vs 78 import), R-163 (stalled retry sweep).
+
+**Working rules learned this session:** one PR at a time on the session branch (stash the next piece); full suite on Node 22 AND 26
+from a clean `git worktree` of the exact head; screenshots before claiming a screen is right.
 
 ## START HERE (26 Oct, Session 53, very last) — #369 merging (clean-worktree runs); R-324 speed step 1 built, next PR
 

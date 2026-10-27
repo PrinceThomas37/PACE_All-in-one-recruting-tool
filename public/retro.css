@@ -1301,6 +1301,16 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .oi-ax{fill:var(--text3);font-size:12px}
 .oi-hit{fill:transparent;cursor:default}
 .oi-hit:hover{fill:var(--accent)}
+/* R-316: a tile opens the people behind its number */
+.oi-tile-btn{font:inherit;text-align:left;cursor:pointer}
+.oi-tile-btn:disabled{cursor:default}
+@media (hover:hover) and (pointer:fine){.oi-tile-btn:not(:disabled):hover{border-color:var(--accent)}}
+.oi-tile-btn.on{border-color:var(--accent);box-shadow:3px 3px 0 var(--accent)}
+.oi-drill-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.oi-drill-acts{display:flex;gap:8px;align-items:center}
+.oi-drill-table td{white-space:nowrap}
+.oi-drill .td-scroll{max-height:420px;overflow:auto}
+.oi-splits{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
 @media (max-width:860px){.oi-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Builder: one email per email ID (R-285) */
 .sq-mbtabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
