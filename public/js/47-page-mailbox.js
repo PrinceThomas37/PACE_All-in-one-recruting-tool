@@ -731,6 +731,74 @@
     var m=M(); var row=(m.messages||[]).filter(function(x){return x.id===id;})[0];
     markRead(id, !!(row&&row.unread));
   };
+  // ── STAR (R-318): the provider's own star — Gmail STARRED / Outlook flag — so it is the same star everywhere ──
+  window.mbToggleStar=function(id){
+    var m=M(), acct=acctOf(id);
+    var on=!(m.message&&m.message.id===id?m.message.flagged:false);
+    var apply=function(v){
+      if(m.message&&m.message.id===id) m.message.flagged=v;
+      (Array.isArray(m.thread)?m.thread:[]).forEach(function(t){ if(t.id===id) t.flagged=v; });
+      (m.messages||[]).forEach(function(x){ if(x.id===id||(x.message_ids&&x.message_ids.indexOf(id)>=0)) x.flagged=v; });
+      var cm=_mc[acct+':'+id]; if(cm) cm.flagged=v;
+      listCachePut(); paint();
+    };
+    apply(on);
+    apiPatch('/mailbox/'+encodeURIComponent(acct)+'/messages/'+encodeURIComponent(id),{flagged:on})
+      .catch(function(e){ apply(!on); showToast('Could not '+(on?'star':'unstar')+' it: '+e.message,'error'); });
+  };
+  // ── POP OUT (R-318): the open email in a window of its own. The body stays in the same locked-down frame as here
+  // (no scripts, nothing of PACE reachable from it); the window is ours, written by us, with only escaped text around the frame.
+  window.mbPopOut=function(){
+    var m=M(), x=m.message; if(!x) return;
+    var w=window.open('', '_blank', 'width=960,height=820');
+    if(!w){ showToast('Your browser blocked the new window — allow pop-ups for PACE','warning'); return; }
+    var one=function(p){ return p&&p.email?((p.name&&p.name!==p.email?p.name+' ':'')+'<'+p.email+'>'):''; };
+    var whoLine=function(list){ return (list||[]).map(one).filter(Boolean).join(', '); };
+    var from=one(x.from);
+    var head='<h1>'+esc(x.subject||'(no subject)')+'</h1>'+
+      '<div class="m">From: '+esc(from)+'</div>'+
+      ((x.to||[]).length?'<div class="m">To: '+esc(whoLine(x.to))+'</div>':'')+
+      ((x.cc||[]).length?'<div class="m">Cc: '+esc(whoLine(x.cc))+'</div>':'')+
+      '<div class="m">'+esc(x.date?new Date(x.date).toLocaleString():'')+'</div>';
+    var bodyDoc='<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:16px 18px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.6;color:#0F172A;word-wrap:break-word}img{max-width:100%;height:auto}table{max-width:100%}blockquote{border-left:2px solid #E2E8F0;margin:8px 0;padding-left:12px;color:#475569}pre{white-space:pre-wrap}</style></head><body>'+(routeMailtoLinks(x.body_html)||'<i>(no content)</i>')+'</body></html>';
+    w.document.open();
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+esc(x.subject||'Email')+'</title>'+
+      '<style>html,body{margin:0;height:100%;background:#F8FAFC;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#0F172A}'+
+      '.h{padding:14px 20px;border-bottom:1px solid #E2E8F0;background:#fff}h1{font-size:18px;margin:0 0 6px}.m{font-size:13px;color:#475569}'+
+      'iframe{display:block;width:100%;height:calc(100% - 120px);border:0;background:#fff}</style></head><body>'+
+      '<div class="h">'+head+'</div>'+
+      '<iframe title="Message body" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="'+escAttr(bodyDoc)+'"></iframe></body></html>');
+    w.document.close();
+  };
+  // ── RESIZE THE LIST (R-318): a per-person convenience, kept in this browser only ──
+  var LISTW_KEY='pace-mb-list-w';
+  function mbListWidth(){ try{ var v=parseInt(localStorage.getItem(LISTW_KEY),10); return v>=240&&v<=1400?v:0; }catch(e){ return 0; } }
+  function setListWidth(px, save){
+    var root=document.getElementById('mb-root'), panes=document.getElementById('mb-panes'); if(!root||!panes) return;
+    var max=Math.max(260, panes.getBoundingClientRect().width-380);   // the message always keeps room to be read
+    var w=Math.round(Math.min(max, Math.max(240, px)));
+    root.style.setProperty('--mb-list-w', w+'px');
+    if(save){ try{ localStorage.setItem(LISTW_KEY, String(w)); }catch(e){} }
+    return w;
+  }
+  window.mbResizeStart=function(ev){
+    if(ev.button!==0) return; ev.preventDefault();
+    var panes=document.getElementById('mb-panes'); if(!panes) return;
+    var left=panes.getBoundingClientRect().left, last=null;
+    document.body.classList.add('mb-resizing');
+    var move=function(e){ last=setListWidth(e.clientX-left, false); };
+    var up=function(){ document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up); document.body.classList.remove('mb-resizing'); if(last) setListWidth(last, true); };
+    document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
+  };
+  window.mbResizeKey=function(ev){
+    if(ev.key!=='ArrowLeft'&&ev.key!=='ArrowRight') return; ev.preventDefault();
+    var list=document.getElementById('mb-list'); if(!list) return;
+    setListWidth(list.getBoundingClientRect().width+(ev.key==='ArrowRight'?24:-24), true);
+  };
+  window.mbResizeReset=function(){
+    try{ localStorage.removeItem(LISTW_KEY); }catch(e){}
+    var root=document.getElementById('mb-root'); if(root) root.style.removeProperty('--mb-list-w');
+  };
   window.mbShowImages=function(){
     var m=M(); if(!m.message)return;
     m.showImages=true; m.msgLoading=true; paint();
@@ -935,6 +1003,39 @@
   };
   window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paintComposer(); };
 
+  // ── UNDO SEND (R-318, owner 26 Oct: "5-second Undo after Send") ──────────────
+  // Send holds the email in the window for a few seconds first; the Send button becomes "Undo · sending in 5s". Undo puts the
+  // window back exactly as it was; nothing has left PACE. The countdown changes only its own number (no repaint under the
+  // person's hands). Leaving the page while one is held asks first — closing the tab would mean it never goes.
+  window.MB_UNDO_MS=5000;
+  var _held=[];
+  function holdThenSend(c, repaint, go){
+    c.sending=true; c.held=true; c.undone=false;
+    var left=Math.max(1,Math.round(window.MB_UNDO_MS/1000)); c.holdLeft=left; repaint();
+    _held.push(c);
+    c.holdTick=setInterval(function(){
+      c.holdLeft=Math.max(0,c.holdLeft-1);
+      var n=document.getElementById('mb-undo-n'); if(n) n.textContent=String(c.holdLeft);
+    },1000);
+    c.holdTimer=setTimeout(function(){
+      clearInterval(c.holdTick); _held=_held.filter(function(x){return x!==c;});
+      if(c.undone) return;
+      c.held=false; repaint(); go();
+    },window.MB_UNDO_MS);
+  }
+  window.mbUndoSend=function(which){
+    var m=M(); var c=which==='compose'?m.compose:m.composer; if(!c||!c.held)return;
+    clearTimeout(c.holdTimer); clearInterval(c.holdTick); _held=_held.filter(function(x){return x!==c;});
+    c.undone=true; c.held=false; c.sending=false;
+    if(which==='compose') paintComposeModal(); else paintComposer();
+    showToast('Not sent — the email is back in the window','info');
+  };
+  window.addEventListener('beforeunload',function(e){ if(_held.length){ e.preventDefault(); e.returnValue='An email is about to be sent. Leave anyway?'; return e.returnValue; } });
+  function undoButton(which,id){
+    return '<button class="btn btn-primary" id="'+id+'" onclick="mbUndoSend(\''+which+'\')">Undo · sending in <span id="mb-undo-n">'+(M()[which==='compose'?'compose':'composer']||{}).holdLeft+'</span>s</button>';
+  }
+  window.mbUndoButton=undoButton;
+
   window.mbSendComposer=function(){
     mbChipFlush();
     var m=M(); var c=m.composer; if(!c||!c.msgId||c.sending)return;
@@ -949,7 +1050,6 @@
     if(total>MAX_ATTACH_BYTES){
       showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return;
     }
-    c.sending=true; paintComposer();
     var payload={
       body:c.body, subject:c.subject,
       to:c.to, cc:c.cc,
@@ -962,6 +1062,8 @@
     var path='/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.msgId)+
       (c.mode==='forward'?'/forward':'/reply');
     if(c.mode!=='forward') payload.reply_all=(c.mode==='replyAll');
+    holdThenSend(c, function(){ if(m.composer===c) paintComposer(); }, function(){
+    if(m.composer===c) paintComposer();
     apiPost(path,payload)
       .then(function(r){
         showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
@@ -976,6 +1078,7 @@
         c.sending=false; if(m.composer===c) paintComposer();
         showToast((c.mode==='forward'?'Forward':'Send')+' failed: '+e.message,'error');
       });
+    });
   };
   // Older name kept so nothing that still calls it silently does nothing.
   window.mbSendReply=window.mbSendComposer;
@@ -1315,7 +1418,7 @@
           '<button class="btn btn-outline" onclick="mbCancelCompose()">Cancel</button>'+
           '<button class="btn btn-outline" id="mb-c-savedraft" onclick="mbSaveDraft(\'compose\')"'+(c.sending?' disabled':'')+' title="Keep it in your mailbox\'s own Drafts folder, so you can carry on from your phone or from Gmail / Outlook">Save draft</button>'+
           '<button class="btn btn-outline" onclick="mbSchedOpen(\'compose\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
-          '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
+          (c.held?mbUndoButton('compose','mb-c-send'):'<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>')+
         '</div>'+
       '</div>';
   }
@@ -1496,7 +1599,6 @@
     if(mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){ showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return; }
-    c.sending=true; paintComposeModal();
     var sendBody={
       to:c.to, cc:c.cc, subject:c.subject, body:c.body,
       include_signature:!!c.sig,
@@ -1504,7 +1606,9 @@
     };
     if(mbIsFormatted(c)) sendBody.formatted=true;
     if((c.labels||[]).length) sendBody.label_ids=c.labels.map(function(l){return l.id;});
-    apiPost('/mailbox/'+encodeURIComponent(c.acct||m.activeId)+'/send', sendBody)
+    var acct=c.acct||m.activeId;
+    holdThenSend(c, function(){ if(m.compose===c) paintComposeModal(); }, function(){
+    apiPost('/mailbox/'+encodeURIComponent(acct)+'/send', sendBody)
       .then(function(r){
         showToast('Sent','success');
         if(r&&r.label_error) showToast('Sent, but the label could not be added: '+r.label_error,'warning');
@@ -1514,6 +1618,7 @@
         else if(window.Dock) Dock.discardCtx(c);
       })
       .catch(function(e){ c.sending=false; if(m.compose===c) paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
+    });
   };
 
   // ── SCHEDULE SEND (R-273, D-0162 / D-0163) ─────────────────────────────────
@@ -1734,12 +1839,15 @@
     // it. Nothing is lost; every folder, custom ones included, is in the list.
     var p=parts(readable);
     _regs=p;
-    return '<div class="mb" id="mb-root">'+
+    var lw=mbListWidth();
+    return '<div class="mb" id="mb-root"'+(lw?' style="--mb-list-w:'+lw+'px"':'')+'>'+
       '<div id="mb-tabs" style="flex:none">'+p.tabs+'</div>'+
       '<div id="mb-toolbar" style="flex:none">'+p.toolbar+'</div>'+
       '<div id="mb-bulk" style="flex:none">'+p.bulk+'</div>'+
       '<div class="mb-panes'+(p.reading?' reading':'')+'" id="mb-panes">'+
         p.list+
+        // R-318: drag the line between the list and the message to make either wider (like Gmail); double-click resets it.
+        '<div class="mb-resize" id="mb-resize" role="separator" aria-orientation="vertical" aria-label="Resize the list" tabindex="0" title="Drag to make the list wider or narrower · double-click to reset" onmousedown="mbResizeStart(event)" ondblclick="mbResizeReset()" onkeydown="mbResizeKey(event)"></div>'+
         p.reader+
       '</div>'+
     '</div>';
@@ -2303,6 +2411,9 @@
         '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbLabelMenu([\''+escAttr(x.id)+'\'])">Label</button>'+
+        // R-318: star it (the same star in Gmail, the flag in Outlook) and read a long one in its own window
+        '<button class="btn btn-sm btn-outline mb-star'+(x.flagged?' on':'')+'" id="mb-star" aria-pressed="'+(x.flagged?'true':'false')+'" title="'+(x.flagged?'Starred — also starred in Gmail / flagged in Outlook':'Star it — it is starred in Gmail / flagged in Outlook too')+'" onclick="mbToggleStar(\''+escAttr(x.id)+'\')">'+(x.flagged?'★ Starred':'☆ Star')+'</button>'+
+        '<button class="btn btn-sm btn-outline" title="Open this email in its own window — easier for a long one" onclick="mbPopOut()">Pop out</button>'+
         (hasOthers?'<button class="btn btn-sm btn-outline" title="Make the open message taller, to read it without scrolling inside it" onclick="mbToggleTall()">'+(M().bodyTall?'Shrink message':'Expand message')+'</button>':'')+
         '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
       '</div>';
@@ -2548,7 +2659,7 @@
             '<button class="btn btn-outline" onclick="mbCancelComposer()">Discard</button>'+
             (fwd?'':'<button class="btn btn-outline" id="mb-comp-savedraft" onclick="mbSaveDraft(\'reply\')"'+(c.sending?' disabled':'')+' title="Keep it in your mailbox\'s own Drafts folder, so you can carry on from your phone or from Gmail / Outlook">Save draft</button>')+
             '<button class="btn btn-outline" onclick="mbSchedOpen(\'reply\')"'+(c.sending?' disabled':'')+' title="Pick a date and time to send it">Schedule</button>'+
-            '<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
+            (c.held?mbUndoButton('composer','mb-comp-send'):'<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>')+
           '</span>'+
         '</div>'+
       '</div>';

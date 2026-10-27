@@ -102,6 +102,34 @@ try {
   step('PATCH carries up to 3 interviewer names', apply.patch && Array.isArray(apply.patch.body.interviewers) && apply.patch.body.interviewers.length === 2 && apply.patch.body.interviewers[0] === 'Jane Smith');
   step('Interview invite emailed to chosen recipients', apply.invite && apply.invite.url === '/submissions/s1/interview-invite' && apply.invite.body.recipients.includes('candidate'));
 
+  // R-317: the CLIENT gets its own email — address (pre-filled from the client's people PACE knows), résumé ticked by default
+  const client = await page.evaluate(async () => {
+    window.apiGet = function (url) { return Promise.resolve(/submission-email\/options/.test(url) ? { suggestions: [{ email: 'mark@griffith.test', name: 'Mark Lowe', role: 'Client contact' }], documents: [{ id: 'd1', filename: 'Sarah_Chen.pdf' }] } : []); };
+    window.openStageModal('s1', 'Interview Scheduled', null);
+    await new Promise(r => setTimeout(r, 80));
+    const box = document.getElementById('stg-iv-notify-client');
+    const out = { offered: !!box, hiddenFirst: (document.getElementById('stg-iv-client') || {}).style && document.getElementById('stg-iv-client').style.display === 'none' };
+    box.checked = true; window.stgIvClientToggle();
+    out.shown = document.getElementById('stg-iv-client').style.display !== 'none';
+    out.prefilled = document.getElementById('stg-iv-client-to').value;
+    out.cvTicked = document.getElementById('stg-iv-client-cv').checked;
+    out.note = document.getElementById('stg-iv-client-note').textContent;
+    document.getElementById('stg-iv-at').value = '2026-08-01T10:00';
+    document.getElementById('stg-note').value = 'Client interview booked';
+    let invite = null;
+    window.apiPatch = function () { return Promise.resolve({ id: 's1', stage: 'Interview Scheduled' }); };
+    window.apiPost = function (url, body) { invite = { url, body }; return Promise.resolve({ sent: 2, results: [] }); };
+    window.stgApply();
+    await new Promise(r => setTimeout(r, 100));
+    out.invite = invite; out.err = (document.getElementById('stg-err') || {}).textContent || ''; out.modalOpen = !!document.getElementById('stg-go');
+    return out;
+  });
+  step('R-317: "Client" is offered, its box hidden until ticked', client.offered && client.hiddenFirst && client.shown);
+  step('…the client\'s address is filled from the people PACE knows there, and the résumé is ticked', client.prefilled === 'mark@griffith.test' && client.cvTicked && /Sarah_Chen\.pdf/.test(client.note), JSON.stringify(client));
+  step('…the send asks for a separate client email with the address, the name and the résumé', client.invite && client.invite.body.recipients.includes('client') && client.invite.body.client_to === 'mark@griffith.test' && client.invite.body.client_name === 'Mark Lowe' && client.invite.body.attach_resume === true, JSON.stringify({ invite: client.invite, err: client.err, open: client.modalOpen }));
+  // (a recruiter never reaches this window for an interview — they move people only up to "Submitted to BDM"; the server refuses
+  //  them the client email too: test/interview-client-email-smoke.mjs)
+
   step('No uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
   step('Test harness ran', false, String(e));

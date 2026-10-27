@@ -435,7 +435,71 @@ function loadOutreachInsights(){
   apiGet('/insights/outreach?'+q.join('&')).then(function(d){ o.data=d; o.loading=false; if(!o.from){ o.from=d.from; o.to=d.to; } if(STATE.page==='bdinsights') render(); })
     .catch(function(e){ o.loading=false; o.err=(e&&e.message)||'Could not load'; if(STATE.page==='bdinsights') render(); });
 }
-window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); render(); };
+window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); if(o.drill) oiLoadDrill(); render(); };
+// R-316 (owner 26 Oct: "click Bounced / Replied / Interested / Opened → the email IDs and leads behind it … download to Excel … by
+// industry and time zone"). A tile opens the people behind its number, counted by the server with the SAME rules as the tile
+// (GET /insights/outreach/people → services/outreach-insights.js peopleBehind), for the same dates and sequence.
+var OI_KINDS={emailed:'People emailed',opened:'Opened',replied:'Replied',interested:'Interested',bounced:'Bounced'};
+function oiQuery(extra){
+  var o=oiState(), tz=(insightsTzQ()||'').replace(/^\?/,'');
+  var q=['seq='+encodeURIComponent(o.seq)];
+  if(o.from) q.push('from='+o.from); if(o.to) q.push('to='+o.to); if(tz) q.push(tz);
+  return q.concat(extra||[]).join('&');
+}
+function oiLoadDrill(){
+  var o=oiState(), d=o.drill; if(!d) return;
+  d.loading=true; d.err=''; var asked=d.kind+'|'+oiQuery();
+  d.asked=asked;
+  apiGet('/insights/outreach/people?'+oiQuery(['kind='+encodeURIComponent(d.kind)])).then(function(r){
+    if(!o.drill||o.drill.asked!==asked) return;   // another tile or filter was picked meanwhile
+    d.rows=(r&&r.people)||[]; d.from=r&&r.from; d.to=r&&r.to; d.loading=false; if(STATE.page==='bdinsights') render();
+  }).catch(function(e){ if(!o.drill||o.drill.asked!==asked) return; d.loading=false; d.err=(e&&e.message)||'Could not load'; if(STATE.page==='bdinsights') render(); });
+}
+window.oiOpen=function(kind){
+  var o=oiState();
+  if(o.drill&&o.drill.kind===kind){ o.drill=null; render(); return; }   // the same tile again closes it
+  o.drill={kind:kind,rows:null,loading:true,err:''}; oiLoadDrill(); render();
+};
+window.oiCloseDrill=function(){ oiState().drill=null; render(); };
+// The list as a file Excel opens (comma-separated, with the mark Excel needs to read accents and non-English names correctly).
+function oiCsv(rows){
+  var cols=[['Name','name'],['Email','email'],['Company','company'],['Position','position'],['Industry','industry'],['Time zone','timezone'],['Type','type'],
+    ['Emails sent','emails'],['First sent','first_day'],['Last sent','last_day'],['Opened','opened'],['Replied on','replied_day'],['Stage','stage'],['Bounced','bounce_kind'],['Sequences','sequences']];
+  var cell=function(v){ if(v===true) v='Yes'; else if(v===false) v='No'; else if(Array.isArray(v)) v=v.join('; '); v=(v==null?'':String(v));
+    if(/^[=+\-@]/.test(v)) v="'"+v;   // a value starting like a formula is shown as text, never run by the spreadsheet
+    return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  return '\ufeff'+[cols.map(function(c){return c[0];}).join(',')].concat((rows||[]).map(function(r){ return cols.map(function(c){ return cell(r[c[1]]); }).join(','); })).join('\r\n');
+}
+window.oiCsv=oiCsv;
+window.oiDownload=function(){
+  var o=oiState(), d=o.drill; if(!d||!d.rows) return;
+  var name='outreach-'+d.kind+'-'+(d.from||o.from)+'-to-'+(d.to||o.to)+'.csv';
+  var blob=new Blob([oiCsv(d.rows)],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+};
+function oiDrillCard(){
+  var o=oiState(), d=o.drill; if(!d) return '';
+  var label=OI_KINDS[d.kind]||'People';
+  var n=d.rows?d.rows.length:null;
+  var head='<div class="oi-drill-h"><div><div class="td-h" style="margin:0">'+htmlEsc(label.toUpperCase())+(n!=null?' · '+n.toLocaleString('en-US')+' '+(n===1?'person':'people'):'')+'</div>'+
+    '<div class="fs-12 c-text3">'+htmlEsc((d.from||o.from)+' to '+(d.to||o.to))+' · the same people the number counts</div></div>'+
+    '<div class="oi-drill-acts">'+(d.rows&&d.rows.length?'<button class="btn btn-outline btn-sm" onclick="oiDownload()">'+ico('download',12)+' Download for Excel</button>':'')+
+    '<button class="btn-icon" onclick="oiCloseDrill()" aria-label="Close">'+ico('x',14)+'</button></div></div>';
+  var body;
+  if(d.err) body='<div class="fs-13 c-red">Could not load: '+htmlEsc(d.err)+'</div>';
+  else if(!d.rows) body='<div class="fs-13 c-text3">Loading…</div>';
+  else if(!d.rows.length) body='<div class="fs-13 c-text3">Nobody in these dates.</div>';
+  else body='<div class="td-scroll"><table class="td-table oi-table oi-drill-table"><thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Position</th><th>Industry</th><th>Time zone</th><th>Emails</th><th>Last sent</th><th>Opened</th><th>Replied</th><th>Stage</th></tr></thead><tbody>'+
+    d.rows.map(function(r){ return '<tr><td class="fw6">'+htmlEsc(r.name||'—')+(r.type==='candidate'?' <span class="c-text3">(candidate)</span>':'')+'</td><td>'+htmlEsc(r.email||'')+'</td><td>'+htmlEsc(r.company||'')+'</td><td>'+htmlEsc(r.position||'')+'</td><td>'+htmlEsc(r.industry||'')+'</td><td>'+htmlEsc(r.timezone||'')+'</td><td>'+r.emails+'</td><td>'+htmlEsc(r.last_day||'')+'</td><td>'+(r.opened?'Yes':(r.tracked?'No':'—'))+'</td><td>'+htmlEsc(r.replied_day||'')+'</td><td>'+(r.bounced?'<span class="c-red">'+(r.bounce_kind==='blocked'?'Blocked — their side rejects our mail':'Invalid address')+'</span>':htmlEsc(r.stage||''))+'</td></tr>'; }).join('')+
+    '</tbody></table></div>';
+  return '<div class="card oi-card oi-drill" data-oi-drill>'+head+body+'</div>';
+}
+function oiSplitCard(title,list){
+  var rows=(list||[]).map(function(g){ return '<tr><td class="fw6">'+htmlEsc(g.name)+'</td><td>'+oiNum(g.people)+'</td><td>'+oiNum(g.emailed)+'</td><td>'+oiNum(g.replied_rate,'%')+'</td><td>'+oiNum(g.interested)+'</td><td>'+oiNum(g.bounced_rate,'%')+'</td></tr>'; }).join('');
+  return '<div class="card oi-card"><div class="td-h">'+title+'</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>'+(title==='BY INDUSTRY'?'Industry':'Time zone')+'</th><th>People</th><th>Emailed</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    :'<div class="fs-13 c-text3">Nothing to split in these dates.</div>')+'</div>';
+}
 function oiNum(v,suffix){ return v==null?'—':(typeof v==='number'?v.toLocaleString('en-US'):v)+(v==null?'':(suffix||'')); }
 function oiChart(series,bucket){
   var W=1140,H=300,L=44,R=1130,T=20,B=260;
@@ -462,13 +526,15 @@ function renderOutreachInsights(toggle){
     '<label class="oi-f"><span>To</span><input type="date" class="inp" value="'+escAttr(o.to)+'" onchange="oiSet(\'to\',this.value)"></label></div>';
   var head='<div class="oi-head"><div><div class="ptitle">Outreach Insights</div><div class="psub">How your sequences are doing. Each number appears once on this page.</div></div>'+controls+'</div>';
   if(o.err&&!d) return '<div class="page">'+toggle+head+'<div class="card cp c-red fs-13">Could not load: '+htmlEsc(o.err)+'</div></div>';
+  // R-316: each tile opens the people behind it (click again to close)
   var tiles=[
-    [oiNum(t.people),'People emailed',(t.emailed!=null?oiNum(t.emailed)+' emails':'')],
-    [oiNum(t.opened_rate,'%'),'Opened','of tracked emails'],
-    [oiNum(t.replied_rate,'%'),'Replied',(t.replied!=null?oiNum(t.replied)+' people':'')],
-    [oiNum(t.interested),'Interested','Connected or In discussion'],
-    [oiNum(t.bounced_rate,'%'),'Bounced','bad addresses']
-  ].map(function(x){ return '<div class="oi-tile"><span class="oi-n">'+(d?x[0]:'—')+'</span><span class="oi-l">'+x[1]+'</span><span class="oi-s">'+(d?x[2]:'')+'</span></div>'; }).join('');
+    ['emailed',oiNum(t.people),'People emailed',(t.emailed!=null?oiNum(t.emailed)+' emails':'')],
+    ['opened',oiNum(t.opened_rate,'%'),'Opened','of tracked emails'],
+    ['replied',oiNum(t.replied_rate,'%'),'Replied',(t.replied!=null?oiNum(t.replied)+' people':'')],
+    ['interested',oiNum(t.interested),'Interested','Connected or In discussion'],
+    ['bounced',oiNum(t.bounced_rate,'%'),'Bounced',(t.bounced_invalid!=null?oiNum(t.bounced_invalid)+' invalid · '+oiNum(t.bounced_blocked)+' blocked':'bad or blocked addresses')]
+  ].map(function(x){ var on=o.drill&&o.drill.kind===x[0];
+    return '<button type="button" class="oi-tile oi-tile-btn'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" title="See who" onclick="oiOpen(\''+x[0]+'\')"'+(d?'':' disabled')+'><span class="oi-n">'+(d?x[1]:'—')+'</span><span class="oi-l">'+x[2]+'</span><span class="oi-s">'+(d?x[3]:'')+'</span></button>'; }).join('');
   var legend='<div class="oi-legend"><span><i class="oi-key oi-emailed"></i>Emailed</span><span><i class="oi-key oi-opened"></i>Opened</span><span><i class="oi-key oi-replied"></i>Replied</span></div>';
   var buckets='<div class="oi-seg" role="group" aria-label="By day or week">'+[['day','Daily'],['week','Weekly']].map(function(b){ return '<button type="button" class="oi-segb'+(o.bucket===b[0]?' on':'')+'" aria-pressed="'+(o.bucket===b[0])+'" onclick="oiSet(\'bucket\',\''+b[0]+'\')">'+b[1]+'</button>'; }).join('')+'</div>';
   var chart='<div class="card oi-card"><div class="oi-chart-head">'+legend+buckets+'</div>'+
@@ -478,5 +544,6 @@ function renderOutreachInsights(toggle){
   }).join('');
   var table='<div class="card oi-card" data-oi-table><div class="td-h">BY SEQUENCE</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>Sequence</th><th>People</th><th>Emailed</th><th>Opened</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     :'<div class="fs-13 c-text3">'+(d?'No sequence sent anything in these dates.':'Loading…')+'</div>')+'</div>';
-  return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+chart+table+'</div>';
+  var splits=d?'<div class="oi-splits">'+oiSplitCard('BY INDUSTRY',d.by_industry)+oiSplitCard('BY TIME ZONE',d.by_timezone)+'</div>':'';
+  return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+oiDrillCard()+chart+table+splits+'</div>';
 }

@@ -32,6 +32,7 @@ const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../.
 const { fillSignatureHtml } = require('../../email-signature');
 const interviewTime = require('../../services/interview-time');
 const submissionEmail = require('../../services/submission-email');
+const interviewInvite = require('../../services/interview-invite');   // R-317: the words of each interview email (candidate / client / BD)
 const { clientOwnerFrom } = require('../../services/ownership');
 
 module.exports = function (app, ctx) {
@@ -524,68 +525,29 @@ app.post('/companies/:id/email', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-function firstNameOf(name) { return String(name || '').trim().split(/\s+/)[0] || 'there'; }
+// The interview emails' words live in services/interview-invite.js (R-317). Kept under this name for anything that imports it.
+function buildInterviewInviteText(sub, candidate, job, role, tz) { return interviewInvite.buildInviteText({ sub, candidate, job, role, tz }); }
 
-// Build the interview-invitation message (plain text; buildHtmlEmailBody wraps it).
-function buildInterviewInviteText(sub, candidate, job, role, tz) {
-  // The time is stated in the zone the scheduler picked, with the zone spelled out (R-095).
-  const when = interviewTime.formatInterview(sub.interview_at, tz);
-  const type = sub.interview_type || (sub.interview_link ? 'virtual' : (sub.interview_address ? 'in_person' : ''));
-  const lines = [];
-  lines.push('Hi ' + firstNameOf(role === 'candidate' ? candidate.full_name : (job.bd_manager && job.bd_manager.name)) + ',', '');
-  lines.push(role === 'candidate'
-    ? 'Your interview has been scheduled. Here are the details:'
-    : ('An interview has been scheduled for ' + (candidate.full_name || 'the candidate') + ':'), '');
-  lines.push('Position: ' + (job.job_title || '—'));
-  const company = job.client || (job.company && job.company.name);
-  if (company) lines.push('Company: ' + company);
-  if (role !== 'candidate') lines.push('Candidate: ' + (candidate.full_name || '—'));
-  lines.push('Date & time: ' + when);
-  if (type === 'virtual') {
-    lines.push('Format: Virtual' + (sub.interview_platform ? ' (' + sub.interview_platform + ')' : ''));
-    if (sub.interview_link) lines.push('Join link / meeting ID: ' + sub.interview_link);
-  } else if (type === 'in_person') {
-    lines.push('Format: In person');
-    if (sub.interview_address) lines.push('Address: ' + sub.interview_address);
-    else if (job.city || job.state) lines.push('Location: ' + [job.city, job.state].filter(Boolean).join(', '));
-  } else if (type === 'phone') {
-    lines.push('Format: Phone call');
-    if (sub.interview_link) lines.push('Number: ' + sub.interview_link);
-  } else if (sub.interview_location) {
-    lines.push('Location: ' + sub.interview_location);
-  }
-  const ivs = Array.isArray(sub.interviewers) ? sub.interviewers.filter(Boolean) : [];
-  if (ivs.length) lines.push('Interviewer' + (ivs.length > 1 ? 's' : '') + ': ' + ivs.join(', '));
-  // R-086 (owner: "the interview confirmation email should go with job details"):
-  // the candidate gets what the role is, not only when to show up. Only facts the
-  // job order actually holds — nothing is filled in on its behalf, and no pay
-  // figure is stated (a candidate confirmation is not the place to quote one).
-  if (role === 'candidate') {
-    const about = [];
-    const where = [job.city, job.state].filter(Boolean).join(', ');
-    if (where) about.push('Location: ' + where);
-    if (job.job_type) about.push('Job type: ' + job.job_type);
-    const rem = String(job.remote || '').trim();
-    if (/^(remote|hybrid|on.?site)$/i.test(rem)) about.push('Work setting: ' + rem);
-    const desc = String(job.job_description || '').replace(/\s+/g, ' ').trim();
-    if (desc) about.push('About the role: ' + (desc.length > 600 ? desc.slice(0, 597).replace(/\s+\S*$/, '') + '…' : desc));
-    if (about.length) lines.push('', 'The role', ...about);
-  }
-  lines.push('', 'Please let us know if you have any questions or need to reschedule.', '', 'Best regards');
-  return lines.join('\n');
-}
-
-// Email the interview details to the candidate and/or the BD manager.
+// Email the interview details — a separate email to each person it is for (R-317): the candidate, the CLIENT (with the résumé
+// attached), and/or the BD manager. Body: { recipients: ['candidate'|'client'|'bd_manager'], client_to, client_name?,
+// attach_resume? (default true), mailbox_id?, interview_tz? }. From the mailbox the sender picked (sendingMailboxFor).
 app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
   try {
     const b = req.body || {};
     const roles = Array.isArray(b.recipients) ? b.recipients : [];
     const wantCandidate = roles.includes('candidate') || b.candidate === true;
     const wantBd = roles.includes('bd_manager') || b.bd_manager === true;
-    if (!wantCandidate && !wantBd) return res.status(400).json({ error: 'Pick at least one recipient.' });
+    const wantClient = roles.includes('client');
+    if (!wantCandidate && !wantBd && !wantClient) return res.status(400).json({ error: 'Pick at least one recipient.' });
+    // The client copy is the BD team's to send — the same rule as the submission email to the client.
+    if (wantClient && !hasRole(req, 'admin', 'bd', 'bd_lead', 'associate_director', 'director')) {
+      return res.status(403).json({ error: 'Only the BD team emails the client.' });
+    }
+    const clientTo = wantClient ? submissionEmail.parseAddresses(b.client_to, emailSyntaxValid) : [];
+    if (wantClient && !clientTo.length) return res.status(400).json({ error: 'Who at the client should get it? Add a valid email address.' });
 
     let subQ = supabase.from('submissions')
-      .select('id, org_id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email), job:job_orders(id,job_title,client,city,state,job_type,remote,job_description,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
+      .select('id, org_id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email,phone), job:job_orders(id,job_title,client,city,state,job_type,remote,job_description,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
       .eq('id', req.params.id);
     if (req.orgId) subQ = subQ.eq('org_id', req.orgId);
     const { data: sub, error } = await subQ.single();
@@ -595,38 +557,55 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
     const targets = [];
     if (wantCandidate) {
       if (!candidate.email) return res.status(400).json({ error: 'The candidate has no email on file.' });
-      targets.push({ email: candidate.email, role: 'candidate', candidate_id: candidate.id });
+      targets.push({ to: candidate.email, role: 'candidate', candidate_id: candidate.id });
     }
+    if (wantClient) targets.push({ to: clientTo[0], cc: clientTo.slice(1), role: 'client', candidate_id: candidate.id, toName: String(b.client_name || '').slice(0, 120) });
     if (wantBd) {
       if (!bd.email) return res.status(400).json({ error: 'This job has no BD manager email on file.' });
-      targets.push({ email: bd.email, role: 'bd_manager', candidate_id: null });
+      targets.push({ to: bd.email, role: 'bd_manager', candidate_id: null });
+    }
+
+    // The client's copy carries the candidate's latest résumé unless the sender unticked it. A résumé that exists but cannot be
+    // read just now stops the CLIENT copy (never "attached" when it is not); no résumé on file → it goes, and says so.
+    let resume = [], resumeOnFile = false;
+    if (wantClient && b.attach_resume !== false) {
+      let lq = supabase.from('candidate_documents').select('id').eq('candidate_id', sub.candidate_id).eq('doc_type', 'resume')
+        .is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(1);
+      if (req.orgId) lq = lq.eq('org_id', req.orgId);
+      const { data: latest } = await lq;
+      resumeOnFile = !!(latest && latest.length);
+      if (resumeOnFile) resume = await resolveEmailAttachments('candidate_documents', latest.map(r => r.id), req.orgId || null);
     }
 
     const ivTz = interviewTime.validZone(b.interview_tz);
     const mailbox = await sendingMailboxFor(req, b.mailbox_id);
     if (!mailbox) return noMailboxReply(res, b.mailbox_id);
     const signature = await filledSignature(mailbox, req.user.id);
-    const subject = 'Interview scheduled: ' + (candidate.full_name || 'Candidate') + ' — ' + (job.job_title || 'Role');
     const orgId = req.orgId || null;
     const results = [];
     for (const t of targets) {
-      if (!emailSyntaxValid(t.email)) { results.push({ email: t.email, role: t.role, status: 'skipped', reason: 'invalid_email' }); continue; }
+      if (!emailSyntaxValid(t.to)) { results.push({ email: t.to, role: t.role, status: 'skipped', reason: 'invalid_email' }); continue; }
+      const attachments = t.role === 'client' ? resume : [];
+      if (t.role === 'client' && resumeOnFile && !attachments.length) {
+        results.push({ email: t.to, role: t.role, status: 'failed', reason: 'The résumé could not be attached just now, so the client email was not sent. Please try again.' });
+        continue;
+      }
       const token = newTrackToken();
-      const inviteText = buildInterviewInviteText(sub, candidate, job, t.role, ivTz);
-        const htmlBody = injectTrackPixel(buildHtmlEmailBody(inviteText, signature), token);
+      const subject = interviewInvite.subjectFor({ role: t.role, candidate, job });
+      const resumeNote = t.role !== 'client' || b.attach_resume === false ? null : (attachments.length ? 'attached' : 'none_on_file');
+      const inviteText = interviewInvite.buildInviteText({ sub, candidate, job, role: t.role, tz: ivTz, toName: t.toName, resume: resumeNote });
+      const htmlBody = injectTrackPixel(buildHtmlEmailBody(inviteText, signature), token);
       try {
-        // By the mailbox's own platform. This line used to call Microsoft
-        // directly, so for a Gmail mailbox the invite failed every time — one
-        // reason "no email went to the candidate" (R-086).
-        await sendMailboxNewMessage(mailbox, { to: t.email, subject, htmlBody });
+        // By the mailbox's own platform (R-086: a Gmail mailbox used to fail every time).
+        await sendMailboxNewMessage(mailbox, { to: t.to, cc: t.cc && t.cc.length ? t.cc : undefined, subject, htmlBody, attachments: attachments.length ? attachments : undefined });
         await supabase.from('email_tracking').insert({
           token, channel: 'interview', candidate_id: t.candidate_id, job_order_id: sub.job_order_id,
-          to_email: t.email, subject, body: inviteText,
+          to_email: t.to, subject, body: inviteText,
           sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
           ...(orgId ? { org_id: orgId } : {})
         });
-        results.push({ email: t.email, role: t.role, status: 'sent' });
-      } catch (e) { results.push({ email: t.email, role: t.role, status: 'failed', reason: e.message }); }
+        results.push({ email: t.to, role: t.role, status: 'sent', attached: attachments.map(a => a.filename) });
+      } catch (e) { results.push({ email: t.to, role: t.role, status: 'failed', reason: e.message }); }
     }
     const sentCount = results.filter(x => x.status === 'sent').length;
     if (sentCount) {

@@ -429,6 +429,8 @@
     var ivLink0 = ivSub.interview_link || ivSub.interview_location || '';
     var ivAddr0 = ivSub.interview_address || (ivSub.interview_type==='in_person'?ivSub.interview_location:'') || '';
     var ivPeople0 = Array.isArray(ivSub.interviewers) ? ivSub.interviewers.join(', ') : '';
+    // R-317: the client copy is offered for one person at a time, and only to the BD team (the server says the same)
+    var ivClientOk = ids.length===1 && !group && !recruiterScoped();
 
     // Confirmation line: show exactly what's changing — [current] → [target] —
     // so a stage move never happens without the user seeing where it goes.
@@ -487,13 +489,21 @@
               '<div id="stg-iv-phone" style="display:'+(ivType0==='phone'?'block':'none')+';margin-top:10px">'+
                 '<label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Phone number</label>'+
                 '<input id="stg-iv-phone-num" class="sel" placeholder="+1 …" value="'+esc(ivType0==='phone'?ivLink0:'')+'"></div>'+
-              '<div style="margin-top:10px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Interviewer name(s) — up to 3</label>'+
-                '<input id="stg-iv-people" class="sel" placeholder="e.g. Jane Smith, Raj Patel" value="'+esc(ivPeople0)+'"></div>'+
-              '<div class="fs-11_5 c-text2" style="margin-top:11px;font-weight:600">Email these details to:</div>'+
-              '<div style="display:flex;gap:16px;margin-top:5px">'+
+              '<div style="margin-top:10px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Interviewers and their titles — up to 3</label>'+
+                '<input id="stg-iv-people" class="sel" placeholder="e.g. Jane Smith (Hiring Manager), Raj Patel (CTO)" value="'+esc(ivPeople0)+'"></div>'+
+              '<div class="fs-11_5 c-text2" style="margin-top:11px;font-weight:600">Email these details to (each gets their own email):</div>'+
+              '<div style="display:flex;gap:16px;margin-top:5px;flex-wrap:wrap">'+
                 '<label class="fs-12_5" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-cand" checked> Candidate</label>'+
+                // R-317: the client gets its own email — the candidate's name, email and phone, when and how, and the résumé attached
+                (ivClientOk?'<label class="fs-12_5" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-client" onchange="stgIvClientToggle()"> Client</label>':'')+
                 '<label class="fs-12_5" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-bd"> BD Manager</label>'+
               '</div>'+
+              (ivClientOk?'<div id="stg-iv-client" style="display:none;margin-top:8px">'+
+                '<label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Client email (more than one: separate with commas)</label>'+
+                '<input id="stg-iv-client-to" class="sel" list="stg-iv-client-sugg" placeholder="hiring.manager@client.com"><datalist id="stg-iv-client-sugg"></datalist>'+
+                '<label class="fs-12 c-text" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:6px"><input type="checkbox" id="stg-iv-client-cv" checked> Attach the candidate\'s latest résumé</label>'+
+                '<div id="stg-iv-client-note" class="fs-11 c-text3" style="margin-top:3px"></div>'+
+              '</div>':'')+
               (window.FromPick?'<div style="margin-top:9px">'+FromPick.slot('stg-iv-from')+'</div>':'')+
               '<div class="fs-11 c-text3" style="margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
                 (group?' <b>These details go on every person you move, and each one gets their own email.</b>':'')+'</div>'+
@@ -527,6 +537,21 @@
       '</div>';
     render();
     if (newStage === 'Submitted to Client' && !group && !recruiterScoped()) subEmailLoad('client', ids[0]);
+    if (showInterview && ids.length===1 && !group && !recruiterScoped()) stgIvClientLoad(ids[0]);
+  };
+  // R-317: the client's people PACE already knows (the same list as the submission email), and whether a résumé is on file.
+  window.stgIvClientToggle = function(){
+    var on = (document.getElementById('stg-iv-notify-client')||{}).checked, box = document.getElementById('stg-iv-client');
+    if (box) box.style.display = on ? '' : 'none';
+    var to = document.getElementById('stg-iv-client-to'); if (on && to && !to.value) to.focus();
+  };
+  window.stgIvClientLoad = function(subId){
+    apiGet('/submissions/'+encodeURIComponent(subId)+'/submission-email/options?kind=client').then(function(r){
+      var dl = document.getElementById('stg-iv-client-sugg'), to = document.getElementById('stg-iv-client-to'), note = document.getElementById('stg-iv-client-note');
+      if (dl) dl.innerHTML = (r.suggestions||[]).map(function(x){ return '<option value="'+esc(x.email)+'">'+esc((x.name?x.name+' · ':'')+x.role)+'</option>'; }).join('');
+      if (to && !to.value && r.suggestions && r.suggestions[0]) { to.value = r.suggestions[0].email; to.setAttribute('data-name', r.suggestions[0].name||''); }
+      if (note) note.textContent = (r.documents||[]).length ? ('Résumé on file: '+(r.documents[0].filename||'résumé')) : 'No résumé on file for this candidate — the email will say so.';
+    }).catch(function(){});
   };
 
   // ── The pieces of a group move that are not the form ────────────────────────
@@ -679,6 +704,15 @@
       payload.interviewers = people.length ? people : undefined;
       notifyCand = !!(document.getElementById('stg-iv-notify-cand')||{}).checked;
       notifyBd = !!(document.getElementById('stg-iv-notify-bd')||{}).checked;
+      // R-317: the client copy — read now, the window is replaced before the invites go
+      mv.ivClient = null;
+      if ((document.getElementById('stg-iv-notify-client')||{}).checked) {
+        var cto = (val('stg-iv-client-to')||'').trim();
+        if (!cto) { stgSetError('Add the client\'s email address, or untick Client.'); return; }
+        var toEl = document.getElementById('stg-iv-client-to');
+        mv.ivClient = { to: cto, name: (toEl && toEl.getAttribute('data-name') && toEl.value === cto.split(',')[0].trim()) ? toEl.getAttribute('data-name') : '',
+          attach: !!(document.getElementById('stg-iv-client-cv')||{}).checked };
+      }
       mv.fromId = (window.FromPick && FromPick.value('stg-iv-from')) || '';   // read now: the window is replaced before the invites go
     }
     if (remOn && val('stg-rem-date')) { payload.reminder_date = val('stg-rem-date'); payload.reminder_note = val('stg-rem-note') || undefined; }
@@ -708,11 +742,18 @@
       // (the stage PATCH has already stored the details on the submission).
       var recips = [];
       if (notifyCand) recips.push('candidate');
+      if (mv.ivClient) recips.push('client');
       if (notifyBd) recips.push('bd_manager');
       if (recips.length) {
         updated.forEach(function(s){
-          apiPost('/submissions/'+s.id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined, interview_tz: mv.ivTz || undefined })
-            .then(function(r){ if (r && r.sent) showToast(r.sent+' interview invite'+(r.sent>1?'s':'')+' sent','success'); })
+          var body = { recipients: recips, mailbox_id: mv.fromId || undefined, interview_tz: mv.ivTz || undefined };
+          if (mv.ivClient) { body.client_to = mv.ivClient.to; body.client_name = mv.ivClient.name || undefined; body.attach_resume = mv.ivClient.attach; }
+          apiPost('/submissions/'+s.id+'/interview-invite', body)
+            .then(function(r){
+              var bad = ((r && r.results) || []).filter(function(x){ return x.status !== 'sent'; });
+              if (r && r.sent) showToast(r.sent+' interview email'+(r.sent>1?'s':'')+' sent'+(bad.length?' — '+bad.map(function(x){ return x.role+': '+(x.reason||x.status); }).join('; '):''), bad.length?'error':'success');
+              else if (bad.length) showToast('Interview saved; the email was not sent — '+bad.map(function(x){ return x.reason||x.status; }).join('; '),'error');
+            })
             .catch(function(e){
               if (/no_connected_mailbox/.test(e.message)) showToast('Interview saved — connect a mailbox to email the invite','error');
               else showToast('Interview saved; invite email failed: '+e.message,'error');

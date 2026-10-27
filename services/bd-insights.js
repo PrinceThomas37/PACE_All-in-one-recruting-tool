@@ -147,8 +147,8 @@ const rate1 = (n, d) => (d ? Math.round(n / d * 1000) / 10 : null);   // one dec
 
 /**
  * THE TWO DELIVERY FIGURES for Outreach Insights (owner, 8 Oct: bounce rate and open rate belong with the person's other numbers).
- *   bounce rate = of the PEOPLE this person emailed in the window, the share whose address has since turned out invalid (a bounce
- *                 marks the contact invalid, and a known-bad address is never emailed, so after a send "invalid" means it bounced).
+ *   bounce rate = of the PEOPLE this person emailed in the window, the share whose address has since turned out invalid or blocked
+ *                 (BOUNCED below; a known-bad address is never emailed, so after a send either status means it bounced).
  *                 Null when nobody was emailed — not 0%.
  *   open rate   = of the emails sent WITH open tracking, the share opened by someone who looks like the recipient (scanners, the
  *                 sender's own network and opens inside two minutes are never counted — services/open-tracking.js). Tracking is on
@@ -157,9 +157,16 @@ const rate1 = (n, d) => (d ? Math.round(n / d * 1000) / 10 : null);   // one dec
  * @param {object}   o.contactStatus   contact id → email_status
  * @param {object[]} o.tracking        { email_id, open_count }
  */
+// WHAT COUNTS AS A BOUNCE — once, for every insights screen (R-316, owner 26 Oct: "bounced split into invalid / blocked"):
+//   invalid = the address does not exist (a hard bounce, or the email check found it bad);
+//   blocked = the address is right but their side rejects our mail (services/contact-status.js).
+// Both mean the mail did not get through, so both are bounces; the screens say which.
+const BOUNCED = ['invalid', 'blocked'];
+const bounceKind = (status) => (BOUNCED.includes(status) ? status : null);
+
 function deliveryStats({ sent, contactStatus, tracking }) {
   const people = [...new Set((sent || []).map(e => e.contact_id).filter(Boolean))];
-  const bounced = people.filter(id => (contactStatus || {})[id] === 'invalid').length;
+  const bounced = people.filter(id => bounceKind((contactStatus || {})[id])).length;
   const ids = new Set((sent || []).map(e => e.id));
   const rows = (tracking || []).filter(t => ids.has(t.email_id));
   const tracked = new Set(rows.map(t => t.email_id)).size;
@@ -167,4 +174,4 @@ function deliveryStats({ sent, contactStatus, tracking }) {
   return { contacts_emailed: people.length, bounced, bounce_rate: rate1(bounced, people.length), tracked, opened, open_rate: rate1(opened, tracked) };
 }
 
-module.exports = { summarise, sentInMonth, deliveryStats, windows, dayKey, validZone, localDay, dayOf, CONVERTED, POSITIVE, NEGATIVE, OOO };
+module.exports = { summarise, sentInMonth, deliveryStats, windows, dayKey, validZone, localDay, dayOf, CONVERTED, POSITIVE, NEGATIVE, OOO, BOUNCED, bounceKind };

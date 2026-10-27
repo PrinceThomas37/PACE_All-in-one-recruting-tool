@@ -21,7 +21,7 @@ try{
   browser=await chromium.launch({executablePath:findChromium(),headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
   const ctx=await browser.newContext(); await ctx.route('**',r=>r.request().url().startsWith(BASE)?r.continue():r.abort());
   const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
-  await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,'bd');
+  await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,'bd'); await page.evaluate(() => { window.MB_UNDO_MS = 0; });   // R-318's Undo wait is tested in mailbox-undo-send-smoke
   const ev=(f,a)=>page.evaluate(f,a);
   await ev(()=>{ STATE.mailbox=STATE.mailbox||{}; STATE.mailbox.activeId='mb1'; STATE.mailbox.accounts=[{id:'mb1',email_address:'me@pace.test'}];
     window.__sent=null; window.apiPost=(u,b)=>{ window.__sent={u,b}; return Promise.resolve({success:true}); };
