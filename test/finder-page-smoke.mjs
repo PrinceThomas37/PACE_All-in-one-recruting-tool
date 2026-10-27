@@ -93,6 +93,7 @@ try {
       if (/\/emails\/send-selected$/.test(p)) return Promise.resolve({ success: true, queued: (b.email_ids || []).length });
       if (/\/postings$/.test(p)) return Promise.resolve({ postings: [{ title: 'CNC Machinist', url: 'https://x.test/1', city: 'Waco', state: 'TX', age_days: 41, source: 'LinkedIn' }, { title: 'Welder', url: '', age_days: 3, source: '' }], signals: { chips: ['2 open roles', 'Oldest open 41 days'] } });
       if (/\/people$/.test(p)) return Promise.resolve(b && b.title === 'Owner' ? { total: 1, people: [{ id: 'p9', first_name: 'Hal', last_name: 'Fox', title: 'Owner', revealed: false, email: null }] } : JSON.parse(JSON.stringify(people)));
+      if (/\/rewrite-ai$/.test(p)) return Promise.resolve(b && b.restore ? { restored: true, email: { subject: b.restore.subject, body: b.restore.body } } : (window.__rw || { ai: true, written: false, reason: 'The AI is off.' }));
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
       if (/\/another$/.test(p)) {
@@ -209,6 +210,23 @@ try {
   step('Accept opens ONE window with the job, the people and where it goes', /Add Brazos Valley Machining as a lead/.test(m) && /Which jobs is this lead for/.test(m) && /Who should we write to/.test(m) && /Where it goes/.test(m));
   step('for an RA it says plainly: into the Unassigned pool, nothing emailed now — and offers no "Send from" (a pool lead has no mailbox yet)', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m) && !/Send from/.test(m));
   step('the jobs already opened on the card are offered as one-click choices', /class="fd-pill/.test(m) && /CNC Machinist/.test(m) && /Welder/.test(m));
+  // 27 Oct (R-319, owner): "a link to the job posting in the small lead window"
+  step('P3: before any job is ticked there is no posting link to show', !/fd-postlinks/.test(m));
+  await page.evaluate(() => window.fdToggleJob('CNC Machinist')); await page.waitForTimeout(120);
+  m = await modal();
+  step('P3: ticking a job whose posting has an address shows "Job posting: <that job> ↗" opening that address in a new tab, safely', /fd-postlinks[^>]*>Job posting: <a class="fd-postlink" href="https:\/\/x\.test\/1" target="_blank" rel="noopener noreferrer">CNC Machinist ↗<\/a>/.test(m), (m.match(/fd-postlinks.{0,200}/) || [''])[0]);
+  await page.evaluate(() => window.fdToggleJob('Welder')); await page.waitForTimeout(120);
+  m = await modal();
+  step('P3: a ticked job with NO posting address adds no link (nothing invented, no dead link)', (m.match(/class="fd-postlink"/g) || []).length === 1 && !/Welder ↗/.test(m));
+  await page.evaluate(() => { document.getElementById('fd-position').value = 'Typed By Hand'; window.fdAddJob(); }); await page.waitForTimeout(120);
+  m = await modal();
+  step('P3: a job typed by hand has no posting, so still only the one link', (m.match(/class="fd-postlink"/g) || []).length === 1);
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.card.postings = a.card.postings.map(p => p.title === 'CNC Machinist' ? Object.assign({}, p, { url: 'javascript:alert(1)' }) : p); });
+  const evil = await page.evaluate(() => window.fdPostingLinks(window.STATE.finder.acc.card, ['CNC Machinist']));
+  step('P3: an address that is not http(s) never becomes a link (javascript: refused)', evil === '', evil);
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.card.postings = a.card.postings.map(p => p.title === 'CNC Machinist' ? Object.assign({}, p, { url: 'https://x.test/1' }) : p); ['Typed By Hand', 'Welder', 'CNC Machinist'].forEach(t => { if (a.jobs.indexOf(t) >= 0) window.fdToggleJob(t); }); });   // leave the window as the next steps expect it
+  await page.waitForTimeout(150);
+  step('P3: unticking the jobs takes the links away again, and the window is back as it was', !/fd-postlinks/.test(await modal()) && await page.evaluate(() => window.STATE.finder.acc.jobs.length === 0));
   const saveDisabled = () => page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead|Saving/.test(b.textContent)).disabled);
   step('Save lead is disabled until a job and a contact are chosen', await saveDisabled());
 
@@ -623,6 +641,22 @@ try {
   await page.evaluate(() => window.fdReview('a1')); await page.waitForTimeout(300);
   rvm = await modal();
   step('E: Preview & edit opens the lead\'s email, and says when the AI will rewrite it at send', /Original/.test(await page.evaluate(() => document.getElementById('fd-rv-b-eL7').value)) && /AI writes this lead/.test(rvm) && /dana@saved\.example/.test(rvm), rvm.slice(0, 200));
+  // 27 Oct (R-319, owner): "Rewrite with AI" for one person's email in the review window
+  step('P3: each first email in the review window offers "✨ Rewrite with AI", and no Undo before a rewrite', /Rewrite with AI/.test(rvm) && !/Undo rewrite/.test(rvm));
+  await page.evaluate(() => { window.__rw = { ai: true, written: true, email: { subject: 'Your Welder opening', body: 'Hi Dana, a note written for a Welder.' }, previous: { subject: 'Welder', body: 'Original', template_variant: null } }; document.getElementById('fd-rv-b-eL7').value = 'Hand edit first'; window.__calls.length = 0; window.fdRvRewrite('eL7'); });
+  await page.waitForTimeout(350);
+  let rwc = await calls();
+  const iPatch = rwc.findIndex(c => c[0] === 'PATCH'), iPost = rwc.findIndex(c => /\/emails\/eL7\/rewrite-ai$/.test(c[1]));
+  step('P3: Rewrite saves what is on screen FIRST (so Undo is exact), then asks the server for that one email only', iPatch >= 0 && iPost > iPatch && /Hand edit first/.test(rwc[iPatch][2].body) && rwc.filter(c => /rewrite-ai$/.test(c[1])).length === 1, JSON.stringify(rwc.map(c => c[0] + ' ' + c[1])));
+  step('P3: the new subject and message appear in the boxes, with a note and an Undo button', await page.evaluate(() => document.getElementById('fd-rv-s-eL7').value === 'Your Welder opening' && /written for a Welder/.test(document.getElementById('fd-rv-b-eL7').value)) && /Undo rewrite/.test(await modal()) && /Rewritten for this person/.test(await modal()));
+  step('P3: …and the rewritten text is not re-saved as if the person had typed it (the server already stored it)', !(await calls()).some(c => c[0] === 'PATCH' && /Welder opening|written for a Welder/.test(JSON.stringify(c[2]))) && (await page.evaluate(() => { window.__calls.length = 0; window.fdRvSave(); return true; })) && (await new Promise(r => setTimeout(r, 150))) === undefined && !(await calls()).some(c => c[0] === 'PATCH'));
+  await page.evaluate(() => { window.__calls.length = 0; window.fdRvUndo('eL7'); }); await page.waitForTimeout(300);
+  const undoCall = (await calls()).find(c => /rewrite-ai$/.test(c[1]));
+  step('P3: Undo sends back exactly the earlier wording the server handed over', undoCall && undoCall[2].restore && undoCall[2].restore.body === 'Original' && undoCall[2].restore.subject === 'Welder', JSON.stringify(undoCall && undoCall[2]));
+  step('P3: …the old text is back in the boxes and the Undo button is gone', await page.evaluate(() => document.getElementById('fd-rv-b-eL7').value === 'Original' && document.getElementById('fd-rv-s-eL7').value === 'Welder') && !/Undo rewrite/.test(await modal()));
+  await page.evaluate(() => { window.__rw = { ai: true, written: false, reason: 'The AI\'s draft broke one of the house rules, so your wording was kept.' }; window.fdRvRewrite('eL7'); }); await page.waitForTimeout(300);
+  step('P3: when the AI cannot or will not, the text is untouched and the reason is shown in words (no Undo to offer)', await page.evaluate(() => document.getElementById('fd-rv-b-eL7').value === 'Original') && /house rules/.test(await modal()) && !/Undo rewrite/.test(await modal()));
+  await page.evaluate(() => { window.__rw = null; });
   await page.evaluate(() => window.fdRvClose());
   await page.evaluate(() => { window.__pendingList = []; window.fdReview('a1'); }); await page.waitForTimeout(250);
   step('E: with no email waiting any more it says so instead of showing an empty form', /no email waiting for this lead any more/.test(await modal()));

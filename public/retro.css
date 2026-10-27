@@ -429,11 +429,10 @@ body.ui-kit .u-role{color:var(--on-canvas)}
 /* ══ THE SIDEBAR AS DESIGNED (owner's sidebar mockup, R-122) ══════════════ */
 /* The logo tile: a taller slice of sky with the big pixel PACE. */
 body.ui-kit .sb-brand{height:84px;min-height:84px;padding-left:14px}
-body.ui-kit #sidebar.pinned .rail-mark{display:none}
-@media (hover:hover) and (pointer:fine){
-  body.ui-kit #sidebar:hover .rail-mark{display:none}
-}
-body.ui-kit .rail-word{font-size:24px;margin-left:2px}
+/* R-319: the chevron mark stays beside the word when the menu is open (it used to give way to the word), and stands alone when folded. */
+body.ui-kit .rail-mark{display:flex;align-items:center;justify-content:center;color:#FFD84A;width:34px;height:34px}
+body.ui-kit .rail-mark svg{display:block}
+body.ui-kit .rail-word{font-size:24px;margin-left:10px}
 /* collapsed: the P key sits centred in the 60px rail */
 body.ui-kit .sb-brand .rail-mark{margin-left:0}
 
@@ -1019,6 +1018,10 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0;align-items:start}
 .fd-label{font-size:12px;font-weight:700;margin:12px 0 4px;color:var(--text)}
 .fd-hint{font-size:12px;color:var(--text3);line-height:1.4}
+.fd-postlinks{margin:6px 0 2px}
+.fd-rv-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 2px}
+.fd-postlinks a{color:var(--accent);font-weight:600;text-decoration:none}
+.fd-postlinks a:hover{text-decoration:underline}
 .fd-group{margin:16px 0 6px;padding-top:2px}
 .fd-strong{font-weight:700}
 .fd-pad{margin-top:18px}
@@ -1293,7 +1296,12 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .oi-segb{font:inherit;font-size:12px;padding:6px 12px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
 .oi-segb+.oi-segb{border-left:0}
 .oi-segb.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}
-.oi-chart{width:100%;height:auto;display:block}
+.oi-chart{width:100%;height:auto;display:block;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.oi-zoombar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.oi-zbtn{font:inherit;font-size:13px;min-width:32px;padding:4px 10px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
+.oi-zbtn:disabled{opacity:.4;cursor:default}
+.oi-zhint{font-size:12px;color:var(--text3);margin-left:4px}
+@media (hover:hover) and (pointer:fine){.oi-zbtn:not(:disabled):hover{border-color:var(--accent)}}
 .oi-line{stroke-width:3}
 .oi-line.oi-emailed{stroke:var(--accent)}.oi-line.oi-opened{stroke:var(--amber)}.oi-line.oi-replied{stroke:var(--green)}
 .oi-grid{stroke:var(--border)}
@@ -1316,3 +1324,34 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .sq-mbtabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 .sq-mbtab{font:inherit;font-size:12.5px;padding:7px 10px;border:2px solid var(--ctl-brd,var(--border2));background:var(--card-solid,var(--card));color:var(--text);cursor:pointer}
 .sq-mbtab.on{background:var(--text);color:var(--card-solid,#fff);font-weight:600}
+
+/* ══ THE SIDEBAR ARROW AND A SMOOTHER OPEN / FOLD (R-319, owner's 28 notes) ═══════════════════════════════════════════════
+   One square pixel button in the logo's slice of sky: folded it sits at the top of the 60px rail under nothing else; open it sits
+   bottom-right (the cloud keeps the top). It points LEFT while the menu is open ("fold it") and RIGHT while it is folded ("open it") —
+   decided by the sidebar's own `pinned` class, so the markup never changes and an idle repaint writes nothing.
+   Smoother: the sidebar's width, the page's left edge and the labels all move on ONE curve and ONE time, and only those properties
+   (never `transition: all`); people who asked their device for less motion get none. Below 861px the menu is the phone drawer (mobile.css). */
+body.ui-kit .sb-brand .rail-arrow{display:none}
+@media (min-width:861px){
+  body.ui-kit .sb-brand .rail-arrow{
+    display:flex;position:absolute;z-index:2;right:18px;top:3px;width:24px;height:24px;margin:0;padding:0;
+    align-items:center;justify-content:center;border-radius:0;border:2px solid #000;
+    background:#FFF6E6;color:#1A1033;box-shadow:2px 2px 0 #000;cursor:pointer;
+  }
+  body.ui-kit #sidebar.pinned .sb-brand .rail-arrow{right:8px;top:auto;bottom:8px;width:28px;height:28px}
+  body.ui-kit .rail-arrow svg{display:block;width:10px;height:14px;transition:transform .22s cubic-bezier(.2,.7,.2,1)}
+  body.ui-kit #sidebar:not(.pinned) .rail-arrow svg{transform:scaleX(-1)}
+  body.ui-kit .sb-brand .rail-arrow:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  body.ui-kit #sidebar ~ #main{transition:margin-left .22s cubic-bezier(.2,.7,.2,1)}
+}
+@media (min-width:861px) and (hover:hover) and (pointer:fine){
+  /* hovering a folded rail floats it open: the arrow moves to where the open menu keeps it, and still says "open it" until pinned */
+  body.ui-kit #sidebar:not(.pinned):hover .sb-brand .rail-arrow{right:8px;top:auto;bottom:8px;width:28px;height:28px}
+}
+@media (hover:none),(pointer:coarse){
+  body.ui-kit .rail-arrow:active{background:#E4D6FF}
+}
+body.ui-kit #sidebar{transition:width .22s cubic-bezier(.2,.7,.2,1),box-shadow .22s cubic-bezier(.2,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){
+  body.ui-kit #sidebar,body.ui-kit #sidebar ~ #main,body.ui-kit .rail-arrow svg{transition:none}
+}

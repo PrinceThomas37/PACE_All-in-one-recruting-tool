@@ -42,7 +42,7 @@ const TERRITORIES = [
           'services/ra-insights.js', 'services/viewer-time.js', 'services/error-report.js'],
     not: ['routes/recruiting/', 'routes/ai.js', 'routes/ai-style.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
-          'routes/mailbox.js', 'routes/emails.js', 'routes/warmup.js',
+          'routes/mailbox.js', 'routes/emails.js', 'routes/email-rewrite.js', 'routes/warmup.js',
           'routes/deliverability.js', 'routes/auth.js', 'routes/sso.js',
           'routes/org-domains.js', 'routes/plans.js', 'routes/tracking.js',
           'routes/reminders.js', 'routes/workflows.js', 'routes/wf.js',
@@ -80,7 +80,7 @@ const TERRITORIES = [
           'services/mail-format.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
-          'routes/emails.js', 'routes/warmup.js', 'routes/deliverability.js'],
+          'routes/emails.js', 'routes/email-rewrite.js', 'routes/warmup.js', 'routes/deliverability.js'],
     not: [] },
 
   { id: 'observatory', name: 'Observatory', role: 'AI & Intelligence', terrain: 'the high peak',

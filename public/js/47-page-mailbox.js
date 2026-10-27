@@ -179,7 +179,15 @@
   // CONVERSATIONS OR SINGLE EMAILS (R-271), and ALL INBOXES (R-272). The view is the person's own choice (saved with their
   // preferences; conversations unless they chose); All inboxes is a list over every email ID they can open, each row carrying
   // the mailbox it belongs to — opening a row switches to that mailbox for the message itself, the list stays.
-  function threaded(){ return (STATE.mailView||'threads')!=='messages'; }
+  // Conversations or one email per row. The DRAFTS folder is always one draft per row, whatever the person chose (R-319): a conversation
+  // row leaves its drafts out ("drafts are never the newest message"), so a draft with nothing before it simply did not show up
+  // and a draft reply hid behind its thread — there was nothing to click to carry on writing. `folderId` = that folder (default: the open one).
+  function threaded(folderId){
+    if((STATE.mailView||'threads')==='messages') return false;
+    var m=M(), fid=folderId===undefined?((!m.all&&!m.q)?m.folderId:null):folderId;
+    if(fid){ var f=(m.folders||[]).filter(function(x){ return x.id===fid; })[0]; if(f&&f.kind==='drafts') return false; }
+    return true;
+  }
   function lkey(){ var m=M(); return m.all ? ['*all',threaded()?'t':'m',m.q||''].join('|') : [m.activeId,m.q?'*':(m.folderId||''),m.q||'',threaded()?'t':'m'].join('|'); }
   // The mailbox a row (or a message id inside one) belongs to: its own in All inboxes, otherwise the open one.
   function rowOf(id){ return (M().messages||[]).filter(function(x){ return x.id===id||(x.message_ids||[]).indexOf(id)>=0; })[0]||null; }
@@ -294,9 +302,9 @@
     var next=function(){
       var mm=M(); if(mm.activeId!==acct) { _warmed[acct]=false; return; }   // moved on: a later visit may warm it
       var id=ids.shift(); if(!id) return;
-      var key=[acct,id,'',threaded()?'t':'m'].join('|');
+      var key=[acct,id,'',threaded(id)?'t':'m'].join('|');
       if(_lc[key]||(typeof document!=='undefined'&&document.hidden)) return next();
-      apiGet('/mailbox/'+enc(acct)+(threaded()?'/conversations':'/messages')+'?limit=25&folder='+enc(id)).then(function(d){
+      apiGet('/mailbox/'+enc(acct)+(threaded(id)?'/conversations':'/messages')+'?limit=25&folder='+enc(id)).then(function(d){
         if(!_lc[key]) _lc[key]={at:Date.now(),messages:rowsOf(d).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},d.crm||{})};
       }).catch(function(){}).then(function(){ setTimeout(next,WARM_GAP); });
     };
@@ -376,7 +384,7 @@
       m.crm=Object.assign(m.crm||{}, hit.crm||{});
       paint();
       if(hit.unread) markRead(id, true, true);
-      loadThread(hit);
+      loadThread(hit); leadCardFetch(hit);
       deepAfterOpen(id);
       return;
     }
@@ -390,13 +398,57 @@
       // Opening a message marks it read, the way every mail client behaves.
       // Optimistic locally so the row un-bolds immediately.
       if(d.unread) markRead(id, true, true);
-      loadThread(d);
+      loadThread(d); leadCardFetch(d);
       deepAfterOpen(id);
     }).catch(function(e){
       if(m.selectedId!==id)return;
       m.msgLoading=false; m.error=e.message; paint();
       deepFailed(id);
     });
+  }
+
+  // ── THE LEAD BESIDE ITS EMAIL (R-319, owner's 28 notes) ──────────────────────────────────────────────────────────────────
+  // When the open email is from (or, for one we sent, to) an address PACE knows as a contact on a lead, a small card sits in the
+  // message's header band: who they are, the company, and the leads — job, place, stage, owner — with a link to open each. The server
+  // answers only with leads this person may see (GET /mailbox/lead-card); one it will not show is simply no card. Asked once per
+  // address and kept; the card lives in the HEAD region of the pane, so its arriving never touches the message body's frame.
+  var _lc2={};
+  function cardParty(x){
+    if(!x) return '';
+    var m=M(), acct=(m.accounts||[]).filter(function(a){ return a.id===m.activeId; })[0], own=String((acct&&acct.email_address)||'').toLowerCase();
+    var from=String((x.from||{}).email||'').toLowerCase();
+    if(from&&from!==own) return from;
+    return String(((x.to||[])[0]||{}).email||'').toLowerCase();
+  }
+  function leadCardFetch(x){
+    var em=cardParty(x); if(!em||_lc2[em]) return;
+    var link=(M().crm||{})[em];
+    if(!link||link.type!=='contact') return;                  // PACE does not know this address as a lead's contact: nothing to ask
+    _lc2[em]={ state:'loading' };
+    apiGet('/mailbox/lead-card?email='+encodeURIComponent(em)).then(function(d){
+      _lc2[em]=(d&&d.found)?{ state:'card', card:d }:{ state:'none' };
+      if(M().message&&cardParty(M().message)===em) paint();
+    }).catch(function(){ _lc2[em]={ state:'none' }; });
+  }
+  window.mbLeadCardOpen=function(id){ if(typeof openJob==='function') openJob(id); };
+  function leadCardHtml(x){
+    var e=_lc2[cardParty(x)]; if(!e||e.state!=='card') return '';
+    var d=e.card, c=d.contact||{}, co=d.company||{};
+    var sub=[c.designation, co.name].filter(Boolean).map(esc).join(' · ');
+    var leads=(d.leads||[]).map(function(l){
+      var line=[l.location, l.unassigned?'Unassigned':(l.owner?'Owner: '+l.owner:'')].filter(Boolean).map(esc).join(' · ');
+      return '<div class="mb-lc-lead">'+
+        '<a href="#" class="mb-lc-job" onclick="event.preventDefault();mbLeadCardOpen(\''+escAttr(l.id)+'\')">'+esc(l.position||'Lead')+'</a>'+
+        (l.stage?' <span class="pill mute">'+esc(l.stage)+'</span>':'')+
+        (line?'<div class="fs-12 c-text3">'+line+'</div>':'')+'</div>';
+    }).join('');
+    return '<aside class="mb-leadcard" aria-label="Lead details">'+
+      '<div class="mb-lc-k fs-11 c-text3">LEAD IN PACE</div>'+
+      '<div class="mb-lc-name">'+esc(c.name||'')+'</div>'+
+      (sub?'<div class="fs-12 c-text3">'+sub+'</div>':'')+
+      leads+
+      (d.more?'<div class="fs-12 c-text3">+ '+d.more+' more lead'+(d.more===1?'':'s')+'</div>':'')+
+    '</aside>';
   }
 
   // The rest of the conversation. A reply read on its own is half a story —
@@ -668,6 +720,14 @@
     window.mbViewChanged();
   };
   window.mbViewChanged=function(){ var m=M(); if(STATE.page!=='mailbox'||(!m.activeId&&!m.all)) return; loadMessages(); };
+  // A click on a row of the list. A DRAFT you wrote (Gmail / Outlook Drafts folder) opens straight in the editable window, as it does in
+  // Gmail itself (R-319, owner's 28 notes: "a Gmail draft opened in PACE can be edited") — not as a read-only email with a button to
+  // press next. Anything else, and a draft that cannot be opened for writing, is read as before.
+  window.mbOpenRow=function(id){
+    var row=rowOf(id);
+    if(row&&row.is_draft&&!row.message_ids&&typeof window.mbContinueDraft==='function') return window.mbContinueDraft(id,true);
+    return window.mbOpen(id);
+  };
   window.mbOpen=function(id){
     var m=M(), row=rowOf(id);
     // In All inboxes the message is read from the mailbox it belongs to; the list stays as it is.
@@ -2107,10 +2167,12 @@
         showToast('Could not save the draft: '+((e&&e.message)||e)+'. Your words are still here.','error');
       });
   };
-  window.mbContinueDraft=function(id){
+  window.mbContinueDraft=function(id,fromRow){
     var m=M(), acct=m.activeId; if(!acct||!id) return;
+    // From a click on the list, a draft that cannot be opened for writing is READ instead — the person never lands on nothing.
+    var readInstead=function(why){ if(fromRow){ showToast(why,'warning'); window.mbOpen(id); } else showToast(why,'warning'); };
     apiGet('/mailbox/'+encodeURIComponent(acct)+'/messages/'+encodeURIComponent(id)).then(function(d){
-      if(!d||!d.is_draft){ showToast('That is not a draft','warning'); return; }
+      if(!d||!d.is_draft){ if(fromRow) return window.mbOpen(id); showToast('That is not a draft','warning'); return; }
       var f=draftFields(d);
       var asNew=function(){
         if(!parkOnScreen()) return;
@@ -2127,7 +2189,7 @@
         m._pendingDraft=f;                                  // consumed by openComposer once the email it answers is open
         mbOpenMessage(acct,prior.id,{reply:true,mode:'reply'});
       }).catch(asNew);
-    }).catch(function(e){ showToast('Could not open the draft: '+((e&&e.message)||e),'error'); });
+    }).catch(function(e){ if(fromRow){ readInstead('Could not open the draft for writing ('+((e&&e.message)||e)+') — showing it to read.'); return; } showToast('Could not open the draft: '+((e&&e.message)||e),'error'); });
   };
 
   // Nothing connected. This is a setup state, not an error — say what to do.
@@ -2191,7 +2253,7 @@
         : '');
 
     // Conversations (the newest message either way, ours included) or every email on its own line (R-271).
-    var t=threaded();
+    var t=(STATE.mailView||'threads')!=='messages';   // the person's choice (the Drafts folder is one draft per row either way)
     // One small switch (owner, 20 Oct: "convert this into a toggle and make it small"): on = conversations, off = every email on its own row.
     var viewSwitch='<button type="button" class="mb-switch'+(t?' is-on':'')+'" role="switch" aria-checked="'+t+'" '+
       'title="'+(t?'Conversations: each one is a single row, your replies join it. Switch off to see every email on its own row':'Every email is on its own row. Switch on to group them into conversations')+'" '+
@@ -2359,7 +2421,7 @@
     // newest message, marked "You:" when that was ours.
     var whoText=conv&&(x.participants||[]).length ? x.participants.join(', ')+(x.more_participants?' +'+x.more_participants:'') : ((outbound?'To ':'')+who(party));
     var count=conv&&x.count>1?'<span class="mb-count" title="'+x.count+(x.count_capped?' or more':'')+' messages in this conversation">'+x.count+(x.count_capped?'+':'')+'</span>':'';
-    return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+(picked?' picked':'')+'" onclick="mbOpen(\''+escAttr(x.id)+'\')" '+
+    return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+(picked?' picked':'')+'" onclick="mbOpenRow(\''+escAttr(x.id)+'\')" '+
       'onmouseenter="mbHover(\''+escAttr(x.id)+'\')" onmouseleave="mbHoverEnd()">'+
       '<label class="mb-chk" title="Select" onclick="event.stopPropagation()"><input type="checkbox" '+(picked?'checked ':'')+'onclick="mbSel(\''+escAttr(x.id)+'\',event)" aria-label="Select this email"></label>'+
       mbAvatar(party,28)+
@@ -2395,6 +2457,10 @@
 
   // The subject line and the verbs that act on the open message.
   function renderHead(x, threadLen){
+    var card=leadCardHtml(x);
+    return card?'<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+card+'</div>':renderHeadMain(x,threadLen);
+  }
+  function renderHeadMain(x, threadLen){
     var hasOthers=threadLen>1;
     return '<div style="display:flex;align-items:flex-start;gap:10px">'+
         '<div class="mb-title" style="flex:1;min-width:0">'+esc(x.subject||'(no subject)')+

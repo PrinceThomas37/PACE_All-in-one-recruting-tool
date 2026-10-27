@@ -1148,3 +1148,12 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .am-sum-step span{font-size:11.5px;color:var(--ink3)}
 .am-sum-total{border-color:var(--accent)}
 .am-sum-note{margin-top:8px}
+
+/* R-319: the lead beside its email — in the message's header band; beside the subject and buttons when there is room, under them when there is not */
+.mb-head-row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.mb-head-main{flex:1 1 420px;min-width:0}
+.mb-leadcard{flex:0 1 270px;min-width:220px;padding:10px 12px;border:2px solid var(--glass-brd,var(--border));background:var(--card-solid,var(--card));display:flex;flex-direction:column;gap:3px}
+.mb-lc-name{font-weight:700;font-size:14px}
+.mb-lc-lead{margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
+.mb-lc-job{font-weight:600;color:var(--accent);text-decoration:none}
+.mb-lc-job:hover{text-decoration:underline}

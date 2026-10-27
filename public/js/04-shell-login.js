@@ -220,6 +220,9 @@ function renderSidebar(){
     // folded it before is left with a closed menu and no way to open it.
     // Below 1100px (tablet, phone) the person's own choice still applies.
     if(window.innerWidth>=1100||rp==='pinned') railPinned=' pinned';
+    // R-319 (owner: "the sidebar opens from an arrow"): the arrow is an EXPLICIT choice, remembered under its own key so the old
+    // logo-fold memory above stays ignored. Only a person who pressed the arrow to close it finds it closed on a full-size screen.
+    if(window.innerWidth>=1100&&localStorage.getItem('pace-rail-arrow')==='closed') railPinned='';
   }catch(e){}
 
   return '<div id="sidebar" class="'+(railPinned+setupOpen).trim()+'">'+
@@ -235,10 +238,14 @@ function renderSidebar(){
     '<div class="sb-brand" onclick="paceLogoClick()" role="button" tabindex="0" '+
       'title="PACE" aria-label="PACE">'+
       // R-122: the pixel logo on a slice of the sky (retro.css paints both).
-      '<div class="rail-mark">P</div>'+
+      // R-319: the mark is the two forward chevrons (pace = moving ahead), in the same pixels as the word; folded, it stands alone.
+      '<div class="rail-mark">'+pixelSprite(PACE_GO,'currentColor',2)+'</div>'+
       paceLogoWord()+
       '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
-      '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
+      // The arrow: folds the sidebar to the icon rail, or opens it. Its look (which way it points) is CSS from the sidebar's own
+      // `pinned` class, so the markup never changes between states; the click handler must not also be the brand's click.
+      // It is also the touch device's "open the labels" control (the old hamburger, `.rail-pin`).
+      '<button type="button" class="rail-pin rail-arrow" onclick="event.stopPropagation();toggleRail(true)" aria-label="Fold or open the menu" title="Fold or open the menu" aria-expanded="'+(railPinned?'true':'false')+'">'+pixelSprite(PACE_ARROW,'currentColor',3)+'</button>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
@@ -396,10 +403,15 @@ window.NAV_PIXEL_ICONS=NAV_PIXEL_ICONS;
 // Expand or collapse the icon rail. Like the nav drawer and the theme switch,
 // this toggles ONE class and calls nothing else — a render() here would rebuild
 // the shell, reload every iframe and lose the page's scroll, to move a rail.
-window.toggleRail=function(){
+window.toggleRail=function(viaArrow){
   var sb=document.getElementById('sidebar'); if(!sb)return;
   var on=sb.classList.toggle('pinned');
-  try{ localStorage.setItem('pace-rail', on?'pinned':'collapsed'); }catch(e){}
+  var ar=sb.querySelector('.rail-arrow'); if(ar) ar.setAttribute('aria-expanded',on?'true':'false');
+  try{
+    localStorage.setItem('pace-rail', on?'pinned':'collapsed');
+    // Only the arrow (an explicit choice) is remembered for a full-size screen; the logo's fold on a narrow one is not.
+    if(viaArrow===true) localStorage.setItem('pace-rail-arrow', on?'open':'closed');
+  }catch(e){}
 };
 
 // ── LIGHT / DARK / AUTO ───────────────────────────────────────────────────
@@ -533,6 +545,9 @@ document.addEventListener('keydown',function(ev){
   if(ev.key==='Escape'&&STATE.newMenu){ STATE.newMenu=false; render(); }
 });
 // Pixel clouds (always) and stars (CSS shows them at dusk and night).
+// The brand mark: two forward chevrons (11x9), and the arrow's chevron pointing left (5x7; CSS turns it round when the menu is folded).
+var PACE_GO=['##...##....','.##...##...','..##...##..','...##...##.','....##...##','...##...##.','..##...##..','.##...##...','##...##....'];
+var PACE_ARROW=['...##','..##.','.##..','##...','.##..','..##.','...##'];
 var PACE_CLOUD=['......####......','...#########....','..############..','.##############.','################'];
 function paceSkyDecor(){
   return '<span class="tb-cloud c1">'+pixelSprite(PACE_CLOUD,'currentColor',3)+'</span>'+
