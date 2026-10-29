@@ -41,9 +41,12 @@ try{
 
   await toLeads({id:'boss',role:'bd_lead',roles:['bd_lead']});
   step('nothing ticked: no selection bar, so no Take lead in it (the toolbar\'s "Take leads" is still there)', (await bar())===null && await btn('^Take leads$'));
+  // A teammate's lead is under "My team's leads" for a manager (29 Oct) — look there, then come back to My leads.
+  await ev(()=>{ STATE.jobsFilter.whose='team'; render(); });
   await tick(['own1']);
   let b=await bar();
   step('only an owned lead ticked: Take lead is there but OFF, and says why', b && b.disabled && /Unassigned/.test(b.title), JSON.stringify(b));
+  await ev(()=>{ STATE.jobsFilter.whose='mine'; render(); });
   await tick(['u0','u1','own1']);
   b=await bar();
   step('two Unassigned leads and an owned one ticked: "Take 2 leads" is ON', b && !b.disabled && b.text==='Take 2 leads', JSON.stringify(b));

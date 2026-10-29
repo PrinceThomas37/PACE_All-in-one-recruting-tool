@@ -2,7 +2,7 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-29 (Session 55). **Highest ids:** decision **D-0187** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **069** (none added since 068).
+**Updated**: 2026-10-29 (Session 55). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **069** (none added since 068).
 
 ## START HERE (29 Oct, Session 55) — the owner's 29-note doc: built on `claude/funny-shannon-h83q83` (draft PR), NOT merged
 
