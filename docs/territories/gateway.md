@@ -1260,3 +1260,6 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 
 ## 2026-10-27 (Session 54) — Find Leads industry filter (D-0185)
 `routes/finder.js` config: each industry now says whether it `filters`. `services/lead-finder.js` `industryCodes(search)` — a code filter only when every picked industry has codes.
+
+## 29 Oct 2026 (Session 55)
+- New: `GET /distribute/mailboxes`, `GET /insights/outreach-team`, `POST /my-setup/sequence/rewrite-pending`; `send-progress?user_id=` (admin/ra_lead, same company); `retry-pending-window` checks company + pause; `/distribute/execute` takes `email_ids`, claims leads conditionally, one write per mailbox; `.js/.css` no-cache; JSON cap 8 MB.

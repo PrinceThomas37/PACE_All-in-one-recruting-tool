@@ -819,3 +819,5 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **Paused-mailbox notice (27 Oct 2026, D-0183):** when PACE pauses a mailbox for bouncing too much, the Today screen says which mailbox, when and why — to its owner, managers above and the admin — and the send progress line names the mailbox. Actions to be defined.
 
 - **Hospitals & health care in Find Leads (27 Oct 2026, D-0185):** pick it as an industry and the search returns hospital companies (a real industry-code filter), with 22 hospital job titles to tick.
+
+- **29 Oct 2026 (owner's 29-note doc):** bounces say Blocked or Invalid correctly · 5 MB attachments · a send run picks up newly queued mail and resumes after a restart · Pending per email ID (first / FU1 / FU2) · the RA Lead can watch a person's send live and start it · Assign Leads: choose the email IDs, see each one's queue, assign back to back · RA Lead "Outreach — all users" insights (by user, by email ID) · Rewrite with AI in Pending · re-write waiting first emails after editing the sequence · My leads / My team's leads · lead card on demand · admin people by role · a notice when a send run finishes.

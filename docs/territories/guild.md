@@ -848,3 +848,6 @@ Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.j
 
 ## 2026-10-27 (Session 54) — R-332
 `routes/recruiting/outreach.js` (candidate sequence sends) now reads the warm-up ramp and daily default for the mailbox's own company.
+
+## 29 Oct 2026 (Session 55)
+- Leads list: a team manager opens on My leads (incl. unassigned), My team's leads one click (owner, 29 Oct).

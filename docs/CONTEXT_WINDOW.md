@@ -2,7 +2,15 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-27 (Session 54, evening). **Highest ids:** decision **D-0185** · contract C-0038 · roadmap **R-334** (next `R-335`) · next migration **069** (none added since 068).
+**Updated**: 2026-10-29 (Session 55). **Highest ids:** decision **D-0187** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **069** (none added since 068).
+
+## START HERE (29 Oct, Session 55) — the owner's 29-note doc: built on `claude/funny-shannon-h83q83` (draft PR), NOT merged
+
+R-335…R-341 built and tested (4 commits; archive "2026-10-29 (Session 55)" has the mechanisms). **Waiting on the owner:** the merge go-ahead;
+R-342 direct/office (needs migration 069); R-343 AI variants plan (`docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md`); R-344 Google consent-screen
+steps; R-345 notification actions; R-326 card contents; R-320 compose direction; R-333 which industries. **After merge, verify live:** a run that
+gets new mail mid-way starts a second pass (Render log "[Send] … new email(s) queued … fresh pass"); a Gmail "Message blocked" bounce marks Blocked;
+a 4–5 MB attachment sends from Gmail and Outlook.
 
 ## START HERE (27 Oct, Session 54, evening) — #374, #375, #376 MERGED; clean-worktree 317/317 on Node 22 and Node 26.11.1 for each
 

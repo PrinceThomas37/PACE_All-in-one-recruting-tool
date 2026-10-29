@@ -745,3 +745,6 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 
 ## 2026-10-27 (Session 54) — R-332: settings follow the company
 `workflow-engine.js` reads its step-retry limit for the enrollment's own company (`enrollment.org_id`); `lead-check.js` reads the company cooldown for the asking company. Rule for anything here that calls `getSetting`: name the company (`test/settings-follow-company-smoke.mjs`).
+
+## 29 Oct 2026 (Session 55)
+- Measured 1–29 Oct: AI first emails 1.23 % replies vs 0.54 % template; AI follow-ups below template. ~430k tokens/day, ~250 calls. Plan R-343 in docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md (waiting on the owner). `company_service` (project area) offered in the detail menu.
