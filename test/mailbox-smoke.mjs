@@ -378,9 +378,9 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
 
   const supabase = fakeSupabase();
   const app = express();
-  // Production mounts express.json({ limit: '5mb' }) — matched here, because
+  // Production mounts express.json({ limit: '8mb' }) — matched here, because
   // the attachment cap only means anything relative to the body limit above it.
-  app.use(express.json({ limit: '5mb' }));
+  app.use(express.json({ limit: '8mb' }));
   app.use(require('../routes/mailbox.js')({
     supabase,
     db: { forRequest: () => ({ from: () => ({ select: () => ({ in: () => ({ limit: async () => ({ data: [] }), is: () => ({ limit: async () => ({ data: [] }) }) }) }) }) }) },
@@ -599,19 +599,19 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
 
   // Oversized attachments are refused with something a person can act on.
   //
-  // There are TWO guards and they are not the same. This router's cap (3.5MB of
-  // decoded attachment) sits deliberately below express.json's 5MB body cap, so
+  // There are TWO guards and they are not the same. This router's cap (5MB of
+  // decoded attachment, owner 29 Oct 2026) sits deliberately below express.json's 8MB body cap, so
   // that anything a user is realistically going to attach hits THIS check and
   // gets a sentence explaining what to do. A payload so large it exceeds the
   // body limit itself is stopped earlier, by express, and never reaches here —
   // that is the app-wide backstop, asserted below so the difference is on the
   // record rather than a surprise.
   //
-  // 5,000,000 base64 chars ≈ 3.6MB decoded: over this router's cap, under
+  // 7,200,000 base64 chars ≈ 5.15MB decoded: over this router's cap, under
   // express's body limit — the window this message exists for.
   providerCalls = 0;
   r = await call('POST', '/mailbox/mb-mine/messages/x/reply', {
-    body: 'big', attachments: [{ filename: 'huge.bin', base64: 'A'.repeat(5000000) }],
+    body: 'big', attachments: [{ filename: 'huge.bin', base64: 'A'.repeat(7200000) }],
   });
   ok('an oversized attachment is refused with 413', r.status === 413, 'got ' + r.status);
   const tooBig = await r.json();
@@ -623,7 +623,7 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   // all. Still a 413, still nothing sent — just not our worded message.
   providerCalls = 0;
   r = await call('POST', '/mailbox/mb-mine/messages/x/reply', {
-    body: 'huge', attachments: [{ filename: 'vast.bin', base64: 'A'.repeat(7 * 1024 * 1024) }],
+    body: 'huge', attachments: [{ filename: 'vast.bin', base64: 'A'.repeat(9 * 1024 * 1024) }],
   });
   ok('a body past the express limit is still refused, by express', r.status === 413, 'got ' + r.status);
   ok('...and still sends nothing', providerCalls === 0, 'calls=' + providerCalls);

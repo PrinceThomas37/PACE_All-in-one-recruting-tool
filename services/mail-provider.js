@@ -35,6 +35,7 @@
 // ============================================================================
 
 const { decodeEntities } = require('./html-entities');
+const graphAttach = require('./graph-attach');
 
 // ── Canonical folder kinds ──────────────────────────────────────────────────
 // The six every mail client has, plus 'custom' for a user's own folders. The UI
@@ -292,6 +293,11 @@ function normalizeGmailMessage(m, { folderId } = {}) {
 
 function gmailHasAttachment(part) {
   if (!part) return false;
+  // A thread read headers-only (format=metadata — every conversation summary) carries no parts at all, so this always said
+  // "no files" and an earlier Gmail message's attachment never showed in the thread (owner, 29 Oct). The top part's type
+  // still says it: a message with files is multipart/mixed. The screen reads the message to list them, and shows nothing
+  // when there turn out to be none.
+  if (!part.parts && /^multipart\/mixed/i.test(part.mimeType || '')) return true;
   if (part.filename && part.body?.attachmentId) return true;
   return (part.parts || []).some(gmailHasAttachment);
 }
@@ -692,19 +698,9 @@ function createMailProvider(ctx) {
       // Sent Items carries them.
       if (labels && labels.length) patch.categories = labels;
       await graphMailRequest(t, `/me/messages/${draft.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
-      // Attachments are added to the draft one call at a time; Graph has no
-      // batch form for the simple (<3MB) upload.
-      for (const a of (attachments || [])) {
-        await graphMailRequest(t, `/me/messages/${draft.id}/attachments`, {
-          method: 'POST',
-          body: JSON.stringify({
-            '@odata.type': '#microsoft.graph.fileAttachment',
-            name: a.filename || 'attachment',
-            contentType: a.contentType || 'application/octet-stream',
-            contentBytes: a.base64 || '',
-          }),
-        });
-      }
+      // Attachments are added to the draft one call at a time; a file over 3 MB goes through an upload session
+      // (services/graph-attach.js).
+      await graphAttach.addAttachments(graphMailRequest, t, draft.id, attachments);
       await graphMailRequest(t, `/me/messages/${draft.id}/send`, { method: 'POST' });
       return { ok: true, thread_id: full.conversationId || null };
     }
@@ -738,11 +734,7 @@ function createMailProvider(ctx) {
       } else {
         const d = await graphMailRequest(t, '/me/messages', { method: 'POST', body: JSON.stringify({ subject: subject || '', body: { contentType: 'HTML', content: '' }, toRecipients: [] }) });
         id = d.id;
-        for (const a of (attachments || [])) {
-          await graphMailRequest(t, `/me/messages/${id}/attachments`, { method: 'POST', body: JSON.stringify({
-            '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename || 'attachment',
-            contentType: a.contentType || 'application/octet-stream', contentBytes: a.base64 || '' }) });
-        }
+        await graphAttach.addAttachments(graphMailRequest, t, id, attachments);
       }
       const patch = { body: { contentType: 'HTML', content: quote ? `${htmlBody || ''}<br><br>${quote}` : (htmlBody || '') },
         toRecipients: recips(to), ccRecipients: recips(cc) };

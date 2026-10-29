@@ -495,9 +495,15 @@ function oiDrillCard(){
     '</tbody></table></div>';
   return '<div class="card oi-card oi-drill" data-oi-drill>'+head+body+'</div>';
 }
+// 29 Oct (owner: "the industry list is too big — make it a small section which can be expanded"): the first OI_SPLIT_SHOW
+// rows (the biggest — the server sends them largest first), then a "Show all N" button; the choice lasts until the page is left.
+var OI_SPLIT_SHOW=8;
+window.oiToggleSplit=function(title){ STATE.oiSplitOpen=STATE.oiSplitOpen||{}; STATE.oiSplitOpen[title]=!STATE.oiSplitOpen[title]; render(); };
 function oiSplitCard(title,list){
-  var rows=(list||[]).map(function(g){ return '<tr><td class="fw6">'+htmlEsc(g.name)+'</td><td>'+oiNum(g.people)+'</td><td>'+oiNum(g.emailed)+'</td><td>'+oiNum(g.replied_rate,'%')+'</td><td>'+oiNum(g.interested)+'</td><td>'+oiNum(g.bounced_rate,'%')+'</td></tr>'; }).join('');
-  return '<div class="card oi-card"><div class="td-h">'+title+'</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>'+(title==='BY INDUSTRY'?'Industry':'Time zone')+'</th><th>People</th><th>Emailed</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+  var all=list||[], open=!!(STATE.oiSplitOpen&&STATE.oiSplitOpen[title]);
+  var more=all.length>OI_SPLIT_SHOW?'<button class="btn btn-outline btn-sm oi-split-more" onclick="oiToggleSplit(\''+title+'\')">'+(open?'Show fewer':'Show all '+all.length)+'</button>':'';
+  var rows=(open?all:all.slice(0,OI_SPLIT_SHOW)).map(function(g){ return '<tr><td class="fw6">'+htmlEsc(g.name)+'</td><td>'+oiNum(g.people)+'</td><td>'+oiNum(g.emailed)+'</td><td>'+oiNum(g.replied_rate,'%')+'</td><td>'+oiNum(g.interested)+'</td><td>'+oiNum(g.bounced_rate,'%')+'</td></tr>'; }).join('');
+  return '<div class="card oi-card"><div class="td-h">'+title+'</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>'+(title==='BY INDUSTRY'?'Industry':'Time zone')+'</th><th>People</th><th>Emailed</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+more
     :'<div class="fs-13 c-text3">Nothing to split in these dates.</div>')+'</div>';
 }
 function oiNum(v,suffix){ return v==null?'—':(typeof v==='number'?v.toLocaleString('en-US'):v)+(v==null?'':(suffix||'')); }

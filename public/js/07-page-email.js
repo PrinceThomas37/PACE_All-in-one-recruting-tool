@@ -467,7 +467,7 @@ function renderEmail(){
       '</div>'+
       '<div class="fs-12 c-text3">'+(sp.active&&sp.current?'Currently sending to: '+htmlEsc(sp.current):(sp.done?(sp.interrupted?'Stopped at ':'Completed at ')+(sp.completedAt?new Date(sp.completedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''):''))+'</div>'+
       failPanel+
-      (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending. Press <strong>Send all pending</strong> to carry on.</div>':'')+
+      (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending, and PACE carries on by itself a minute after it is back. You can also press <strong>Send all pending</strong>.</div>':'')+
       (sp.deferredNote?'<div class="fs-12" style="margin-top:8px;color:#b45309">'+htmlEsc(sp.deferredNote)+'</div>':'')+
     '</div>';
   }

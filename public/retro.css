@@ -1327,13 +1327,15 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
    phone drawer (mobile.css) and this row is not drawn. */
 body.ui-kit .rail-toggle{display:none}
 @media (min-width:861px){
-  body.ui-kit .rail-toggle{display:flex;align-items:center;justify-content:center;height:40px;flex:none;padding:0 12px;border-bottom:2px solid var(--glass-brd)}
+  /* 29 Oct (owner: "push this arrow button down, it's taking one tab space — make it smaller"): no longer a row under the
+     logo. It sits at the BOTTOM of the menu, small, under Sign out — the menu items start right under the logo again. */
+  body.ui-kit .rail-toggle{display:flex;align-items:center;justify-content:center;height:30px;flex:none;padding:0 12px 6px}
   body.ui-kit #sidebar.pinned .rail-toggle{justify-content:flex-end}
   body.ui-kit .rail-toggle .rail-arrow{
-    display:flex;align-items:center;justify-content:center;width:30px;height:28px;margin:0;padding:0;border-radius:0;
-    border:2px solid #000;background:#FFF6E6;color:#1A1033;box-shadow:2px 2px 0 #000;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;width:22px;height:22px;margin:0;padding:0;border-radius:0;
+    border:2px solid #000;background:#FFF6E6;color:#1A1033;box-shadow:1px 1px 0 #000;cursor:pointer;
   }
-  body.ui-kit .rail-toggle .rail-arrow svg{display:block}
+  body.ui-kit .rail-toggle .rail-arrow svg{display:block;transform:scale(.8)}
   body.ui-kit .rail-toggle .ra-open{display:none}
   body.ui-kit #sidebar:not(.pinned) .rail-toggle .ra-fold{display:none}
   body.ui-kit #sidebar:not(.pinned) .rail-toggle .ra-open{display:flex}

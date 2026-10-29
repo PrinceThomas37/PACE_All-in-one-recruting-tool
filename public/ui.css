@@ -1146,3 +1146,9 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .mb-lc-lead{margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}
 .mb-lc-job{font-weight:600;color:var(--accent);text-decoration:none}
 .mb-lc-job:hover{text-decoration:underline}
+
+/* Admin → people by role (owner, 29 Oct): one card per role; a click opens the window of names. */
+body.ui-kit .adm-role-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+body.ui-kit .adm-role-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:16px;text-align:left;cursor:pointer;font:inherit;color:var(--text)}
+@media (hover:hover) and (pointer:fine){ body.ui-kit .adm-role-card:hover{border-color:var(--accent)} }
+body.ui-kit .oi-split-more{margin-top:10px}

@@ -47,7 +47,7 @@ const forOrg = (orgId) => ({ from: (t) => {
 const log = { activity: [], emitted: [] };
 const deps = {
   WARMUP_HEADER: 'X-Fute-Warmup', DEFAULT_ORG_ID: null, db: { forOrg },
-  bounceMark: require('../services/bounce-mark.js'), contactStatusRules: require('../services/contact-status.js'),
+  bounceMark: require('../services/bounce-mark.js'), bounceKind: require('../services/bounce-kind.js'), contactStatusRules: require('../services/contact-status.js'),
   emit: (e) => log.emitted.push(e), EVENTS: { EMAIL_BOUNCED: 'EMAIL_BOUNCED', CONTACT_INVALIDATED: 'CONTACT_INVALIDATED' },
   logActivity: async (job, contact, user, type, text) => log.activity.push({ job, type, text }),
 };
