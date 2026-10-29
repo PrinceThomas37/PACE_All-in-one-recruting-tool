@@ -244,11 +244,16 @@ function loadAppData(opts){
     // else keeps the session, tries once more on its own, and then says plainly what happened with Try again / Sign out.
     if(err&&err.expired)return;
     if(!STATE.token)return;
-    if(!opts.retried){
-      STATE.loadNote='PACE is busy — trying again…';render();
-      return new Promise(function(res){setTimeout(res,LOAD_RETRY_MS);}).then(function(){
+    // 29 Oct (owner: "the first log-in takes more than 2 minutes, it shows this message and circles"): the free server
+    // sleeps after a quiet spell and needs up to a minute to wake. One retry after 4 s gave up long before it was awake, so
+    // the person saw "could not load" and pressed again. Now it keeps trying, further apart each time, for about a minute,
+    // and says what is going on.
+    var tries=(opts.tries||0)+1;
+    if(tries<LOAD_RETRY_STEPS.length+1){
+      STATE.loadNote=tries===1?'PACE is busy — trying again…':'PACE is waking up after a quiet spell — this can take up to a minute…';render();
+      return new Promise(function(res){setTimeout(res,LOAD_RETRY_MS*LOAD_RETRY_STEPS[tries-1]);}).then(function(){
         if(!STATE.token)return;   // signed out while we waited
-        return loadAppData({retried:true});
+        return loadAppData({retried:true,tries:tries});
       });
     }
     STATE.loading=false;STATE.loadNote=null;
@@ -257,6 +262,7 @@ function loadAppData(opts){
   });
 }
 var LOAD_RETRY_MS=4000;
+var LOAD_RETRY_STEPS=[1,1.5,2,2.5,3,3.75];   // × LOAD_RETRY_MS: 4, 6, 8, 10, 12, 15 s — about 55 s in all
 window.loadAppDataRetry=function(){STATE.loadFailed=null;loadAppData();};
 function applyJobsList(jl){
   if(!jl)return false;   // R-302: nothing changed — what is on screen stays, and nothing is redrawn

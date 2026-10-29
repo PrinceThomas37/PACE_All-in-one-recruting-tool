@@ -62,7 +62,9 @@ function raTeamStatus(t){
 // .iv-top "top performer" card). The numbers and the three views are unchanged: the BD team (admin only), the RA team,
 // and one analyst's own page.
 function ivTeamSwitch(active){
-  return '<div class="rep-fgroup" style="margin-bottom:14px">'+[['ra','RA Team'],['bd','BD Team']].map(function(t){
+  // 'out' (29 Oct): the team's outreach — every user and every email ID — for the RA Lead and an admin.
+  var tabs=[['ra','RA Team']].concat(userHasRole(STATE.user,'admin')?[['bd','BD Team']]:[]).concat([['out','Outreach — all users']]);
+  return '<div class="rep-fgroup" style="margin-bottom:14px">'+tabs.map(function(t){
     return '<button class="rep-pill'+(active===t[0]?' on':'')+'" onclick="STATE.insightsTeam=\''+t[0]+'\';STATE.insightsSelectedRA=null;render()">'+t[1]+'</button>';
   }).join('')+'</div>';
 }
@@ -122,6 +124,9 @@ function renderInsights(){
       ivTableCard('BD Manager performance',null,bdTeamStatus(tBD)||boardBD)+
     '</div>';
   }
+
+  // RA Lead / admin: the team's outreach, by user and by email ID (owner, 29 Oct)
+  if(isRALead&&insightsTeam==='out'&&!selectedRA) return renderTeamOutreach();
 
   // RA Lead / admin, nobody selected: the RA team
   if(isRALead&&!selectedRA){
@@ -646,4 +651,28 @@ function renderOutreachInsights(toggle){
     :'<div class="fs-13 c-text3">'+(d?'No sequence sent anything in these dates.':'Loading…')+'</div>')+'</div>';
   var splits=d?'<div class="oi-splits">'+oiSplitCard('BY INDUSTRY',d.by_industry)+oiSplitCard('BY TIME ZONE',d.by_timezone)+'</div>':'';
   return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+oiDrillCard()+chart+table+splits+'</div>';
+}
+
+// ── THE TEAM'S OUTREACH (owner, 29 Oct: "connect ratio, block ratio … by total leads, per user and per email ID") ──
+// GET /insights/outreach-team counts (services/team-outreach.js); this draws. Last 30 days.
+function renderTeamOutreach(){
+  var t=STATE.teamOutreach;
+  if(!t||(Date.now()-(t.at||0))>120000&&!t.loading){
+    STATE.teamOutreach=Object.assign({},t||{},{loading:true,at:Date.now()});
+    apiGet('/insights/outreach-team'+insightsTzQ()).then(function(d){ STATE.teamOutreach={data:d,at:Date.now()}; render(); })
+      .catch(function(e){ STATE.teamOutreach={error:(e&&e.message)||'Could not load',at:Date.now()}; render(); });
+  }
+  var d=t&&t.data, head='<div class="ph"><div class="ptitle">Insights</div><div class="psub">Every lead email the company sent'+(d?' · '+htmlEsc(d.from)+' to '+htmlEsc(d.to):'')+'</div></div>'+ivTeamSwitch('out');
+  if(t&&t.error&&!d) return '<div class="page">'+head+'<div class="c-red fs-13">Could not load: '+htmlEsc(t.error)+'</div></div>';
+  if(!d) return '<div class="page">'+head+'<div class="fs-13 c-text3">Loading…</div></div>';
+  var r=function(v){ return v==null?'—':v+'%'; };
+  var row=function(x,first){ return {cells:[first, x.people, x.emailed, r(x.replied_rate), x.connected+' · '+r(x.connect_rate), r(x.bounce_rate), x.blocked+' · '+r(x.block_rate), x.invalid]}; };
+  var cols=['','People written to','Emails sent','Replied','Connected','Bounced','Blocked','Invalid'];
+  var T=d.total;
+  return '<div class="page">'+head+
+    UI.strip([{v:T.people,label:'People written to'},{v:T.emailed,label:'Emails sent'},{v:r(T.connect_rate),label:'Connect ratio'},{v:r(T.replied_rate),label:'Replied'},{v:r(T.block_rate),label:'Block ratio'},{v:r(T.bounce_rate),label:'Bounced (blocked + invalid)'}])+
+    ivTableCard('By user',null,UI.table({cols:['User'].concat(cols.slice(1)),rows:d.by_user.map(function(x){ return row(x,'<strong>'+htmlEsc(x.name)+'</strong>'); }),empty:'Nothing was sent in these dates.'}))+
+    ivTableCard('By email ID',null,UI.table({cols:['Email ID'].concat(cols.slice(1)),rows:d.by_mailbox.map(function(x){ return row(x,htmlEsc(x.name)); }),empty:'Nothing was sent in these dates.'}))+
+    '<div class="fs-12 c-text3">Connected = the lead is Connected or In Discussion. Blocked = their side refuses our mail; Invalid = the address does not exist. Each person is counted once, under whoever wrote to them first in these dates.</div>'+
+  '</div>';
 }

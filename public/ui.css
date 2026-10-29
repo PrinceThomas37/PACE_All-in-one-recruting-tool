@@ -1141,6 +1141,8 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 /* R-319: the lead beside its email — in the message's header band; beside the subject and buttons when there is room, under them when there is not */
 .mb-head-row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
 .mb-head-main{flex:1 1 420px;min-width:0}
+.mb-lc-wrap{position:relative;flex:none;display:flex;flex-direction:column;align-items:flex-end}
+.mb-lc-wrap .mb-leadcard{position:absolute;top:calc(100% + 6px);right:0;width:280px;z-index:20;box-shadow:var(--sh2)}
 .mb-leadcard{flex:0 1 270px;min-width:220px;padding:10px 12px;border:2px solid var(--glass-brd,var(--border));background:var(--card-solid,var(--card));display:flex;flex-direction:column;gap:3px}
 .mb-lc-name{font-weight:700;font-size:14px}
 .mb-lc-lead{margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}

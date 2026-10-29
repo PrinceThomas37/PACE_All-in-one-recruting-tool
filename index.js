@@ -787,6 +787,11 @@ app.use(express.static('public', {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+    } else if (/\.(js|css)$/.test(filePath)) {
+      // A script or style is checked with the server on every load (a cheap "not changed" answer when it has not). Without a
+      // rule, Chrome guessed how long to keep its own copy and could run YESTERDAY's scripts against today's server after a
+      // release (owner, 29 Oct: slow first log-in in Chrome, fine in Brave).
+      res.setHeader('Cache-Control', 'no-cache');
     }
   }
 }));

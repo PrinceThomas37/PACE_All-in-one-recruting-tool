@@ -2460,10 +2460,17 @@
   }
 
   // The subject line and the verbs that act on the open message.
+  // 29 Oct (owner: "the card is always visible at the top — make it pop up only when we want it"): a small "Lead in PACE"
+  // button sits in the header when PACE knows the address; the card opens under it on a click and closes again on another.
   function renderHead(x, threadLen){
     var card=leadCardHtml(x);
-    return card?'<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+card+'</div>':renderHeadMain(x,threadLen);
+    if(!card) return renderHeadMain(x,threadLen);
+    var open=!!M().leadCardOpen;
+    return '<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+
+      '<div class="mb-lc-wrap"><button type="button" class="btn btn-sm btn-outline mb-lc-btn" aria-expanded="'+open+'" onclick="mbToggleLeadCard()">Lead in PACE '+(open?'▴':'▾')+'</button>'+
+      (open?card:'')+'</div></div>';
   }
+  window.mbToggleLeadCard=function(){ var m=M(); m.leadCardOpen=!m.leadCardOpen; paint(); };
   function renderHeadMain(x, threadLen){
     var hasOthers=threadLen>1;
     return '<div style="display:flex;align-items:flex-start;gap:10px">'+

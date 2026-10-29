@@ -281,6 +281,40 @@ router.get('/insights/outreach/people', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// THE TEAM'S OUTREACH (owner, 29 Oct) — for an RA Lead or an admin: every lead email the company sent in the dates, by user
+// and by email ID (connect ratio, block ratio …). services/team-outreach.js counts; this reads. Counts only, never a message.
+// ?from=&to= (YYYY-MM-DD, the viewer's days; default the last 30) · ?tz=
+const teamOutreach = require('../services/team-outreach');
+router.get('/insights/outreach-team', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead or admin only' });
+    const q = req.query || {}, tz = bdInsights.validZone(q.tz), w = bdInsights.windows(new Date(), tz);
+    const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+    let from = isDay(q.from) ? q.from : w.monthFrom, to = isDay(q.to) ? q.to : w.today;
+    if (from > to) [from, to] = [to, from];
+    if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) from = new Date(Date.parse(to) - 366 * 864e5).toISOString().slice(0, 10);
+    const org = (qq) => (req.orgId ? qq.eq('org_id', req.orgId) : qq);
+    const chunks = (ids, n = 150) => { const out = []; for (let i = 0; i < ids.length; i += n) out.push(ids.slice(i, i + n)); return out; };
+    const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id,sent_by,from_email').eq('status', 'sent')
+      .gte('sent_at', from).lte('sent_at', to)).order('id'));
+    const sends = emails.map((e) => ({ id: e.id, day: String(e.sent_at || '').slice(0, 10), contact_id: e.contact_id, sent_by: e.sent_by, from_email: e.from_email }));
+    const contacts = {}, jobOf = {};
+    const cids = [...new Set(sends.map((s) => s.contact_id).filter(Boolean))];
+    for (const part of chunks(cids)) {
+      (await fetchAll(() => org(supabase.from('contacts').select('id,email_status,replied_at,job_id').in('id', part)).order('id'))).forEach((c) => {
+        contacts[c.id] = { email_status: c.email_status, replied_day: c.replied_at ? bdInsights.dayOf(c.replied_at, tz) : null, job_id: c.job_id };
+      });
+    }
+    const jids = [...new Set(Object.values(contacts).map((c) => c.job_id).filter(Boolean))];
+    for (const part of chunks(jids)) (await fetchAll(() => org(supabase.from('jobs').select('id,stage').in('id', part)).order('id'))).forEach((j) => { jobOf[j.id] = j.stage; });
+    Object.values(contacts).forEach((c) => { c.stage = jobOf[c.job_id] || null; });
+    const people = {};
+    const uids = [...new Set(sends.map((s) => s.sent_by).filter(Boolean))];
+    for (const part of chunks(uids)) (await fetchAll(() => org(supabase.from('users').select('id,name').in('id', part)).order('id'))).forEach((u) => { people[u.id] = u.name; });
+    res.json(Object.assign({ from, to, tz }, teamOutreach.summarise({ sends, contacts, people })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/insights/bd/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;

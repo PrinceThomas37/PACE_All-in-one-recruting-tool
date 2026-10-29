@@ -58,12 +58,12 @@ try {
   await page.waitForTimeout(120);
   step('while the first try fails, the person sees "PACE is busy — trying again…", not the login page',
     await ev(() => !!document.getElementById('app-loading') && /trying again/.test(document.body.innerText) && !document.getElementById('login-email')));
-  await page.waitForSelector('#app-loadfail', { timeout: 5000 }).catch(() => {});
-  step('after the second failure: "Your sign-in worked, but PACE could not load your data", with Try again and Sign out',
+  await page.waitForSelector('#app-loadfail', { timeout: 9000 }).catch(() => {});
+  step('after the last retry fails: "Your sign-in worked, but PACE could not load your data", with Try again and Sign out',
     await ev(() => { const b = document.getElementById('app-loadfail'); return !!b && /sign-in worked/.test(b.innerText) && /Try again/.test(b.innerText) && /Sign out/.test(b.innerText) && /Ash Sayyad/.test(b.innerText); }));
   step('…the login page is NOT shown and the sign-in is kept (token in this tab)',
     await ev(() => !document.getElementById('login-email') && STATE.token && sessionStorage.getItem('fg_token') === STATE.token));
-  step('…it tried exactly twice (once more by itself), not in a loop', jobsCalls === 2, String(jobsCalls));
+  step('…it kept trying by itself for a while (7 tries: the first + 6 spaced retries, 29 Oct), not in an endless loop', jobsCalls === 7, String(jobsCalls));
 
   // ── Try again once the server answers ──
   jobsMode = 'ok';
@@ -74,7 +74,7 @@ try {
   // ── Sign out from the failure screen ──
   await ev(() => doLogout()); await page.waitForTimeout(100);
   jobsMode = 'fail'; jobsCalls = 0;
-  await signIn(); await page.waitForSelector('#app-loadfail', { timeout: 5000 }).catch(() => {});
+  await signIn(); await page.waitForSelector('#app-loadfail', { timeout: 9000 }).catch(() => {});
   await ev(() => doLogout()); await page.waitForTimeout(150);
   step('Sign out from the failure screen goes to the login page and forgets the sign-in',
     await ev(() => !!document.getElementById('login-email') && !STATE.token && !sessionStorage.getItem('fg_token')));
