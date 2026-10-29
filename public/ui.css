@@ -1152,3 +1152,5 @@ body.ui-kit .adm-role-grid{display:grid;grid-template-columns:repeat(auto-fill,m
 body.ui-kit .adm-role-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:16px;text-align:left;cursor:pointer;font:inherit;color:var(--text)}
 @media (hover:hover) and (pointer:fine){ body.ui-kit .adm-role-card:hover{border-color:var(--accent)} }
 body.ui-kit .oi-split-more{margin-top:10px}
+body.ui-kit .pend-mb-h{text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+body.ui-kit .pend-mb-tot td{border-top:2px solid var(--line)}

@@ -85,13 +85,16 @@ function renderAssignLeads(){
     poolBar='<div class="fs-13 c-green" style="background:var(--green-l);border:1px solid var(--green);border-radius:var(--r2);padding:14px 16px;margin-bottom:18px;font-weight:600">\u2713 No unassigned leads — pool is clear for today.</div>';
   }
 
+  startAssignPoolPoll();
+  var busy=STATE._assigningNow;
+  var busyBar=busy?'<div class="card cp mb3 fs-13" role="status"><strong>Assigning '+busy.n+' lead'+(busy.n===1?'':'s')+' to '+htmlEsc(busy.name)+'…</strong> You can assign the next set now — the numbers here update by themselves.</div>':'';
   return '<div class="page">'+
     '<div class="ph"><div class="flex jb aic">'+
       '<div><div class="ptitle">Assign Leads</div>'+
         '<div class="psub">'+poolStats.total+' unassigned leads in pool \u00b7 '+managers.length+' managers</div></div>'+
       '<button onclick="refreshPoolStats()" class="c-text2 fs-12" style="background:transparent;border:1px solid var(--border);padding:7px 13px;border-radius:8px;cursor:pointer">\u21bb Refresh pool</button>'+
     '</div></div>'+
-    poolBar+
+    busyBar+poolBar+
     '<div class="fs-13 c-text2" style="font-weight:600;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Managers</div>'+
     managerCards+
   '</div>';

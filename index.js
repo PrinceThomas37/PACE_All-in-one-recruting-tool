@@ -858,6 +858,15 @@ app.post('/emails/retry-pending-window', auth, async (req, res) => {
   try {
     let managerId = req.user.id;
     if (hasRole(req, 'admin', 'ra_lead') && req.body?.manager_id) managerId = req.body.manager_id;
+    // An RA Lead / admin starting someone else's sending (owner, 29 Oct: "an option for the RA lead to send or enable the
+    // outreach if it got stuck"): only a person in their own company, and a pause still wins — said, not swallowed.
+    if (managerId !== req.user.id) {
+      const o = orgIdFor(req);
+      if (o && (await userOrgId(managerId)) !== o) return res.status(404).json({ error: 'Not found' });
+    }
+    if (isSendingPaused() || isManagerPaused(managerId)) {
+      return res.json({ started: false, paused: true, message: 'Sending is paused for this person (emergency stop or a team lead\'s pause) — resume it first.' });
+    }
     if (activeSendByUser.has(managerId)) {
       return res.json({ started: false, message: 'Send already in progress for this manager' });
     }
@@ -2533,7 +2542,14 @@ app.post('/distribute/execute', auth, async (req, res) => {
       supabase, withOrg: (q) => withOrg(q, req), userId: manager_id, todayStr: today(), who: 'Manager',
     });
     if (mb.error) return res.status(400).json({ error: mb.error });
-    const accounts = mb.accounts;
+    // The assigner may choose WHICH of the manager's email IDs the new leads go out from (owner, 29 Oct). Only ones that are
+    // connected and have room today count; none of the chosen ones usable → said, nothing assigned.
+    let accounts = mb.accounts;
+    if (Array.isArray(req.body.email_ids) && req.body.email_ids.length) {
+      const want = new Set(req.body.email_ids.map(String));
+      accounts = accounts.filter(a => want.has(String(a.id)));
+      if (!accounts.length) return res.status(400).json({ error: 'None of the chosen email IDs can send today (not connected, or no room left). Nothing was assigned.' });
+    }
 
     const totalCapacity = accounts.reduce((s, a) => s + a.remaining, 0);
     const totalToSend = Math.min(ratio.total_to_send || 50, totalCapacity);
@@ -2580,12 +2596,22 @@ app.post('/distribute/execute', auth, async (req, res) => {
     console.log(`[Distribute] Accounts in pool: ${accounts.map(a => a.email_address).join(', ')}`);
     console.log(`[Distribute] Assignment queue breakdown:`, assignmentQueue.reduce((m, id) => { m[id] = (m[id]||0)+1; return m; }, {}));
 
-    for (let i = 0; i < selected.length; i++) {
-      const job = selected[i];
-      const emailId = assignmentQueue[i];
-      await supabase.from('jobs').update({ assigned_to_bd: manager_id, sending_email_id: emailId, stage: 'Assigned', assigned_at: now, updated_at: now }).eq('id', job.id);
-      assignedLeads.push({ job_id: job.id, user_email_id: emailId });
+    // One write per email ID, not one per lead (owner, 29 Oct: "the RA lead has to wait a minute or so to assign the next
+    // set") — and each write takes a lead ONLY while it is still unassigned, so two assignments made back to back can never
+    // hand the same lead to two people. A lead another assignment took a moment earlier is simply not in the answer.
+    const byBox = {};
+    selected.forEach((job, i) => { (byBox[assignmentQueue[i]] = byBox[assignmentQueue[i]] || []).push(job.id); });
+    for (const emailId of Object.keys(byBox)) {
+      for (let i = 0; i < byBox[emailId].length; i += 200) {
+        const { data: took } = await supabase.from('jobs')
+          .update({ assigned_to_bd: manager_id, sending_email_id: emailId, stage: 'Assigned', assigned_at: now, updated_at: now })
+          .in('id', byBox[emailId].slice(i, i + 200)).eq('stage', 'Unassigned').is('assigned_to_bd', null).select('id');
+        (took || []).forEach(j => assignedLeads.push({ job_id: j.id, user_email_id: emailId }));
+      }
     }
+    if (!assignedLeads.length) return res.status(409).json({ error: 'These leads were just assigned by someone else — refresh the pool and try again. Nothing was assigned.' });
+    const takenIds = new Set(assignedLeads.map(l => l.job_id));
+    for (let i = selected.length - 1; i >= 0; i--) if (!takenIds.has(selected[i].id)) selected.splice(i, 1);
 
     // Daily send quota is charged on actual delivery (see processPendingEmailSends), not at
     // assignment time. Pre-charging here made the auto-sender read a phantom "full" quota and

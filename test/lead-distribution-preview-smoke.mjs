@@ -64,7 +64,7 @@ step('an empty bucket set produces no rows rather than NaN%',
 
 // ── 5. what the preview shows is what execute receives ───────────────────────
 step('execute is handed the same ratio object the preview rendered',
-  /apiPost\('\/distribute\/execute',\{manager_id:managerId,ratio:ratio\}\)/.test(page));
+  /var body=\{manager_id:managerId,ratio:ratio\};[\s\S]{0,200}apiPost\('\/distribute\/execute',body\)/.test(page));   // + the chosen email IDs (29 Oct)
 step('the preview total comes from that same object',
   page.includes("Distribution preview \\u2014 '+ratio.total_to_send"));
 

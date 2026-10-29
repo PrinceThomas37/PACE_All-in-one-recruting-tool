@@ -36,6 +36,7 @@ const aiFirstChoice = require('../services/ai-first-choice');
 const aiTeach = require('../services/ai-teach');
 const followupSteps = require('../services/followup-steps');
 const wordingScope = require('../services/wording-scope');
+const pendingByMailbox = require('../services/pending-by-mailbox');
 const own = require('../services/ownership');
 const { createDb } = require('../models');
 
@@ -266,7 +267,7 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
     // Counts of the caller's own queue — or, for the two roles that operate
     // other people's sending, a named sender's. Never outside the organisation.
     let query = db.forRequest(req).from('emails')
-      .select('id, attempt_count, next_attempt_at, followup_type, job:jobs(timezone, company_id)').eq('status', 'pending');
+      .select('id, attempt_count, next_attempt_at, followup_type, sending_email_id, job:jobs(timezone, company_id, sending_email_id)').eq('status', 'pending');
     if (hasRole(req, 'admin', 'ra_lead') && req.query.manager_id) {
       query = query.eq('sent_by', req.query.manager_id);
     } else if (!hasRole(req, 'admin', 'ra_lead')) {
@@ -334,6 +335,18 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
         resumes_label: formatWindowOpensLabel(t.timezone, sendWindow)
       }));
 
+    // Per email ID, split by step (owner, 29 Oct): first outreach / FU1 / FU2 / later — services/pending-by-mailbox.js.
+    let by_mailbox = [];
+    try {
+      const ids = [...new Set(rows.map(r => r.sending_email_id || (r.job && r.job.sending_email_id)).filter(Boolean))];
+      const boxes = {};
+      for (const part of chunk(ids, 100)) {
+        const { data: mbs } = await db.forRequest(req).from('user_emails').select('id,email_address').in('id', part);
+        (mbs || []).forEach(m => { boxes[m.id] = m.email_address; });
+      }
+      by_mailbox = pendingByMailbox.byMailbox(rows, boxes);
+    } catch (_) { by_mailbox = []; }   // the counts above still stand
+
     const winLbl = `${padHour(sendWindow.start)} – ${padHour(sendWindow.end)} lead local time` +
       (sendWindow.days ? ` · ${sendWindow.days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')} only` : '');
     // Which rows are held, so each can say so. Only for a queue the caller
@@ -349,6 +362,7 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
       ...(rowsVisible ? { held_ids } : {}),
       company_daily_cap: companyCap,
       by_timezone,
+      by_mailbox,
       send_window: sendWindow,
       send_window_label: winLbl,
       auto_retry: {
@@ -382,11 +396,22 @@ router.post('/emails', auth, async (req, res) => {
 });
 
 router.get('/emails/send-progress', auth, async (req, res) => {
+  let meId = req.user.id;
   try {
+    // An RA Lead / admin may watch ANOTHER person's send live (owner, 29 Oct) — counts only, a person in their own company
+    // (anyone else: the same empty answer as nobody sending).
+    let uid = req.user.id;
+    if (req.query.user_id && req.query.user_id !== req.user.id) {
+      if (!hasRole(req, 'admin', 'ra_lead')) return res.json({ active: false });
+      const { data: who } = await db.forRequest(req).from('users').select('id').eq('id', String(req.query.user_id)).maybeSingle();
+      if (!who) return res.json({ active: false });
+      uid = who.id;
+    }
+    const me = { ...req.user, id: uid }; meId = uid;
     // Served from the in-memory mirror: this is the most frequently polled
     // endpoint (every 2-10s per BD), so it must not hit the DB on every call.
     // Fall back to the DB only until the mirror is warm after a restart.
-    const key = `send_progress_${req.user.id}`;
+    const key = `send_progress_${me.id}`;
     // A FINISHED run's card has a shelf life. The 60s timer that clears it only
     // fires while the process lives, and on the free tier the server sleeps —
     // so without this the card comes back hours later still asserting totals
@@ -394,27 +419,27 @@ router.get('/emails/send-progress', auth, async (req, res) => {
     // made) and contradicts the pending panel beside it.
     const expire = async (p) => {
       if (isStaleProgress(p)) {
-        sendProgressCache.set(req.user.id, null);
+        sendProgressCache.set(me.id, null);
         try { await supabase.from('app_settings').delete().eq('key', key); } catch (_) {}
         return null;
       }
       // A run that died with its process (a deploy, a restart) is not "still sending": say it stopped early, and keep
       // that record (it ages out like any finished run). With no liveness probe (a bare test harness) nothing changes.
-      const r = reconcileProgress(p, { alive: ctx.isSendAlive ? ctx.isSendAlive(req.user.id) : true });
+      const r = reconcileProgress(p, { alive: ctx.isSendAlive ? ctx.isSendAlive(me.id) : true });
       if (r !== p) {
-        sendProgressCache.set(req.user.id, r);
+        sendProgressCache.set(me.id, r);
         try { await supabase.from('app_settings').upsert({ key, value: JSON.stringify(r) }, { onConflict: 'key' }); } catch (_) {}
       }
       return r;
     };
-    const cached = sendProgressCache.get(req.user.id);
+    const cached = sendProgressCache.get(me.id);
     if (cached !== undefined) return res.json((await expire(cached)) || { active: false });
     const { data } = await supabase.from('app_settings').select('value').eq('key', key).single();
     let progress = data ? JSON.parse(data.value) : null;
     progress = await expire(progress);
-    sendProgressCache.set(req.user.id, progress);
+    sendProgressCache.set(me.id, progress);
     res.json(progress || { active: false });
-  } catch { sendProgressCache.set(req.user.id, null); res.json({ active: false }); }
+  } catch { sendProgressCache.set(meId, null); res.json({ active: false }); }
 });
 
 router.delete('/emails/:id', auth, async (req, res) => {
