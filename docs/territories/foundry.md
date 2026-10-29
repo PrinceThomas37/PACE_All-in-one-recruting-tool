@@ -1370,3 +1370,4 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 ## 30 Oct 2026 (Session 56)
 - R-342 labels: `contact-points-smoke` 51 (+6), `lead-contact-points-routes-smoke` 33 (+2), `contact-points-ui-smoke` 37 (+4, incl. browser/server key parity; the fake candidate carries labels).
+- R-333: `lead-finder-smoke` 89 (every industry coded except the four job types, 2–6 digits, no staffing 5613, two industries = both codes); `finder-page-smoke` 211 (job-type hint).
