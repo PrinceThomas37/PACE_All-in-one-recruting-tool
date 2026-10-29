@@ -13,8 +13,9 @@ const { approxBytes } = require('./mail-provider');
 const mailFormat = require('./mail-format');
 const { fillSignatureHtml } = require('../email-signature');
 
-// express.json() is capped at 5mb for the whole app, and base64 inflates a file by about a third — so this is the real ceiling.
-const MAX_ATTACH_BYTES = 3.5 * 1024 * 1024;
+// 5 MB of files per message (owner, 29 Oct 2026). base64 inflates a file by about a third, so the app's JSON cap (index.js
+// express.json) is 8 MB; Gmail big messages go by its upload address and Outlook files over 3 MB by an upload session.
+const MAX_ATTACH_BYTES = 5 * 1024 * 1024;
 const KINDS = ['new', 'reply', 'forward'];
 
 // Attachments arrive as [{ filename, content_type, base64 }]. Validated before anything is sent.

@@ -384,3 +384,6 @@ Order of a run: window-open leads before closed-window ones; inside each, first 
 
 ## 2026-10-27 (Session 54) — R-332: warm-up, smtp batch, candidate hours per company
 Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`); `routes/recruiting/outreach.js` mailbox selects now include `org_id`. Candidate-email hours: `candidateWindow(orgId)` (per-company cache); the drain uses each row's company. `warmup-engine.js` reads every number per mailbox.
+
+## 29 Oct 2026 (Session 55)
+- Bounce kind (blocked/invalid) `services/bounce-kind.js`; refused send marks the contact. 5 MB attachments: `services/graph-attach.js`, Gmail `sendMime` upload path. Send runs are passes (`services/send-passes.js`, `runSendPasses`): new mail queued mid-run → fresh pass in the agreed order; cut-off runs resume 60 s after boot. Reply-all no longer copies To into Cc. Gmail headers-only `multipart/mixed` = has files.

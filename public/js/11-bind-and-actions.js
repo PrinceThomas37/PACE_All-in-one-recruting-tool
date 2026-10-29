@@ -224,15 +224,33 @@ function loadPendingSummary(){
   if(userHasRole(STATE.user,'ra_lead')&&STATE.raLeadSelectedBD)q='?manager_id='+encodeURIComponent(STATE.raLeadSelectedBD);
   apiGet('/emails/pending-summary'+q).then(function(d){STATE.pendingSummary=d;scheduleRender();}).catch(function(){});
 }
+// An RA Lead watching one manager's queue (owner, 29 Oct: "view the live numbers automatically"): that person's send run,
+// their counts and their queue split, every 15 seconds while the drill-in is open — counts only, never a message.
+function loadWatchedProgress(){
+  var id=STATE.raLeadSelectedBD; if(!id||!STATE.token)return;
+  apiGet('/emails/send-progress?user_id='+encodeURIComponent(id)).then(function(d){
+    if(STATE.raLeadSelectedBD!==id)return; STATE.watchedProgress=d||{active:false}; scheduleRender();
+  }).catch(function(){});
+}
 function startPendingSummaryPoll(){
   if(STATE._pendingSummaryTimer){clearInterval(STATE._pendingSummaryTimer);STATE._pendingSummaryTimer=null;}
   if(!STATE.user||STATE.emailTab!=='pending')return;
   loadPendingSummary();
+  var tick=0;
   STATE._pendingSummaryTimer=setInterval(function(){
-    if(STATE.emailTab==='pending'&&STATE.user)loadPendingSummary();
-    else if(STATE._pendingSummaryTimer){clearInterval(STATE._pendingSummaryTimer);STATE._pendingSummaryTimer=null;}
-  },60000);
+    if(!(STATE.emailTab==='pending'&&STATE.user)){ clearInterval(STATE._pendingSummaryTimer);STATE._pendingSummaryTimer=null; return; }
+    tick++;
+    if(STATE.raLeadSelectedBD){ loadWatchedProgress(); if(tick%2===0){ loadPendingSummary(); loadSenderSummary(); } }
+    else if(tick%4===0) loadPendingSummary();
+  },15000);
 }
+window.raLeadStartSending=function(){
+  var id=STATE.raLeadSelectedBD; if(!id)return;
+  apiPost('/emails/retry-pending-window',{manager_id:id}).then(function(d){
+    showToast((d&&d.message)||'Started',(d&&d.started)?'success':'info');
+    setTimeout(loadWatchedProgress,4000);
+  }).catch(function(e){ showToast('Could not start: '+((e&&e.message)||e),'error'); });
+};
 function stopPendingSummaryPoll(){
   if(STATE._pendingSummaryTimer){clearInterval(STATE._pendingSummaryTimer);STATE._pendingSummaryTimer=null;}
 }
@@ -286,6 +304,15 @@ function startProgressPoll(){
         if(_emailRefreshCount%3===0&&STATE.page==='email')loadEmailsForCurrentUser();
       }
       else if(!!newProgress!==hadProgress||moved){scheduleRender();}
+      // A run that was going and has now finished says so, wherever the person is in PACE — and, when they asked for it,
+      // as a notification from the browser if PACE is in a background tab (owner, 29 Oct: "once the outreach is
+      // completed, give the user a notification").
+      if(d&&d.active) STATE._runSeenActive=d.startedAt||true;
+      else if(STATE._runSeenActive&&d&&d.done){
+        STATE._runSeenActive=null;
+        var msg=(d.interrupted?'Sending was cut off by a restart after ':'Outreach finished — ')+(d.sent||0)+' sent'+(d.failed?', '+d.failed+' failed':'')+(d.deferred?', '+d.deferred+' waiting':'')+'.';
+        paceNotify(d.interrupted?'Sending stopped early':'Outreach finished', msg, d.failed?'warning':'success');
+      }
       if(d&&d.done&&!d.active){
         _emailRefreshCount=0;
         if(STATE.page==='email')loadEmailsForCurrentUser();
@@ -364,3 +391,14 @@ window.retryAllFailedEmails=function(ids){
   apiPost('/emails/retry-failed',{ids:ids||[]}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
 };
 
+// A message for the person: a toast in PACE, and — only when they allowed it and PACE is not the tab on screen — the
+// browser's own notification. Never asks for permission by itself; askNotifyPermission() is called from a click.
+function paceNotify(title, body, kind){
+  try{ showToast(body, kind||'info'); }catch(e){}
+  try{
+    if(document.hidden&&window.Notification&&Notification.permission==='granted') new Notification('PACE — '+title,{body:body});
+  }catch(e){}
+}
+window.askNotifyPermission=function(){
+  try{ if(window.Notification&&Notification.permission==='default') Notification.requestPermission(); }catch(e){}
+};

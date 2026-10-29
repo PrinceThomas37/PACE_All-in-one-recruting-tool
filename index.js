@@ -73,6 +73,7 @@ const { createGmailDelivery, freshFollowup } = require('./services/gmail-deliver
 // App-password mailboxes — SMTP to send, IMAP to read (D-0120, R-200 step b). Zoho and any provider without an OAuth sign-in.
 const dailyLimit = require('./services/daily-limit');
 const contactStatusRules = require('./services/contact-status');            // a mailbox's limit is the admin's number (D-0123)
+const graphAttach = require('./services/graph-attach');   // Outlook files over 3 MB go through an upload session
 const mailboxSecret = require('./services/mailbox-secret');
 const { createSmtpStore } = require('./services/smtp-store');
 const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mailbox');
@@ -139,7 +140,8 @@ memoryWatch.start();
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization','If-None-Match'], exposedHeaders: ['ETag'] }));   // If-None-Match / ETag: the lead list's "not changed" answer (R-302)
 // `verify` keeps the raw bytes on the request. Stripe signs the exact body it
 // sent, so a re-serialised object cannot be verified — see routes/plans.js.
-app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
+app.use(express.json({ limit: '8mb',   // 5 MB of attachments, base64 (services/mailbox-send.js)
+  verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── Rate limits on the unauthenticated surface ─────────────────
 // Everything else sits behind `auth`. These three are reachable by anyone, and
@@ -583,6 +585,7 @@ function buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skipped
 }
 
 const { tryStartRun } = require('./services/send-progress');
+const sendPasses = require('./services/send-passes');
 const activeSendByUser = new Set();
 // "Is a send for this person running in THIS process?" — the two ways a run starts (Send all pending registers in
 // activeSendByUser; Send selected registers here). A progress record that says `active` with neither is a run a
@@ -784,6 +787,11 @@ app.use(express.static('public', {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+    } else if (/\.(js|css)$/.test(filePath)) {
+      // A script or style is checked with the server on every load (a cheap "not changed" answer when it has not). Without a
+      // rule, Chrome guessed how long to keep its own copy and could run YESTERDAY's scripts against today's server after a
+      // release (owner, 29 Oct: slow first log-in in Chrome, fine in Brave).
+      res.setHeader('Cache-Control', 'no-cache');
     }
   }
 }));
@@ -855,6 +863,15 @@ app.post('/emails/retry-pending-window', auth, async (req, res) => {
   try {
     let managerId = req.user.id;
     if (hasRole(req, 'admin', 'ra_lead') && req.body?.manager_id) managerId = req.body.manager_id;
+    // An RA Lead / admin starting someone else's sending (owner, 29 Oct: "an option for the RA lead to send or enable the
+    // outreach if it got stuck"): only a person in their own company, and a pause still wins — said, not swallowed.
+    if (managerId !== req.user.id) {
+      const o = orgIdFor(req);
+      if (o && (await userOrgId(managerId)) !== o) return res.status(404).json({ error: 'Not found' });
+    }
+    if (isSendingPaused() || isManagerPaused(managerId)) {
+      return res.json({ started: false, paused: true, message: 'Sending is paused for this person (emergency stop or a team lead\'s pause) — resume it first.' });
+    }
     if (activeSendByUser.has(managerId)) {
       return res.json({ started: false, message: 'Send already in progress for this manager' });
     }
@@ -1098,25 +1115,10 @@ async function loadSettingsByKeys(keys) {
   return out;
 }
 
-// Standalone generation function — called directly by autoSendForManager (no HTTP)
-async function generateEmailsForJobs(job_ids, callerUserId) {
-  // Batch fetch jobs in chunks to avoid Supabase URL length limits on .in()
-  const BATCH_SIZE = 50;
-  let jobs = [];
-  for (let i = 0; i < job_ids.length; i += BATCH_SIZE) {
-    const chunk = job_ids.slice(i, i + BATCH_SIZE);
-    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
-    if (error) {
-      console.error(`[GenerateEmails] Failed to fetch jobs batch ${i}-${i + chunk.length}:`, error.message);
-      throw error;
-    }
-    jobs = jobs.concat(data || []);
-  }
-  if (!jobs.length) {
-    console.log(`[GenerateEmails] No jobs found for IDs: ${job_ids.slice(0, 5).join(',')}...`);
-    return 0;
-  }
-  console.log(`[GenerateEmails] Fetched ${jobs.length} jobs (requested ${job_ids.length})`);
+// Who writes each lead's first email and in which words: the people, their first email IDs and every wording store the
+// builder reads (services/lead-outreach-queue.js). Shared by queuing new first emails and by re-writing the waiting ones
+// after the person changed their sequence (POST /my-setup/sequence/rewrite-pending).
+async function loadFirstEmailWording(jobs, callerUserId) {
   const bdIds = [...new Set(jobs.map(j => j.assigned_to_bd).filter(Boolean))];
   const { data: bdUsers } = bdIds.length ? await supabase.from('users').select('id,name,email').in('id', bdIds) : { data: [] };
   const bdMap = {};
@@ -1137,6 +1139,29 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   const tmplRows = await loadSettingsByKeys(tmplKeys);
   const tmplSettings = {};
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
+  return { bdMap, bdPrimaryEmailMap, tmplSettings };
+}
+
+// Standalone generation function — called directly by autoSendForManager (no HTTP)
+async function generateEmailsForJobs(job_ids, callerUserId) {
+  // Batch fetch jobs in chunks to avoid Supabase URL length limits on .in()
+  const BATCH_SIZE = 50;
+  let jobs = [];
+  for (let i = 0; i < job_ids.length; i += BATCH_SIZE) {
+    const chunk = job_ids.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
+    if (error) {
+      console.error(`[GenerateEmails] Failed to fetch jobs batch ${i}-${i + chunk.length}:`, error.message);
+      throw error;
+    }
+    jobs = jobs.concat(data || []);
+  }
+  if (!jobs.length) {
+    console.log(`[GenerateEmails] No jobs found for IDs: ${job_ids.slice(0, 5).join(',')}...`);
+    return 0;
+  }
+  console.log(`[GenerateEmails] Fetched ${jobs.length} jobs (requested ${job_ids.length})`);
+  const { bdMap, bdPrimaryEmailMap, tmplSettings } = await loadFirstEmailWording(jobs, callerUserId);
 
   const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
   const { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped, needsSequence } = buildPendingEmailsFromJobs(
@@ -1320,6 +1345,50 @@ app.post('/emails/send-selected', auth, async (req, res) => {
   }
 });
 
+// AFTER A PERSON CHANGES THEIR SEQUENCE (owner, 29 Oct: "if I sent outreach today and realise the wording is not working,
+// I should be able to edit it"). The sequence itself can always be edited; what did not change were the FIRST emails already
+// written and waiting in Pending — they keep the words they were written with. This re-writes those, from the person's
+// wording as it is now, the same way they were written (services/lead-outreach-queue.js: per-email-ID wording, versions).
+// Only the caller's own, only still 'pending' at the moment of writing (a send that has just claimed one is never touched).
+// Follow-ups are written on the day they go out, so they already use the new words. { dry:true } only counts.
+app.post('/my-setup/sequence/rewrite-pending', auth, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    let rows = [], from = 0;
+    for (;;) {
+      const { data, error } = await db.forRequest(req).from('emails').select('id,job_id,contact_id,followup_type')
+        .eq('sent_by', uid).eq('status', 'pending').order('id', { ascending: true }).range(from, from + 999);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows = rows.concat(data); if (data.length < 1000) break; from += 1000;
+    }
+    rows = rows.filter(r => !followupSteps.isFollowupType(r.followup_type) && r.job_id && r.contact_id);
+    if (req.body && req.body.dry) return res.json({ waiting: rows.length });
+    if (!rows.length) return res.json({ rewritten: 0, waiting: 0 });
+    const want = new Set(rows.map(r => `${r.job_id}:${r.contact_id}`));
+    const jobIds = [...new Set(rows.map(r => r.job_id))];
+    let jobs = [];
+    for (let i = 0; i < jobIds.length; i += 50) {
+      const { data } = await db.forRequest(req).from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', jobIds.slice(i, i + 50));
+      jobs = jobs.concat(data || []);
+    }
+    // Written in THIS person's words, for exactly the people whose first email is waiting.
+    jobs = jobs.map(j => Object.assign({}, j, { assigned_to_bd: uid, contacts: (j.contacts || []).filter(c => want.has(`${j.id}:${c.id}`)) }));
+    const { bdMap, bdPrimaryEmailMap, tmplSettings } = await loadFirstEmailWording(jobs, uid);
+    const { emailsToInsert, needsSequence } = buildPendingEmailsFromJobs(jobs, uid, bdMap, bdPrimaryEmailMap, tmplSettings, new Set());
+    if (needsSequence.length && !emailsToInsert.length) return res.status(400).json({ error: 'Save your sequence first — there is no wording to write them with.' });
+    const fresh = {}; emailsToInsert.forEach(e => { fresh[`${e.job_id}:${e.contact_id}`] = e; });
+    let rewritten = 0;
+    for (const r of rows) {
+      const e = fresh[`${r.job_id}:${r.contact_id}`]; if (!e) continue;
+      const { data: done } = await db.forRequest(req).from('emails').update({ subject: e.subject, body: e.body, template_variant: e.template_variant || null })
+        .eq('id', r.id).eq('sent_by', uid).eq('status', 'pending').select('id');
+      if (done && done.length) rewritten++;
+    }
+    res.json({ rewritten, waiting: rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /emails/send-progress → extracted to routes/emails.js (mounted below).
 
 app.post('/emails/queue-all', auth, async (req, res) => {
@@ -1327,6 +1396,7 @@ app.post('/emails/queue-all', auth, async (req, res) => {
     if (isSendingPaused()) return res.status(409).json({ error: 'Sending is paused (emergency stop is on). Resume sending first.' });
     if (isManagerPaused(req.user.id)) return res.status(409).json({ error: 'Your sending is paused by your team lead/admin — it will resume when they turn it back on.' });
     // Fetch all pending emails for this user, joining job -> sending_email_id + platform
+    const fetchedAt = new Date().toISOString();
     const pendingEmails = await fetchPendingEmailsForUser(req.user.id);
     if (!pendingEmails.length) return res.json({ success: true, sent: 0, failed: 0, queued: 0 });
 
@@ -1348,14 +1418,14 @@ app.post('/emails/queue-all', auth, async (req, res) => {
       await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
       console.log(`[SendAll] Starting loop for ${totalCount} emails, userId=${userId}`);
-      const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
+      const { totalCount: runTotal, sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await runSendPasses(userId, pendingEmails, { autoSend: false, fetchedAt });
       const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
       if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
       const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
       for (const jid of uniqueJobIds) await logActivity(jid, null, userId, 'emails_sent', `${sent} email(s) sent via Microsoft`, null, null);
       const deferredTotal = skippedWindow + skippedQuota + skippedDomain + (skippedCompany || 0);
       await setSendProgress(userId, {
-        active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
+        active: false, done: true, total: runTotal, sent, failed, retrying, deferred: deferredTotal,
         deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
         failDetails,
         deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany, sendWindow }),
@@ -1511,12 +1581,14 @@ async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, att
       ...((cc && cc.length) ? { ccRecipients: cc.map(a => ({ emailAddress: { address: a } })) } : {}),
       // Labels picked in the New message window (R-244): Outlook categories, carried by the draft into Sent Items.
       ...((categories && categories.length) ? { categories } : {}),
-      ...((attachments && attachments.length) ? { attachments: attachments.map(a => ({
+      // Small files ride inside the message; anything over Graph's 3 MB is uploaded to the draft below (graph-attach.js).
+      ...((attachments && attachments.length && graphAttach.allSmall(attachments)) ? { attachments: attachments.map(a => ({
         '@odata.type': '#microsoft.graph.fileAttachment',
         name: a.filename, contentType: a.contentType || 'application/octet-stream', contentBytes: a.base64
       })) } : {})
     })
   });
+  if (attachments && attachments.length && !graphAttach.allSmall(attachments)) await graphAttach.addAttachments(graphMailRequest, accessToken, msg.id, attachments);
   await graphMailRequest(accessToken, `/me/messages/${msg.id}/send`, { method: 'POST' });
   // msg.id is the DRAFT id; once sent, the durable id lives on the Sent Items copy. Re-fetch it
   // so follow-up threading has a parent that survives the Drafts->Sent move.
@@ -2033,6 +2105,11 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   let sent = 0, failed = 0, skippedWindow = 0, skippedQuota = 0, skippedDomain = 0, skippedContactStatus = 0, skippedThread = 0, skippedInactive = 0, skippedSuppressed = 0, skippedCompany = 0;
   const failDetails = [], sentContactIds = [], sentJobIds = [];
   const startedAt = new Date().toISOString();
+  // A run is a series of passes (services/send-passes.js): a later pass shows its numbers on top of the earlier ones,
+  // carries the mailbox spacing over, and stops early when new mail has been queued since it began.
+  const prior = opts.prior || null;
+  const progress = (uid, d) => setSendProgress(uid, prior ? sendPasses.withPrior(d, prior) : d);
+  let lastArrivalCheck = Date.now(), restart = false;
 
   // Load delivery status for every pending recipient (not just follow-ups) so we can
   // skip known-bad addresses on initial outreach too — hard bounces to invalid/deactivated
@@ -2119,8 +2196,8 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         pendingEmails.filter(companyDailyCap.isFirstEmail).map(e => e.job?.company_id), today());
     }
   } catch (_) { companyCap = 0; }   // a failed count must never stop sending
-  const lastSendAtByMailbox = {};
-  const domainTimestamps = {};
+  const lastSendAtByMailbox = (opts.carry && opts.carry.lastSendAtByMailbox) || {};
+  const domainTimestamps = (opts.carry && opts.carry.domainTimestamps) || {};
   let sendAttempts = 0;
   const maxPerRun = settings.maxPerRun || 0;
 
@@ -2136,6 +2213,16 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     if (isSendingPaused() || isManagerPaused(userId)) {
       console.log(`[EmergencyStop] Sending paused (global or manager ${userId}) mid-run — halting; remaining emails stay pending`);
       break;
+    }
+    // New mail queued since this pass began (a fresh assignment's first emails, the daily follow-ups)? Stop here; the run
+    // starts a new pass from the whole queue, in the agreed order. One small count every few minutes.
+    if (opts.watchArrivals && Date.now() - lastArrivalCheck > sendPasses.ARRIVAL_CHECK_MS) {
+      lastArrivalCheck = Date.now();
+      try {
+        const { count } = await supabase.from('emails').select('id', { count: 'exact', head: true })
+          .eq('sent_by', userId).eq('status', 'pending').gt('created_at', opts.fetchedAt || startedAt);
+        if (count > 0) { restart = true; console.log(`[Send] ${count} new email(s) queued for ${userId} mid-run — starting a fresh pass`); break; }
+      } catch (_) { /* could not look: carry on with this pass */ }
     }
     const leadTz = email.job?.timezone || 'EST';
     // Rotation: a per-email override mailbox wins over the job's default. All
@@ -2156,20 +2243,20 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
 
     if (sendingEmail && sendingEmail.is_active === false) {
       skippedInactive++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (sending mailbox disabled — skipped)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (sending mailbox disabled — skipped)` });
       continue;
     }
 
     if (userEmailId && authFailedMailboxes.has(userEmailId)) {
       skippedInactive++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (mailbox sign-in failed this run — left in queue)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (mailbox sign-in failed this run — left in queue)` });
       continue;
     }
 
     if (userEmailId && mailboxDeliv[userEmailId] && mailboxDeliv[userEmailId].auto_paused_at) {
       skippedInactive++;
       // Say WHICH mailbox (owner, 27 Oct 2026): five were paused and the line gave no way to tell which one held this email back.
-      await setSendProgress(userId, { ...progressBase, current: mailboxAlertsRules.heldByPauseLine(email.to_email, sendingEmail?.email_address) });
+      await progress(userId, { ...progressBase, current: mailboxAlertsRules.heldByPauseLine(email.to_email, sendingEmail?.email_address) });
       continue;
     }
 
@@ -2177,20 +2264,20 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       skippedSuppressed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: 'Recipient is on the opt-out / suppression list — not sent' });
       await recordSendFailure(email, 'suppression', 'Recipient is on the opt-out / suppression list — not sent');
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (suppressed — opted out)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (suppressed — opted out)` });
       continue;
     }
 
     if (!isInLeadSendWindow(leadTz, new Date(), sendWindow)) {
       skippedWindow++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (waiting ${leadTz} send window)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (waiting ${leadTz} send window)` });
       continue;
     }
 
     // Left pending, not claimed: it goes on the first run tomorrow.
     if (companyDailyCap.capCheck({ email, companyId: email.job?.company_id, counts: companySentToday, cap: companyCap }).blocked) {
       skippedCompany++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (${companyDailyCap.waitSentence(companyCap)})` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (${companyDailyCap.waitSentence(companyCap)})` });
       continue;
     }
 
@@ -2201,7 +2288,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: email.from_email || '—', error: 'No sending email configured for this job' });
       await recordSendFailure(email, 'No sending email configured for this job', 'No sending mailbox is set on this lead — assign one, then press Retry.');
-      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      await progress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
 
@@ -2210,14 +2297,14 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     const limit = wl != null ? Math.min(baseLimit, wl) : baseLimit;
     if ((sentToday[userEmailId] || 0) >= limit) {
       skippedQuota++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (mailbox daily limit ${limit} reached)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (mailbox daily limit ${limit} reached)` });
       continue;
     }
 
     const domain = emailDomain(email.to_email);
     if (domain && domainSendsInLastHour(domainTimestamps, domain) >= settings.domainMaxPerHour) {
       skippedDomain++;
-      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (domain ${domain} throttled)` });
+      await progress(userId, { ...progressBase, current: `${email.to_email} (domain ${domain} throttled)` });
       continue;
     }
 
@@ -2230,7 +2317,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'Gmail sending is not configured on the server yet' });
       await recordSendFailure(email, 'Gmail sending is not configured on the server yet', 'Gmail sending is not configured on the server yet');
-      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      await progress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
     if (platform === 'smtp' && !mailboxSecret.isConfigured()) {
@@ -2238,7 +2325,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'App-password sending is not configured on the server yet' });
       await recordSendFailure(email, 'App-password sending is not configured on the server yet', 'App-password sending is not configured on the server yet (MAILBOX_SECRET_KEY).');
-      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      await progress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
     if (!emailSyntaxValid(email.to_email)) {
@@ -2246,7 +2333,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email || '(empty)', from: sendingEmail?.email_address || email.from_email || '—', error: `Invalid recipient address: "${email.to_email}" — not an email` });
       await recordSendFailure(email, 'Invalid recipient — not an email', `Invalid recipient address: "${email.to_email}" — not an email`);
-      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      await progress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
 
@@ -2263,7 +2350,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         } else {
           await recordSendFailure(email, 'undeliverable', contactStatusRules.sentence(contact.email_status));
         }
-        await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (skipped: ${contactEmailStatus(contact)} address)` });
+        await progress(userId, { ...progressBase, current: `${email.to_email} (skipped: ${contactEmailStatus(contact)} address)` });
         continue;
       }
     }
@@ -2273,13 +2360,13 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       if (contact && !isFollowupEligibleContact(contact)) {
         skippedContactStatus++;
         await cancelBlockedFollowupSend(email, contact.email_status);
-        await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (follow-up skipped: ${contactEmailStatus(contact)})` });
+        await progress(userId, { ...progressBase, current: `${email.to_email} (follow-up skipped: ${contactEmailStatus(contact)})` });
         continue;
       }
     }
 
     await waitForMailboxSlot(userEmailId, lastSendAtByMailbox, delays);
-    await setSendProgress(userId, { ...progressBase, current: email.to_email });
+    await progress(userId, { ...progressBase, current: email.to_email });
 
     try {
       sendAttempts++;
@@ -2347,14 +2434,14 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       if (email.contact_id) sentContactIds.push(email.contact_id);
       if (email.job_id) sentJobIds.push(email.job_id);
       sent++;
-      await setSendProgress(userId, { ...progressBase, sent, current: email.to_email });
+      await progress(userId, { ...progressBase, sent, current: email.to_email });
     } catch (e) {
       if (e && e.deferFollowup) {
         // Thread parent not resolvable yet — release the claim back to pending
         // so a later run can send it as a true reply (it was NOT dispatched).
         try { await supabase.from('emails').update({ status: 'pending' }).eq('id', email.id).eq('status', 'sending'); } catch (_) {}
         skippedThread++;
-        await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (follow-up waiting for thread)` });
+        await progress(userId, { ...progressBase, current: `${email.to_email} (follow-up waiting for thread)` });
         continue;
       }
       // The row is 'sending' (we claimed it), so the update below always
@@ -2362,15 +2449,57 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       // failure, 'failed' with the reason for anything else.
       const friendly = friendlySendError(e && e.message);
       const upd = await recordSendFailure(email, e && e.message, friendly);
+      // The provider refused it AT SEND TIME because of the recipient (a 550 at the door, not a later bounce notice): mark the
+      // contact Blocked or Invalid now, the same way a bounce notice would (owner, 29 Oct: "it shows failed but the status is
+      // not updated"). Only a PERMANENT failure — a sign-in or throttling error says nothing about the address.
+      if (upd.status === 'failed' && upd.fail_kind === sendRetry.KIND.PERMANENT && email.contact_id) {
+        const kind = bounceKind.refusalKind(e && e.message);
+        if (kind) {
+          try {
+            // By the contact's own id, the same way this loop read its status above (contactStatusById).
+            const ct = contactStatusById[email.contact_id];
+            if (ct && String(ct.email || '').toLowerCase() === String(email.to_email || '').toLowerCase() && !contactStatusRules.neverEmail(ct.email_status)) {
+              await supabase.from('contacts').update({ email_status: kind, updated_at: new Date() }).eq('id', ct.id);
+              ct.email_status = kind;
+              await logActivity(email.job_id, ct.id, null, 'email_bounced', `Auto-marked ${kind} — the receiving server refused the send to ${email.to_email}`, null, { source: 'send_refused', kind });
+            }
+          } catch (_) { /* best-effort: the row already says why it failed */ }
+        }
+      }
       if (upd.status === 'pending') retrying++; else failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: friendly + retryNote(upd), retrying: upd.status === 'pending' });
       if (sendRetry.isAuthFailure(e && e.message)) authFailedMailboxes.add(userEmailId);
       lastSendAtByMailbox[userEmailId] = Date.now();
-      await setSendProgress(userId, { ...progressBase, failed, retrying, current: email.to_email });
+      await progress(userId, { ...progressBase, failed, retrying, current: email.to_email });
     }
   }
 
-  return { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, skippedCompany, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow };
+  return { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, skippedCompany, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow,
+    restart, carry: { lastSendAtByMailbox, domainTimestamps } };
+}
+
+// One send run = passes until nothing new arrives (services/send-passes.js). `first` is the queue the caller already
+// fetched (at `fetchedAt`). The answer has the same shape as processPendingEmailSends', with the run's totals.
+async function runSendPasses(userId, first, { autoSend = false, fetchedAt } = {}) {
+  let pending = first, at = fetchedAt || new Date().toISOString();
+  const runStartedAt = at;
+  let prior = null, carry = null, r = null, last = null;
+  const contactIds = [], jobIds = [];
+  for (;;) {
+    r = await processPendingEmailSends(userId, pending, { autoSend, prior, carry, watchArrivals: true, fetchedAt: at });
+    contactIds.push(...(r.sentContactIds || [])); jobIds.push(...(r.sentJobIds || []));
+    carry = r.carry;
+    if (!r.restart) { last = r; break; }                     // the pass finished its list: this is the run's last pass
+    prior = sendPasses.addPass(prior, r, runStartedAt);      // it stopped early for new mail: its numbers are kept
+    at = new Date().toISOString();
+    pending = await fetchPendingEmailsForUser(userId);
+    if (!sendPasses.shouldContinue(r, prior.passes, pending.length)) break;
+  }
+  const tail = last ? { total: last.totalCount, sent: last.sent, failed: last.failed, retrying: last.retrying, failDetails: last.failDetails }
+    : { total: 0, sent: 0, failed: 0, retrying: 0, failDetails: [] };
+  const t = prior ? sendPasses.withPrior(tail, prior) : tail;
+  return Object.assign({}, r, { totalCount: t.total, sent: t.sent, failed: t.failed, retrying: t.retrying,
+    failDetails: t.failDetails, sentContactIds: contactIds, sentJobIds: jobIds, passes: prior ? prior.passes + (last ? 1 : 0) : 1 });
 }
 
 async function retryDeferredPendingSends() {
@@ -2395,10 +2524,12 @@ async function autoSendForManager(managerId) {
   }
   activeSendByUser.add(managerId);
   try {
+    let fetchedAt = new Date().toISOString();
     let pendingEmails = await fetchPendingEmailsForUser(managerId);
     if (!pendingEmails.length) {
       console.log(`[AutoSend] No pending emails yet for manager ${managerId}, retrying in 5s...`);
       await new Promise(r => setTimeout(r, 5000));
+      fetchedAt = new Date().toISOString();
       pendingEmails = await fetchPendingEmailsForUser(managerId);
       if (!pendingEmails.length) {
         console.log(`[AutoSend] Still no pending emails for manager ${managerId} after retry — aborting`);
@@ -2409,7 +2540,7 @@ async function autoSendForManager(managerId) {
     console.log(`[AutoSend] Starting auto-send of ${totalCount} emails for manager ${managerId}`);
     await setSendProgress(managerId, { active: true, total: totalCount, sent: 0, failed: 0, deferred: 0, current: '', failDetails: [], startedAt: new Date().toISOString(), autoSend: true });
 
-    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(managerId, pendingEmails, { autoSend: true });
+    const { totalCount: runTotal, sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await runSendPasses(managerId, pendingEmails, { autoSend: true, fetchedAt });
 
     const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
     if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
@@ -2418,7 +2549,7 @@ async function autoSendForManager(managerId) {
 
     const deferredTotal = skippedWindow + skippedQuota + skippedDomain + (skippedCompany || 0);
     await setSendProgress(managerId, {
-      active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
+      active: false, done: true, total: runTotal, sent, failed, retrying, deferred: deferredTotal,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       failDetails,
       deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany, sendWindow }),
@@ -2468,7 +2599,14 @@ app.post('/distribute/execute', auth, async (req, res) => {
       supabase, withOrg: (q) => withOrg(q, req), userId: manager_id, todayStr: today(), who: 'Manager',
     });
     if (mb.error) return res.status(400).json({ error: mb.error });
-    const accounts = mb.accounts;
+    // The assigner may choose WHICH of the manager's email IDs the new leads go out from (owner, 29 Oct). Only ones that are
+    // connected and have room today count; none of the chosen ones usable → said, nothing assigned.
+    let accounts = mb.accounts;
+    if (Array.isArray(req.body.email_ids) && req.body.email_ids.length) {
+      const want = new Set(req.body.email_ids.map(String));
+      accounts = accounts.filter(a => want.has(String(a.id)));
+      if (!accounts.length) return res.status(400).json({ error: 'None of the chosen email IDs can send today (not connected, or no room left). Nothing was assigned.' });
+    }
 
     const totalCapacity = accounts.reduce((s, a) => s + a.remaining, 0);
     const totalToSend = Math.min(ratio.total_to_send || 50, totalCapacity);
@@ -2515,12 +2653,22 @@ app.post('/distribute/execute', auth, async (req, res) => {
     console.log(`[Distribute] Accounts in pool: ${accounts.map(a => a.email_address).join(', ')}`);
     console.log(`[Distribute] Assignment queue breakdown:`, assignmentQueue.reduce((m, id) => { m[id] = (m[id]||0)+1; return m; }, {}));
 
-    for (let i = 0; i < selected.length; i++) {
-      const job = selected[i];
-      const emailId = assignmentQueue[i];
-      await supabase.from('jobs').update({ assigned_to_bd: manager_id, sending_email_id: emailId, stage: 'Assigned', assigned_at: now, updated_at: now }).eq('id', job.id);
-      assignedLeads.push({ job_id: job.id, user_email_id: emailId });
+    // One write per email ID, not one per lead (owner, 29 Oct: "the RA lead has to wait a minute or so to assign the next
+    // set") — and each write takes a lead ONLY while it is still unassigned, so two assignments made back to back can never
+    // hand the same lead to two people. A lead another assignment took a moment earlier is simply not in the answer.
+    const byBox = {};
+    selected.forEach((job, i) => { (byBox[assignmentQueue[i]] = byBox[assignmentQueue[i]] || []).push(job.id); });
+    for (const emailId of Object.keys(byBox)) {
+      for (let i = 0; i < byBox[emailId].length; i += 200) {
+        const { data: took } = await supabase.from('jobs')
+          .update({ assigned_to_bd: manager_id, sending_email_id: emailId, stage: 'Assigned', assigned_at: now, updated_at: now })
+          .in('id', byBox[emailId].slice(i, i + 200)).eq('stage', 'Unassigned').is('assigned_to_bd', null).select('id');
+        (took || []).forEach(j => assignedLeads.push({ job_id: j.id, user_email_id: emailId }));
+      }
     }
+    if (!assignedLeads.length) return res.status(409).json({ error: 'These leads were just assigned by someone else — refresh the pool and try again. Nothing was assigned.' });
+    const takenIds = new Set(assignedLeads.map(l => l.job_id));
+    for (let i = selected.length - 1; i >= 0; i--) if (!takenIds.has(selected[i].id)) selected.splice(i, 1);
 
     // Daily send quota is charged on actual delivery (see processPendingEmailSends), not at
     // assignment time. Pre-charging here made the auto-sender read a phantom "full" quota and
@@ -2970,6 +3118,7 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
 // The NDR rule, shared by every provider's bounce sweep: a message from a mail-delivery daemon names the address that bounced, and
 // that contact is marked invalid (so it stops being mailed and its follow-ups are cancelled). `messages` are Graph-shaped.
 const bounceMark = require('./services/bounce-mark');
+const bounceKind = require('./services/bounce-kind');
 async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder, newestStart) {
   let marked = 0, newest = newestStart;
   // R-243: a bounce read from THIS company's mailbox can only invalidate THIS company's contacts. The same address held by
@@ -2982,13 +3131,14 @@ async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder,
     if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
     if (!isNdrMessage(msg)) continue;
     const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
+    const kind = bounceKind.bounceKind(`${msg.subject || ''} ${text}`);   // blocked vs invalid — read from the notice itself
     for (const addr of extractBounceRecipients(text, ownAddresses)) {
-      for (const c of await bounceMark.invalidateBouncedContacts(scoped, addr, { neverEmail: contactStatusRules.neverEmail })) {
+      for (const c of await bounceMark.invalidateBouncedContacts(scoped, addr, { neverEmail: contactStatusRules.neverEmail, status: kind })) {
         emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
         emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
         await logActivity(c.job_id, c.id, null, 'email_bounced',
-          `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
-          { source: 'ndr', mailbox: tokenRow.email_address, folder });
+          `Auto-marked ${c.status} — bounce/NDR received for ${addr}`, null,
+          { source: 'ndr', mailbox: tokenRow.email_address, folder, kind: c.status });
         marked++;
       }
     }
@@ -3781,6 +3931,25 @@ loadPausedOrgs();
 releaseInterruptedSends(supabase).then((n) => {
   if (n) console.log(`[SendRecovery] ${n} email(s) cut off mid-send moved to "Didn't send" (may have gone out)`);
 }).catch(() => {});
+// A send run the previous process was in the middle of (its card still says "active") is picked up again by itself a
+// minute after boot — the owner (29 Oct): "the sending gets paused or stopped and then I have to initiate it again".
+// A minute, so the boot work above has finished; the emergency stop and a person's own pause still win (autoSendForManager).
+setTimeout(async () => {
+  try {
+    const { data } = await supabase.from('app_settings').select('key,value').like('key', 'send_progress_%');
+    for (const row of (data || [])) {
+      let p = null; try { p = JSON.parse(row.value); } catch (_) { continue; }
+      // Still "active", or already marked "stopped early" by a screen that asked in the meantime (send-progress.js) — a
+      // recent one only: an old card is history, not a run to restart.
+      const cutOff = p && (p.active || (p.interrupted && Date.now() - Date.parse(p.completedAt || 0) < 15 * 60 * 1000));
+      if (!cutOff) continue;
+      const uid = row.key.slice('send_progress_'.length);
+      if (!uid || isSendAlive(uid)) continue;
+      console.log(`[SendRecovery] resuming the send run that a restart cut off for ${uid}`);
+      autoSendForManager(uid).catch(e => console.error('[SendRecovery] resume failed:', e.message));
+    }
+  } catch (e) { console.error('[SendRecovery] could not look for cut-off runs:', e.message); }
+}, 60 * 1000).unref();
 
 // ══════════════════════════════════════════════════════════════
 // MICROSOFT OAUTH

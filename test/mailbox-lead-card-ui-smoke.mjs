@@ -86,6 +86,10 @@ try {
   await open('m1');
   step('before the answer arrives there is no card (and no error)', await page.evaluate(() => !document.querySelector('.mb-leadcard')));
   await page.evaluate(() => { window.__frameBefore = document.querySelector('#mb-open iframe'); window.__bodyBefore = document.querySelector('#mb-open'); window.__releaseCard(); });
+  // 29 Oct (owner): the card opens only when asked — a "Lead in PACE" button first, the card on a click.
+  await page.waitForSelector('.mb-lc-btn', { timeout: 5000 });
+  step('the card is closed until asked for: only the "Lead in PACE" button shows', await page.evaluate(() => !document.querySelector('.mb-leadcard') && /Lead in PACE/.test(document.querySelector('.mb-lc-btn').textContent)));
+  await page.evaluate(() => { document.querySelector('.mb-lc-btn').click(); });
   await page.waitForSelector('.mb-leadcard', { timeout: 5000 });
   const card = await page.evaluate(() => { const c = document.querySelector('.mb-leadcard'); return { text: c.innerText.replace(/\s+/g, ' '), inHead: !!c.closest('#mb-head'), jobs: [...c.querySelectorAll('.mb-lc-job')].map(a => a.textContent) }; });
   step('an email from a lead\'s contact shows the card in its header band: name, role · company', card.inHead && /Dana Cole/.test(card.text) && /HR Manager · Acme Machining/.test(card.text), card.text);

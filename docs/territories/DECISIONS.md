@@ -2291,3 +2291,27 @@ Owner, after "I set the bounce limit to 10% and it still paused" and being told 
 ### D-0185 — "Hospitals & health care" is an industry in Find Leads, and it is a real filter (27 Oct 2026)
 
 Owner: "add hospital and healthcare in find lead industries and get leads according to that industry — it is very hard to get that industry in particular." Cause: an industry in Find Leads was only a shortcut for job titles; the search itself ran on titles, so "Registered Nurse" returned whoever posts that title (staffing firms, clinics) and every page costs a credit. Decided/built: a new industry "Hospitals & health care" with 22 hospital titles AND an industry code filter — Apollo's own `organization_naics_codes` (NAICS 622 = hospitals; Apollo matches by prefix; docs.apollo.io Organization Search). Rule: the code filter is applied only when EVERY industry picked defines codes (hospitals + IT must not drop IT companies). The form says plainly when it is filtering. The other industries are unchanged; "Medical & healthcare" (clinics, offices) stays as it was. The free job sources have no industry codes, so there it stays a titles shortcut.
+
+### D-0186 — "Rewrite with AI" is offered in Email → Pending (29 Oct 2026)
+
+Owner, on the R-325 offer: "yes". A lead's first email waiting in Pending has ✨ Rewrite with AI and Undo in its preview — the same writer and house checker as a send (`routes/email-rewrite.js`). Follow-ups are edited by hand.
+
+### D-0187 — The lead card in the inbox opens only when asked (29 Oct 2026)
+
+Owner, on R-326: "yes, but discuss what details to show and what can be done with the card" and "even now the card is always visible on top — make it pop up only when we want it". The card is behind a "Lead in PACE" button in the message header; its contents and actions (and showing it for candidates) wait on that discussion.
+
+### D-0188 — Every outreach email comes from AI-written template variants with AI-filled blanks; no per-email AI writing (29 Oct 2026)
+
+Owner chose "All templates" for R-343 over the recommended hybrid, after being shown that AI first emails got 1.23 % replies vs 0.54 % for templates (1–29 Oct, 55 replies in all) and AI follow-ups did worse than templates. Build: up to 10 variants per step (first, FU1, FU2…) written once by AI from the person's mother template; each lead's posting read once for the blanks (skills, industry, project area, on-site/remote); the reply rate of first emails is watched after the switch and reported back (the recorded risk).
+
+### D-0189 — Direct / office on an added email or phone (29 Oct 2026)
+
+Owner: "yes, add it" (R-342) — one new field (migration 069), applied to the live database only with the owner's go-ahead at merge time.
+
+### D-0190 — All Find Leads industries get a real industry filter (29 Oct 2026)
+
+Owner: "All industries" (R-333): each industry gets its industry codes and a live check (about one contact-data credit per check).
+
+### D-0191 — Compose to a new company starts from the company (29 Oct 2026)
+
+Owner: "Company first" (R-320): company (+ location) → its people from the company's contact-data provider → tick one or more → AI writes one email per person from title and job → send or add to a sequence; one credit per email lookup. Built on the provider-neutral layer (D-0175).

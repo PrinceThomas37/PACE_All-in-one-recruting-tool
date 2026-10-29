@@ -214,6 +214,7 @@ window.submitSendAll=function(){
   // under them because a leader clicked Send.
   var mine=(STATE.pendingEmails||[]).filter(function(e){return e.is_mine!==false;});
   closeModal();
+  askNotifyPermission();   // so "Outreach finished" can reach them in another tab (asked once, from this click)
   // Show progress bar immediately — don't wait for first poll
   STATE.sendProgress={active:true,total:mine.length,sent:0,failed:0,current:'Initiating send...',failDetails:[],startedAt:new Date().toISOString()};
   STATE.pendingEmails=(STATE.pendingEmails||[]).filter(function(e){return e.is_mine===false;});

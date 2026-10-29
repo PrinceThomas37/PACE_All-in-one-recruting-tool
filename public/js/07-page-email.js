@@ -467,7 +467,7 @@ function renderEmail(){
       '</div>'+
       '<div class="fs-12 c-text3">'+(sp.active&&sp.current?'Currently sending to: '+htmlEsc(sp.current):(sp.done?(sp.interrupted?'Stopped at ':'Completed at ')+(sp.completedAt?new Date(sp.completedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''):''))+'</div>'+
       failPanel+
-      (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending. Press <strong>Send all pending</strong> to carry on.</div>':'')+
+      (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending, and PACE carries on by itself a minute after it is back. You can also press <strong>Send all pending</strong>.</div>':'')+
       (sp.deferredNote?'<div class="fs-12" style="margin-top:8px;color:#b45309">'+htmlEsc(sp.deferredNote)+'</div>':'')+
     '</div>';
   }
@@ -545,17 +545,24 @@ function renderEmail(){
       var bdSum=((STATE.senderSummary&&STATE.senderSummary.senders)||[]).find(function(s){return s.id===bdId;})||{pending:0,sent:0,failed:0};
       var backBtn='<div style="margin-bottom:14px"><button onclick="STATE.raLeadSelectedBD=null;render()" class="fs-13 c-text2" style="background:none;border:1px solid var(--border2);padding:6px 14px;border-radius:7px;cursor:pointer">← Back to all BD Managers</button><span class="fs-14" style="margin-left:12px;font-weight:600">'+htmlEsc(bdName)+'</span></div>';
       var ps=STATE.pendingSummary;
-      var tzRows=((ps&&ps.by_timezone)||[]).map(function(t){
-        return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+htmlEsc(t.timezone)+'</span><span>'+t.ready_now+' ready now · '+t.waiting_window+' waiting</span></div>';
-      }).join('');
-      pendingHtml='<div>'+scheduleBanner+backBtn+
+      // 29 Oct (owner): per email ID, split into first outreach / FU1 / FU2 — the time-zone split is gone.
+      var mbTable=pendingMailboxTable(ps);
+      // Live: is this person's sending running? And a way to start it when it is stuck (owner, 29 Oct).
+      if(STATE.watchedProgressFor!==bdId){ STATE.watchedProgressFor=bdId; STATE.watchedProgress=null; loadWatchedProgress(); }
+      var wp=STATE.watchedProgress;
+      var wpLine=!wp?'<span class="c-text3">Checking whether they are sending…</span>'
+        :wp.active?'<strong class="c-green">Sending now</strong> — '+(wp.sent||0)+' sent of '+(wp.total||0)+(wp.failed?' · '+wp.failed+' failed':'')+(wp.current?' · now: '+htmlEsc(String(wp.current).slice(0,90)):'')
+        :wp.done?'<strong>Last run finished</strong> — '+(wp.sent||0)+' sent'+(wp.interrupted?' (cut off by a restart — PACE picks it up again by itself)':'')
+        :'<strong class="c-amber">Not sending right now</strong>';
+      var liveCard='<div class="card cp mb3 flex jb aic" style="gap:12px;flex-wrap:wrap"><div class="fs-13">'+wpLine+'<div class="fs-11_5 c-text3">Updates by itself every 15 seconds.</div></div>'+
+        ((bdSum.pending||0)>0&&!(wp&&wp.active)?'<button class="btn btn-primary btn-sm" onclick="raLeadStartSending()">Start sending their pending now</button>':'')+'</div>';
+      pendingHtml='<div>'+scheduleBanner+backBtn+liveCard+
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;text-align:center;margin-bottom:14px">'+
           '<div><div class="fs-24 c-amber" style="font-weight:700">'+(bdSum.pending||0)+'</div><div class="fs-11 c-text3" style="margin-top:2px">PENDING</div></div>'+
           '<div><div class="fs-24 c-green" style="font-weight:700">'+(bdSum.sent||0)+'</div><div class="fs-11 c-text3" style="margin-top:2px">SENT</div></div>'+
           '<div><div class="fs-24" style="font-weight:700;color:var(--red,#dc2626)">'+(bdSum.failed||0)+'</div><div class="fs-11 c-text3" style="margin-top:2px">FAILED (all runs)</div></div>'+
         '</div>'+
-        (tzRows?'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 18px"><div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pending, by lead timezone</div>'+tzRows+'</div>':
-          '<div class="c-text3 fs-13" style="padding:24px;text-align:center">Only this manager\'s counts are shown here — not the messages themselves.</div>')+
+        (mbTable||'<div class="c-text3 fs-13" style="padding:24px;text-align:center">Nothing pending. Only this manager\'s counts are shown here — not the messages themselves.</div>')+
       '</div>';
 
     // ── everyone else: bd, bd_lead, admin ─────────────────────────────
@@ -633,7 +640,12 @@ function renderEmail(){
             '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(pe.subject||'')+'</div>'+
           '</div>'+
           '<div class="fs-13" style="padding:14px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(pe.body||'')+'</div>'+
-          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
+          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">'+
+            // R-325 (owner, 29 Oct: "yes"): the same ✨ Rewrite with AI as the Find Leads review window, for a lead's FIRST email.
+            (!pe.followup_type||pe.followup_type==='initial'?(function(){ var rw=(STATE._pendRw||{})[pe.id]||{};
+              return (rw.note?'<div class="fs-12 c-text2" role="status" style="flex-basis:100%">'+htmlEsc(rw.note)+'</div>':'')+
+                '<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteAi(\''+pe.id+'\')">'+(rw.busy?'Working…':'✨ Rewrite with AI')+'</button>'+
+                (rw.prev?'<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteUndo(\''+pe.id+'\')">Undo rewrite</button>':''); })():'')+
             '<button class="btn btn-outline btn-sm" onclick="openDeletePendingConfirm([\''+pe.id+'\'])" title="Remove this email from Pending — it will not be sent">Delete email</button>'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
           '</div>':'')+
@@ -681,7 +693,7 @@ function renderEmail(){
       '</div>'):'';
 
     pendingHtml='<div>'+scheduleBanner+
-      failedPanel+focusBanner+
+      failedPanel+focusBanner+(focus?'':pendingMailboxTable(STATE.pendingSummary))+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap">'+
         // "pending", not "ready": what is ready NOW is the split under the tab.
         '<div class="fs-13 c-text2">'+totalRecipients+' pending email'+(totalRecipients!==1?'s':'')+(focus?' for this lead':(totalRecipients!==mineCount?' · '+mineCount+' yours':''))+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
@@ -1131,3 +1143,44 @@ function renderEmail(){
   });
 }
 
+// Pending, per email ID and step (owner, 29 Oct 2026) — from GET /emails/pending-summary `by_mailbox`. '' when there is nothing.
+function pendingMailboxTable(ps){
+  var rows=(ps&&ps.by_mailbox)||[];
+  if(!rows.length) return '';
+  var n=function(v){ return v?String(v):'<span class="c-text3">0</span>'; };
+  var tot={pending:0,initial:0,fu1:0,fu2:0,later:0};
+  rows.forEach(function(r){ Object.keys(tot).forEach(function(k){ tot[k]+=r[k]||0; }); });
+  var anyLater=tot.later>0;
+  return '<div class="card cp mb3 pend-mb">'+
+    '<div class="fs-11 c-text3 fw6 pend-mb-h">Pending, by email ID</div>'+
+    '<div class="td-scroll"><table class="td-table"><thead><tr><th>Email ID</th><th>First outreach</th><th>Follow-up 1</th><th>Follow-up 2</th>'+(anyLater?'<th>Later follow-ups</th>':'')+'<th>Total</th></tr></thead><tbody>'+
+      rows.map(function(r){
+        return '<tr><td class="fw6">'+htmlEsc(r.email||'')+'</td><td>'+n(r.initial)+'</td><td>'+n(r.fu1)+'</td><td>'+n(r.fu2)+'</td>'+(anyLater?'<td>'+n(r.later)+'</td>':'')+'<td class="fw6">'+r.pending+'</td></tr>';
+      }).join('')+
+      (rows.length>1?'<tr class="pend-mb-tot"><td class="fw6">All email IDs</td><td>'+tot.initial+'</td><td>'+tot.fu1+'</td><td>'+tot.fu2+'</td>'+(anyLater?'<td>'+tot.later+'</td>':'')+'<td class="fw6">'+tot.pending+'</td></tr>':'')+
+    '</tbody></table></div></div>';
+}
+
+// ✨ Rewrite with AI in Email → Pending (R-325). The server writes it with the same writer and house checker as a send
+// (routes/email-rewrite.js); when it cannot, the wording stays and the reason is shown. Undo puts back what was there.
+function pendRwState(id){ STATE._pendRw=STATE._pendRw||{}; return (STATE._pendRw[id]=STATE._pendRw[id]||{}); }
+function pendApply(id, em){
+  (STATE.pendingEmails||[]).forEach(function(e){ if(e.id===id&&em){ e.subject=em.subject; e.body=em.body; e.ai_written=em.template_variant==='ai'; } });
+}
+window.pendRewriteAi=function(id){
+  var rw=pendRwState(id); if(rw.busy)return;
+  rw.busy=true; rw.note=''; render();
+  apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{}).then(function(r){
+    rw.busy=false;
+    if(r&&r.written&&r.email){ rw.prev=r.previous||null; pendApply(id,r.email); rw.note='Rewritten for this person. Read it — edit, send, or undo.'; }
+    else rw.note=(r&&r.reason)||'The AI could not write this one, so the wording was kept.';
+    render();
+  }).catch(function(e){ rw.busy=false; rw.note='Could not rewrite: '+((e&&e.message)||e); render(); });
+};
+window.pendRewriteUndo=function(id){
+  var rw=pendRwState(id); if(rw.busy||!rw.prev)return;
+  rw.busy=true; render();
+  apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{restore:rw.prev}).then(function(r){
+    rw.busy=false; rw.prev=null; if(r&&r.email) pendApply(id,r.email); rw.note='Back to the earlier wording.'; render();
+  }).catch(function(e){ rw.busy=false; rw.note='Could not undo: '+((e&&e.message)||e); render(); });
+};

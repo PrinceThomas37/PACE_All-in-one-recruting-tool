@@ -291,3 +291,6 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 
 ## 2026-10-27 (Session 54) — Find Leads industry hint (D-0185)
 `68-page-finder.js` `renderIndustries`: when every picked industry `filters` (hospitals) and the source is the contact database, one plain line says only that kind of company is searched.
+
+## 29 Oct 2026 (Session 55)
+- Admin people-by-role cards + window (`adminRoleGroups`, `openAdminRoleGroup`); sidebar fold arrow moved to the footer, 22px; insights split lists 8 + Show all; Pending per-email-ID table (`pendingMailboxTable`) + RA Lead live card; assign window email-ID picker (`paintAssignBoxes`), stays on Assign Leads with a 20 s pool poll; Rewrite with AI in the Pending preview; My leads / My team's leads (`leadsIsTeamManager`); lead card behind "Lead in PACE"; `paceNotify`; first load retries ~55 s; "Outreach — all users" insights tab.

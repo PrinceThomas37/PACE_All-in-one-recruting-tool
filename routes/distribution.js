@@ -77,6 +77,53 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Before assigning (owner, 29 Oct): the manager's email IDs, each with what it can still send today, what is already queued
+// on it (first outreach / FU1 / FU2) and the follow-ups that fall due today but are not queued yet — so the assigner can
+// send new leads from the email IDs with the least waiting. Counts only. A manager outside the caller's company: 404.
+router.get('/distribute/mailboxes', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
+    const managerId = String(req.query.manager_id || '');
+    const { data: who } = await withOrg(supabase.from('users').select('id').eq('id', managerId), req).maybeSingle();
+    if (!who) return res.status(404).json({ error: 'Not found' });
+    const todayStr = today();
+    const { data: boxes } = await withOrg(supabase.from('user_emails')
+      .select('id,org_id,email_address,display_name,platform,daily_send_limit,is_active').eq('user_id', managerId).eq('is_active', true), req);
+    const ids = (boxes || []).map(b => b.id);
+    if (!ids.length) return res.json({ mailboxes: [] });
+    const cap = await require('../services/lead-distribution').connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: managerId, todayStr, ignoreRoom: true });
+    const connected = new Set(((cap && cap.accounts) || []).map(a => a.id));
+    const dailyDefault = (cap && cap.dailyDefault) || 0;
+    const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', todayStr).in('user_email_id', ids);
+    const sentToday = {}; (logs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
+    // Queued: the email's own mailbox, else its lead's (services/pending-by-mailbox.js) — this manager's queue only.
+    let rows = [], from = 0;
+    for (;;) {
+      const { data } = await withOrg(supabase.from('emails').select('id,followup_type,sending_email_id,job:jobs(sending_email_id)')
+        .eq('sent_by', managerId).eq('status', 'pending').order('id', { ascending: true }).range(from, from + 999), req);
+      if (!data || !data.length) break;
+      rows = rows.concat(data); if (data.length < 1000) break; from += 1000;
+    }
+    const queued = {}; require('../services/pending-by-mailbox').byMailbox(rows).forEach(r => { if (r.id) queued[r.id] = r; });
+    // Follow-ups that fall due today and have not been queued yet (the follow-up engine queues them at its daily time).
+    const steps = require('../services/followup-steps');
+    const dueToday = {};
+    const { data: fus } = await withOrg(supabase.from('follow_ups').select('*').eq('status', 'active').in('user_email_id', ids), req);
+    (fus || []).forEach(f => { const n = steps.nextDue(f, todayStr); if (n) { const k = f.user_email_id; dueToday[k] = dueToday[k] || { fu1: 0, fu2: 0, later: 0 }; dueToday[k][n === 1 ? 'fu1' : n === 2 ? 'fu2' : 'later']++; } });
+    const dl = require('../services/daily-limit');
+    const mailboxes = (boxes || []).map(b => {
+      const limit = dl.limitOf(b, dailyDefault);
+      const q = queued[b.id] || { pending: 0, initial: 0, fu1: 0, fu2: 0, later: 0 };
+      const d = dueToday[b.id] || { fu1: 0, fu2: 0, later: 0 };
+      const sent = sentToday[b.id] || 0;
+      return { id: b.id, email: b.email_address, name: b.display_name || null, platform: b.platform || null, connected: connected.has(b.id),
+        limit, sent_today: sent, room_today: Math.max(0, limit - sent), queued: q, due_today_not_queued: d,
+        free_today: Math.max(0, limit - sent - q.pending - d.fu1 - d.fu2 - d.later) };
+    }).sort((a, b) => b.free_today - a.free_today);
+    res.json({ mailboxes });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/distribute/today-summary', auth, async (req, res) => {
   try {
     const targetId = req.query.manager_id || req.user.id;

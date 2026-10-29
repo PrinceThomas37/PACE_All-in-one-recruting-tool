@@ -242,14 +242,6 @@ function renderSidebar(){
       paceLogoWord()+
       '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
     '</div>'+
-    // R-319 (owner, 27 Oct video): the menu opens and folds ONLY when this button is pressed — never by a pointer resting on it.
-    // Its own row under the logo, so it never sits on the logo or jumps; both arrows are always drawn and CSS shows the one that
-    // applies from the sidebar's own `pinned` class, so the markup never changes between states and an idle repaint writes nothing.
-    '<div class="rail-toggle">'+
-      '<button type="button" class="rail-pin rail-arrow" onclick="event.stopPropagation();toggleRail(true)" aria-label="Fold or open the menu" title="Fold or open the menu" aria-expanded="'+(railPinned?'true':'false')+'">'+
-        '<span class="ra-fold">'+pixelSprite(PACE_ARROW,'currentColor',2)+'</span><span class="ra-open">'+pixelSprite(PACE_ARROW_OPEN,'currentColor',2)+'</span>'+
-      '</button>'+
-    '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
       (setupRows.length?'<div class="sb-setup">'+setupRows.map(navRow).join('')+'</div>':'')+
@@ -265,6 +257,14 @@ function renderSidebar(){
       '</div>'+
       '<div class="nav-item" onclick="signOut()" title="Sign out">'+
         '<span class="nav-icon">'+UI.ic('ban')+'</span><span class="nav-txt">Sign out</span>'+
+      '</div>'+
+      // R-319 (owner, 27 Oct video): the menu opens and folds ONLY when this button is pressed — never by a pointer resting on it.
+      // At the bottom of the menu, under Sign out (owner, 29 Oct: "push this arrow button down"); both arrows are always drawn and CSS shows the one that
+      // applies from the sidebar's own `pinned` class, so the markup never changes between states and an idle repaint writes nothing.
+      '<div class="rail-toggle">'+
+        '<button type="button" class="rail-pin rail-arrow" onclick="event.stopPropagation();toggleRail(true)" aria-label="Fold or open the menu" title="Fold or open the menu" aria-expanded="'+(railPinned?'true':'false')+'">'+
+          '<span class="ra-fold">'+pixelSprite(PACE_ARROW,'currentColor',2)+'</span><span class="ra-open">'+pixelSprite(PACE_ARROW_OPEN,'currentColor',2)+'</span>'+
+        '</button>'+
       '</div>'+
     '</div>'+
   '</div>';

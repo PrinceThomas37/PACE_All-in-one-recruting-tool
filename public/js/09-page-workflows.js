@@ -729,27 +729,11 @@ function renderAdmin(){
   if(selectedUserId){return renderAdminUserDetail(selectedUserId);}
   if((STATE.adminView||'list')==='org'){return renderAdminOrgChart();}
 
-  var tab=STATE.adminTab||'bd';
   var q=(STATE.adminSearch||'').toLowerCase().trim();
-
-  var tabs=[
-    {id:'bd',        lbl:'BD'},
-    {id:'ra',        lbl:'RA'},
-    {id:'recruiter', lbl:'Recruiter'},
-    {id:'admin',     lbl:'Admin'}
-  ];
 
   var allUsers=STATE.users||[];
 
-  function usersForTab(t){
-    if(t==='bd')        return allUsers.filter(function(x){return userHasAnyRole(x,'bd','bd_lead')&&!userHasRole(x,'admin');});
-    if(t==='ra')        return allUsers.filter(function(x){return userHasAnyRole(x,'ra','ra_lead')&&!userHasAnyRole(x,'bd','bd_lead','admin');});
-    if(t==='recruiter') return allUsers.filter(function(x){return userHasRole(x,'recruiter')&&!userHasAnyRole(x,'bd','bd_lead','ra','ra_lead','admin');});
-    if(t==='admin')     return allUsers.filter(function(x){return userHasRole(x,'admin');});
-    return allUsers;
-  }
-
-  var tabUsers=usersForTab(tab);
+  var tabUsers=allUsers.slice();
   if(q){
     tabUsers=tabUsers.filter(function(x){
       return (x.name||'').toLowerCase().indexOf(q)>-1||
@@ -759,36 +743,19 @@ function renderAdmin(){
     });
   }
 
-  var tabBar=tabs.map(function(t){
-    var count=usersForTab(t.id).length;
-    var on=tab===t.id;
-    return '<button onclick="STATE.adminTab=\''+t.id+'\';render()" style="padding:8px 16px;border:0;border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';background:none;cursor:pointer;font-size:13px;font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+t.lbl+' <span class="fs-11" style="color:'+(on?'var(--accent)':'var(--text3)')+'">'+count+'</span></button>';
-  }).join('');
 
-  var rows=tabUsers.map(function(usr){
-    var emailCount=(STATE.userEmailsCache&&STATE.userEmailsCache[usr.id]||[]).length||
-                   (STATE.emailAccounts||[]).filter(function(a){return a.assigned_to===usr.id;}).length;
-    var teamCount=directReportsOf(usr.id).length;
-    // Per-BD RA mode toggle (BD tab only) — auto = leads auto-send, manual = BD sends by hand.
-    var raChip='';
-    if(tab==='bd'){
-      var mode=(STATE.raModes&&STATE.raModes[usr.id])||'auto';
-      var isAuto=mode!=='manual';
-      raChip='<span onclick="toggleManagerRaMode(event,\''+usr.id+'\')" title="Click to switch between Automatic and Manual outreach for this BD" style="font-size:11px;padding:3px 9px;border-radius:8px;font-weight:600;cursor:pointer;background:'+(isAuto?'var(--accent-l)':'var(--amber-l,#fef3c7)')+';color:'+(isAuto?'var(--accent)':'var(--amber,#b45309)')+'">'+(isAuto?'⚙ Auto RA':'✋ Manual RA')+'</span>';
-    }
-    return '<div onclick="STATE.adminSelectedUser=\''+usr.id+'\';loadUserEmails(\''+usr.id+'\');render()" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer">'+
-      av(usr,'36')+
-      '<div style="flex:1;min-width:0">'+
-        '<div class="fs-13_5" style="font-weight:600">'+htmlEsc(usr.name)+'</div>'+
-        '<div class="fs-11_5 c-text3">'+htmlEsc(usr.email)+(usr.empId?' · '+htmlEsc(usr.empId):'')+'</div>'+
-      '</div>'+
-      raChip+
-      (roleLabel(usr.role)?'<span class="fs-11 c-text2" style="padding:2px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px">'+htmlEsc(roleLabel(usr.role))+'</span>':'')+
-      (emailCount?'<span class="fs-11 c-accent" style="padding:2px 8px;background:var(--accent-l);border-radius:8px">'+emailCount+' email'+(emailCount>1?'s':'')+'</span>':'')+
-      (teamCount?'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:8px">'+teamCount+' member'+(teamCount>1?'s':'')+'</span>':'')+
-      '<span class="fs-11" style="padding:3px 9px;background:'+(usr.is_active!==false?'var(--green-l)':'var(--red-l)')+';color:'+(usr.is_active!==false?'var(--green)':'var(--red)')+';border-radius:8px;font-weight:600">'+(usr.is_active!==false?'Active':'Inactive')+'</span>'+
-      '<div class="c-text3 fs-18" style="margin-left:4px">›</div>'+
-    '</div>';
+  // 29 Oct (owner: "I don't need this big list — I should just see the user profiles like BD manager, recruiter, RA, and when
+  // I click one, a new window with the names and details opens"). The page shows one card per role; the people are in a
+  // window (openAdminRoleGroup). A search still lists matching people straight away, across every role.
+  var rows=(q?tabUsers:[]).map(adminUserRow).join('');
+  if(STATE.adminRoleOpen&&typeof STATE.modal==='string'&&STATE.modal.indexOf('data-win="admin-role"')>=0) STATE.modal=adminRoleWindow(STATE.adminRoleOpen);
+  var roleCards=adminRoleGroups().map(function(g){
+    var active=g.users.filter(function(x){return x.is_active!==false;}).length;
+    return '<button type="button" class="card adm-role-card" onclick="openAdminRoleGroup(\''+g.role+'\')">'+
+      '<div class="fs-14 fw6">'+htmlEsc(g.label)+'</div>'+
+      '<div class="fs-28 fw6 c-accent">'+g.users.length+'</div>'+
+      '<div class="fs-12 c-text3">'+active+' active'+(g.users.length-active?' · '+(g.users.length-active)+' inactive':'')+'</div>'+
+    '</button>';
   }).join('');
 
   var canSeeEngine=userHasAnyRole(u,'admin','ra_lead');
@@ -840,12 +807,62 @@ function renderAdmin(){
     '<div style="margin-bottom:14px">'+
       '<input class="inp" placeholder="Search by name, email, employee ID…" value="'+htmlEsc(STATE.adminSearch||'')+'" oninput="STATE.adminSearch=this.value;render()" style="max-width:360px">'+
     '</div>'+
-    '<div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:16px">'+tabBar+'</div>'+
-    '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
-      (rows||'<div class="c-text3 fs-13" style="padding:40px;text-align:center">'+(q?'No users match "'+htmlEsc(q)+'"':'No users in this group yet.')+'</div>')+
-    '</div>'+
+    (q
+      ?'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
+          (rows||'<div class="c-text3 fs-13" style="padding:40px;text-align:center">No users match "'+htmlEsc(q)+'"</div>')+
+        '</div>'
+      :'<div class="adm-role-grid">'+(roleCards||'<div class="c-text3 fs-13">No users yet.</div>')+'</div>')+
   '</div>';
 }
+
+// One person on the Admin page — in a search result, or in a role's window.
+function adminUserRow(usr){
+    var emailCount=(STATE.userEmailsCache&&STATE.userEmailsCache[usr.id]||[]).length||
+                   (STATE.emailAccounts||[]).filter(function(a){return a.assigned_to===usr.id;}).length;
+    var teamCount=directReportsOf(usr.id).length;
+    // Per-BD RA mode toggle (BD tab only) — auto = leads auto-send, manual = BD sends by hand.
+    var raChip='';
+    if(userHasAnyRole(usr,'bd','bd_lead')&&!userHasRole(usr,'admin')){
+      var mode=(STATE.raModes&&STATE.raModes[usr.id])||'auto';
+      var isAuto=mode!=='manual';
+      raChip='<span onclick="toggleManagerRaMode(event,\''+usr.id+'\')" title="Click to switch between Automatic and Manual outreach for this BD" style="font-size:11px;padding:3px 9px;border-radius:8px;font-weight:600;cursor:pointer;background:'+(isAuto?'var(--accent-l)':'var(--amber-l,#fef3c7)')+';color:'+(isAuto?'var(--accent)':'var(--amber,#b45309)')+'">'+(isAuto?'⚙ Auto RA':'✋ Manual RA')+'</span>';
+    }
+    return '<div onclick="STATE.modal=null;STATE.adminRoleOpen=null;STATE.adminSelectedUser=\''+usr.id+'\';loadUserEmails(\''+usr.id+'\');render()" style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer">'+
+      av(usr,'36')+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="fs-13_5" style="font-weight:600">'+htmlEsc(usr.name)+'</div>'+
+        '<div class="fs-11_5 c-text3">'+htmlEsc(usr.email)+(usr.empId?' · '+htmlEsc(usr.empId):'')+'</div>'+
+      '</div>'+
+      raChip+
+      (roleLabel(usr.role)?'<span class="fs-11 c-text2" style="padding:2px 8px;background:var(--bg);border:1px solid var(--border);border-radius:8px">'+htmlEsc(roleLabel(usr.role))+'</span>':'')+
+      (emailCount?'<span class="fs-11 c-accent" style="padding:2px 8px;background:var(--accent-l);border-radius:8px">'+emailCount+' email'+(emailCount>1?'s':'')+'</span>':'')+
+      (teamCount?'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:8px">'+teamCount+' member'+(teamCount>1?'s':'')+'</span>':'')+
+      '<span class="fs-11" style="padding:3px 9px;background:'+(usr.is_active!==false?'var(--green-l)':'var(--red-l)')+';color:'+(usr.is_active!==false?'var(--green)':'var(--red)')+';border-radius:8px;font-weight:600">'+(usr.is_active!==false?'Active':'Inactive')+'</span>'+
+      '<div class="c-text3 fs-18" style="margin-left:4px">›</div>'+
+    '</div>';
+}
+
+// The roles, as cards: each person counted once, under their own role (the role shown on their row).
+var ADMIN_ROLE_ORDER=['admin','director','associate_director','bd_lead','bd','ra_lead','ra','recruiter'];
+function adminRoleGroups(){
+  var by={};
+  (STATE.users||[]).forEach(function(x){ var r=x.role||'other'; (by[r]=by[r]||[]).push(x); });
+  return Object.keys(by).sort(function(a,b){
+    var ia=ADMIN_ROLE_ORDER.indexOf(a), ib=ADMIN_ROLE_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  }).map(function(r){
+    return { role:r, label:roleLabel(r)||r, users:by[r].slice().sort(function(a,b){return (a.name||'').localeCompare(b.name||'');}) };
+  });
+}
+function adminRoleWindow(role){
+  var g=adminRoleGroups().filter(function(x){return x.role===role;})[0]||{label:roleLabel(role),users:[]};
+  return '<div class="modal modal-w640" data-win="admin-role"><div class="mh"><div class="mt">'+htmlEsc(g.label)+' · '+g.users.length+'</div>'+
+    '<button class="btn-icon" onclick="STATE.adminRoleOpen=null;closeModal()">'+ico('x',14)+'</button></div>'+
+    '<div class="mb" style="padding:0;max-height:70vh;overflow:auto">'+
+      (g.users.map(adminUserRow).join('')||'<div class="c-text3 fs-13" style="padding:30px;text-align:center">No one in this role.</div>')+
+    '</div></div>';
+}
+window.openAdminRoleGroup=function(role){ STATE.adminRoleOpen=role; STATE.modal=adminRoleWindow(role); render(); };
 
 // Segmented List / Org chart toggle shown in the Admin header. `active` is the
 // value if this is the currently-rendered view (so the button styling matches).

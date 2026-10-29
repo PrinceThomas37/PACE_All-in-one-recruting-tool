@@ -3,9 +3,20 @@
 // ════════════════════════════════════════════════
 
 function refreshPoolStats(){
-  apiGet('/distribute/pool-stats').then(function(d){
+  return apiGet('/distribute/pool-stats').then(function(d){
     STATE.distributePoolStats=d;render();
   }).catch(function(){});
+}
+// The pool's numbers keep themselves current while Assign Leads is open (owner, 29 Oct: "after assignment the number does
+// not change on a live basis — it changes when the refresh button is clicked"). Every 20 seconds, only on this page and
+// only while the tab is on screen; it stops by itself when the person leaves.
+function startAssignPoolPoll(){
+  if(STATE._assignPoolTimer)return;
+  STATE._assignPoolTimer=setInterval(function(){
+    if(STATE.page!=='assign'||!STATE.token){ clearInterval(STATE._assignPoolTimer); STATE._assignPoolTimer=null; return; }
+    if(document.hidden||STATE.modal)return;   // never repaint under an open window
+    refreshPoolStats();
+  },20000);
 }
 
 window.updateAssignCountPreview=function(){
@@ -30,7 +41,7 @@ window.openAssignToManager=function(managerId){
   STATE._assignRatio=null;
   STATE._assignGenerating=false;
 
-  STATE.modal='<div class="modal modal-w540">'+
+  STATE.modal='<div class="modal modal-w860">'+
     '<div class="mh">'+
       '<div><div class="mt">Assign leads \u2014 '+htmlEsc(m.name)+'</div>'+
         '<div class="fs-12 c-text3" style="margin-top:3px">'+pool.total+' unassigned leads \u00b7 '+capacity+' email capacity today</div>'+
@@ -48,6 +59,8 @@ window.openAssignToManager=function(managerId){
         '<input type="number" id="assign-manual-count" min="1" max="'+pool.total+'" placeholder="Auto" class="fs-14" style="width:80px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-weight:600;text-align:center;font-family:inherit" oninput="updateAssignCountPreview()"/>'+
         '<span class="fs-12 c-text3">/ '+pool.total+'</span>'+
       '</div>'+
+      // Which email IDs these leads go out from, and how busy each one already is today (owner, 29 Oct).
+      '<div id="assign-boxes" class="mb3"><div class="fs-12 c-text3">Loading the email IDs…</div></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'+
         '<div onclick="setAssignMode(\'auto\')" id="mode-auto" style="padding:14px;border:2px solid var(--accent);border-radius:var(--r2);cursor:pointer;background:var(--accent-l);text-align:center">'+
           '<div class="fs-18" style="margin-bottom:4px">\u26a1</div>'+
@@ -73,8 +86,44 @@ window.openAssignToManager=function(managerId){
     '</div>'+
   '</div>';
   render();
+  STATE._assignEmailIds=null; STATE._assignBoxes=null;
+  loadAssignBoxes(managerId);
   // Auto mode selected by default — trigger auto ratio generation
   setTimeout(function(){generateAutoRatio();},100);
+};
+
+// THE EMAIL IDS TO SEND FROM (owner, 29 Oct: "select the email IDs … see how many pending emails are there which will go out
+// that day … then choose the email IDs with less in the queue"). Each row: what it can still send today, what is already
+// queued on it (first outreach / FU1 / FU2), follow-ups that fall due today but are not queued yet, and what is left free.
+// Ticked at the start: every connected one with room today. The choice goes to the server with the assignment.
+function loadAssignBoxes(managerId){
+  apiGet('/distribute/mailboxes?manager_id='+encodeURIComponent(managerId)).then(function(d){
+    if(STATE._assignManagerId!==managerId)return;
+    STATE._assignBoxes=(d&&d.mailboxes)||[];
+    STATE._assignEmailIds=STATE._assignBoxes.filter(function(b){return b.connected&&b.room_today>0;}).map(function(b){return b.id;});
+    paintAssignBoxes();
+  }).catch(function(e){ var el=document.getElementById('assign-boxes'); if(el) el.innerHTML='<div class="fs-12 c-red">Could not load the email IDs: '+htmlEsc((e&&e.message)||'')+'</div>'; });
+}
+function paintAssignBoxes(){
+  var el=document.getElementById('assign-boxes'); if(!el)return;
+  var boxes=STATE._assignBoxes||[], on=STATE._assignEmailIds||[];
+  if(!boxes.length){ el.innerHTML='<div class="fs-12 c-red">This manager has no active email IDs.</div>'; return; }
+  var q=function(b){ var x=b.queued||{}; return (x.pending||0)?(x.initial||0)+' first · '+(x.fu1||0)+' FU1 · '+(x.fu2||0)+' FU2'+(x.later?' · '+x.later+' later':''):'—'; };
+  var due=function(b){ var x=b.due_today_not_queued||{}; var n=(x.fu1||0)+(x.fu2||0)+(x.later||0); return n?(x.fu1||0)+' FU1 · '+(x.fu2||0)+' FU2'+(x.later?' · '+x.later+' later':''):'—'; };
+  el.innerHTML='<div class="fs-12 c-text2 fw6" style="margin-bottom:6px">Send from these email IDs</div>'+
+    '<div class="td-scroll"><table class="td-table fs-12"><thead><tr><th></th><th>Email ID</th><th>Room today</th><th>Queued</th><th>Due today, not queued</th><th>Free</th></tr></thead><tbody>'+
+    boxes.map(function(b){
+      var usable=b.connected&&b.room_today>0;
+      return '<tr'+(usable?'':' class="c-text3"')+'><td><input type="checkbox" aria-label="Send from '+htmlEsc(b.email)+'" '+(on.indexOf(b.id)>=0?'checked ':'')+(usable?'':'disabled ')+'onchange="toggleAssignBox(\''+b.id+'\',this.checked)"></td>'+
+        '<td class="fw6">'+htmlEsc(b.email)+(b.connected?'':' <span class="c-red">· not connected</span>')+'</td>'+
+        '<td>'+b.room_today+' of '+b.limit+'</td><td>'+q(b)+'</td><td>'+due(b)+'</td><td class="fw6">'+b.free_today+'</td></tr>';
+    }).join('')+'</tbody></table></div>'+
+    '<div class="fs-11 c-text3" style="margin-top:4px">Free = room today minus what is queued and the follow-ups that fall due today. New leads are shared among the ticked ones by the room each has.</div>';
+}
+window.toggleAssignBox=function(id,on){
+  var cur=(STATE._assignEmailIds||[]).filter(function(x){return x!==id;});
+  if(on) cur.push(id);
+  STATE._assignEmailIds=cur;
 };
 
 window.setAssignMode=function(mode){
@@ -203,6 +252,10 @@ window.confirmAssignToManager=function(){
   if(!ratio||!managerId)return;
   var m=STATE.users.find(function(u){return u.id===managerId;})||{name:'Manager'};
   var emailAccounts=(STATE.userEmailsCache[managerId]||[]).filter(function(a){return a.is_active;});
+  if(STATE._assignEmailIds){
+    if(!STATE._assignEmailIds.length){ showToast('Tick at least one email ID to send from','warning'); return; }
+    emailAccounts=emailAccounts.filter(function(a){return STATE._assignEmailIds.indexOf(a.id)>=0;});
+  }
   var totalCapacity=emailAccounts.reduce(function(s,a){return s+(a.daily_send_limit||300);},0);
   var now=new Date();
   var dateStr=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -265,15 +318,23 @@ window.submitAssignToManager=function(){
   var managerId=STATE._assignManagerId;
   if(!ratio||!managerId)return;
   closeModal();
-  apiPost('/distribute/execute',{manager_id:managerId,ratio:ratio}).then(function(res){
-    var msg=res.total_assigned+' leads assigned · emails sending automatically'+(res.skipped_no_people?' · '+res.skipped_no_people+' left in the pool (no contact person to write to)':'');
+  // The RA Lead stays on Assign Leads and can start the next one straight away (owner, 29 Oct): the pool count drops at
+  // once, a line says what is being assigned, and the real numbers replace both when the server answers. The server takes
+  // a lead only while it is still unassigned, so two assignments back to back never share a lead.
+  var m=(STATE.users||[]).find(function(u){return u.id===managerId;})||{name:'the manager'};
+  var n=ratio.total_to_send||0;
+  if(STATE.distributePoolStats&&typeof STATE.distributePoolStats.total==='number') STATE.distributePoolStats.total=Math.max(0,STATE.distributePoolStats.total-n);
+  STATE._assigningNow={name:m.name,n:n};
+  STATE._assignRatio=null;STATE._assignManagerId=null;
+  render();
+  var body={manager_id:managerId,ratio:ratio};
+  if(STATE._assignEmailIds&&STATE._assignEmailIds.length) body.email_ids=STATE._assignEmailIds.slice();
+  apiPost('/distribute/execute',body).then(function(res){
+    var msg=res.total_assigned+' leads assigned to '+m.name+' · emails sending automatically'+(res.skipped_no_people?' · '+res.skipped_no_people+' left in the pool (no contact person to write to)':'');
     showToast(msg,'success');
-    STATE._assignRatio=null;STATE._assignManagerId=null;
-    STATE.sendProgress=null;
-    STATE.page='email'; // go to email page so progress bar is visible
-    render();
+    STATE._assigningNow=null;
     startProgressPoll();
     return Promise.all([refreshPoolStats(),refreshJobs()]);
-  }).catch(function(e){showToast('Failed: '+e.message,'error');});
+  }).catch(function(e){ STATE._assigningNow=null; refreshPoolStats(); showToast('Failed: '+e.message,'error'); });
 };
 

@@ -48,7 +48,7 @@ try{
   step('RA team: the server\'s numbers are on the page (97 + 22 = 119 this month, 200 leads)', /200\s*Total leads/.test(t) && /119\s*Last 30 days/.test(t), t.slice(0,200));
   step('RA team: a stat strip, a "top performer" card and the kit table — no hand-built boxes', /class="strip"/.test(h) && /class="iv-top"/.test(h) && /dt-wrap/.test(h) && !/linear-gradient\(135deg,#1a3a6e/.test(h) && !/background:var\(--card\);border:1px solid var\(--border\)/.test(h));
   step('RA team: the top performer is Asha Rao (97 this month)', /top performer this month\s*Asha Rao/i.test(t) && /97\s*leads/.test(t));
-  step('RA team: the Team switch is the same pill toggle as Lead Insights', (await ev(()=>[...document.querySelectorAll('#content .rep-fgroup .rep-pill')].map(b=>b.textContent+(b.classList.contains('on')?'*':'')).join('|')))==='RA Team*|BD Team');
+  step('RA team: the Team switch is the same pill toggle as Lead Insights (with the team\'s outreach tab)', (await ev(()=>[...document.querySelectorAll('#content .rep-fgroup .rep-pill')].map(b=>b.textContent+(b.classList.contains('on')?'*':'')).join('|')))==='RA Team*|BD Team|Outreach — all users');   // + the team's outreach (29 Oct)
 
   // ── one analyst ──
   await ev(()=>{ [...document.querySelectorAll('#content tr[onclick]')].find(r=>/Ben Cole/.test(r.textContent)) ? 0 : 0; loadRAInsights('ra1'); });

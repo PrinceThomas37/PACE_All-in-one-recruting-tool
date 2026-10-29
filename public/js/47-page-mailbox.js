@@ -921,9 +921,13 @@
         // Everyone else who was on it, minus us — the two classic reply-all
         // bugs are mailing yourself and mailing the sender twice.
         var own=((m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{}).email_address||'';
-        var seen={}; seen[(x.from&&x.from.email)||'']=1; seen[own.toLowerCase()]=1;
+        // Whoever is already in To is not copied into Cc as well (owner, 29 Oct: replying all to our own email put the
+        // client in To AND Cc). Addresses are compared without case.
+        var seen={}; seen[String((x.from&&x.from.email)||'').toLowerCase()]=1; seen[own.toLowerCase()]=1;
+        to.split(',').forEach(function(t){ var k=t.trim().toLowerCase(); if(k) seen[k]=1; });
         cc=addrLine((x.to||[]).concat(x.cc||[]).filter(function(a){
-          if(!a.email||seen[a.email])return false; seen[a.email]=1; return true;
+          var k=String(a.email||'').toLowerCase();
+          if(!k||seen[k])return false; seen[k]=1; return true;
         }));
       }
       subject=/^re:/i.test(x.subject||'')?x.subject:('Re: '+(x.subject||''));
@@ -1034,7 +1038,7 @@
   }
 
   // ── attachments ─────────────────────────────────────────────────────────────
-  var MAX_ATTACH_BYTES=3.5*1024*1024;
+  var MAX_ATTACH_BYTES=5*1024*1024;   // services/mailbox-send.js says the same
   window.mbPickFiles=function(){ var i=document.getElementById('mb-comp-files'); if(i)i.click(); };
   window.mbFilesChosen=function(input){
     var m=M(); var c=m.composer; if(!c||!input.files||!input.files.length)return;
@@ -2456,10 +2460,17 @@
   }
 
   // The subject line and the verbs that act on the open message.
+  // 29 Oct (owner: "the card is always visible at the top — make it pop up only when we want it"): a small "Lead in PACE"
+  // button sits in the header when PACE knows the address; the card opens under it on a click and closes again on another.
   function renderHead(x, threadLen){
     var card=leadCardHtml(x);
-    return card?'<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+card+'</div>':renderHeadMain(x,threadLen);
+    if(!card) return renderHeadMain(x,threadLen);
+    var open=!!M().leadCardOpen;
+    return '<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+
+      '<div class="mb-lc-wrap"><button type="button" class="btn btn-sm btn-outline mb-lc-btn" aria-expanded="'+open+'" onclick="mbToggleLeadCard()">Lead in PACE '+(open?'▴':'▾')+'</button>'+
+      (open?card:'')+'</div></div>';
   }
+  window.mbToggleLeadCard=function(){ var m=M(); m.leadCardOpen=!m.leadCardOpen; paint(); };
   function renderHeadMain(x, threadLen){
     var hasOthers=threadLen>1;
     return '<div style="display:flex;align-items:flex-start;gap:10px">'+

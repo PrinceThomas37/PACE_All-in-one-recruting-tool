@@ -14,7 +14,7 @@
 //   ctx = { supabase, google: { clientId, clientSecret, redirectUri, scopes } }
 // ============================================================================
 
-const { fetchWithRetry } = require('./http-client');
+const { fetchWithRetry, fetchWithTimeout } = require('./http-client');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { decodeEntities } = require('./services/html-entities');
 
@@ -194,7 +194,8 @@ function createGmailProvider(ctx) {
     return `${encodeMimeHeader(m[1].trim().replace(/^["']|["']$/g, ''))} ${m[2]}`;
   }
 
-  function buildRaw({ from, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments }) {
+  function buildRaw(args) { return base64url(buildMime(args)); }
+  function buildMime({ from, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments }) {
     const head = [];
     if (from) head.push(`From: ${encodeAddressHeader(from)}`);
     head.push(`To: ${encodeAddressHeader(to)}`);
@@ -209,7 +210,7 @@ function createGmailProvider(ctx) {
       head.push('Content-Type: text/html; charset="UTF-8"');
       head.push('');
       head.push(htmlBody || '');
-      return base64url(head.join('\r\n'));
+      return head.join('\r\n');
     }
 
     // multipart/mixed: the HTML body, then one attachment part per file.
@@ -227,23 +228,43 @@ function createGmailProvider(ctx) {
         '', ...b64);
     });
     parts.push(`--${boundary}--`);
-    return base64url(head.join('\r\n') + '\r\n' + parts.join('\r\n'));
+    return head.join('\r\n') + '\r\n' + parts.join('\r\n');
+  }
+
+  // A message goes to Gmail as base64url `raw` inside JSON — but Google refuses a JSON body over 5 MB, and base64 of a
+  // base64 attachment is ~1.8x the file. So a big message (an attachment over ~2.5 MB, owner 29 Oct: "increase the limit
+  // to 5 MB") goes to Gmail's UPLOAD address instead, as the plain MIME message beside its JSON (threadId), which takes
+  // up to 35 MB. `wrap` = 'message' for drafts, whose JSON is { message: { raw, threadId } }.
+  const UPLOAD_OVER = 3 * 1024 * 1024;
+  async function sendMime(token, path, method, mime, meta, wrap) {
+    if (Buffer.byteLength(mime, 'utf8') <= UPLOAD_OVER) {
+      const body = wrap ? { [wrap]: { ...(meta[wrap] || {}), raw: base64url(mime) } } : { ...meta, raw: base64url(mime) };
+      return api(token, path, { method, body: JSON.stringify(body) });
+    }
+    const boundary = 'pace_up_' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta || {})}\r\n`
+      + `--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n${mime}\r\n--${boundary}--`;
+    const res = await fetchWithTimeout(`https://gmail.googleapis.com/upload/gmail/v1/users/me${path}?uploadType=multipart`, {
+      method, body,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    }, { timeoutMs: Math.max(GMAIL_TIMEOUT_MS, 60000) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const err = new Error(data?.error?.message || `Gmail API ${res.status}`); err.status = res.status; throw err; }
+    return data;
   }
 
   // ── Send (fresh) ────────────────────────────────────────────────────────────
   async function sendNewMessage(userEmailId, { to, cc, subject, htmlBody, headers, fromAddress, attachments }) {
     const token = await getToken(userEmailId);
-    const raw = buildRaw({ from: fromAddress, to, cc, subject, htmlBody, headers, attachments });
-    const r = await api(token, '/messages/send', { method: 'POST', body: JSON.stringify({ raw }) });
+    const r = await sendMime(token, '/messages/send', 'POST', buildMime({ from: fromAddress, to, cc, subject, htmlBody, headers, attachments }), {});
     return { messageId: r.id, threadId: r.threadId };
   }
 
   // ── Send (threaded reply) — pass the parent's Message-ID for proper threading ─
   async function sendThreadReply(userEmailId, { to, cc, subject, htmlBody, headers, fromAddress, threadId, inReplyTo, references, attachments }) {
     const token = await getToken(userEmailId);
-    const raw = buildRaw({ from: fromAddress, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments });
-    const body = { raw }; if (threadId) body.threadId = threadId;
-    const r = await api(token, '/messages/send', { method: 'POST', body: JSON.stringify(body) });
+    const meta = {}; if (threadId) meta.threadId = threadId;
+    const r = await sendMime(token, '/messages/send', 'POST', buildMime({ from: fromAddress, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments }), meta);
     return { messageId: r.id, threadId: r.threadId };
   }
 
@@ -253,10 +274,9 @@ function createGmailProvider(ctx) {
   // into one by findDraft().
   async function saveDraft(userEmailId, { draftId, to, cc, subject, htmlBody, fromAddress, threadId, inReplyTo, references, attachments }) {
     const token = await getToken(userEmailId);
-    const raw = buildRaw({ from: fromAddress, to: to || '', cc, subject, htmlBody, inReplyTo, references, attachments });
-    const message = { raw }; if (threadId) message.threadId = threadId;
+    const message = {}; if (threadId) message.threadId = threadId;
     const path = draftId ? `/drafts/${encodeURIComponent(draftId)}` : '/drafts';
-    const r = await api(token, path, { method: draftId ? 'PUT' : 'POST', body: JSON.stringify({ message }) });
+    const r = await sendMime(token, path, draftId ? 'PUT' : 'POST', buildMime({ from: fromAddress, to: to || '', cc, subject, htmlBody, inReplyTo, references, attachments }), { message }, 'message');
     return { draftId: r.id, messageId: r.message && r.message.id, threadId: r.message && r.message.threadId };
   }
   // `ref` is a draft id or the id of a message in the Drafts folder. null when there is no such draft (already sent or deleted).
