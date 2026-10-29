@@ -7153,3 +7153,6 @@ Built on `claude/funny-shannon-h83q83` in four commits, each with targeted suite
 - **AI (R-343):** live numbers and recommendation in `docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md` (AI first emails 1.23 % replies vs 0.54 % template; AI follow-ups worse than template).
 - Small: reply-all dedupe (To not copied into Cc, case-insensitive); Gmail `multipart/mixed` in headers-only reads = has files; admin role cards (`adminRoleGroups`); sidebar arrow in the footer; insights split lists 8 + Show all; `company_service` in the detail menu; `POST /my-setup/sequence/rewrite-pending` (+ `loadFirstEmailWording` shared with `generateEmailsForJobs`); leads `leadsIsTeamManager` (unassigned stay under "mine"); lead card behind a button; `paceNotify`; first load retries 6× (~55 s); `.js/.css` get `Cache-Control: no-cache`.
 - Live data read (read-only SQL) for the AI counters and reply rates.
+
+### 29 Oct 2026 (Session 55, end) — #378 merged
+Owner: "merge them". Clean worktree of head `3a…` (branch tip before squash) ran 323/323 on Node 22 and Node 26.11.1; squash-merged as `21ef7ec`. Deploy not confirmed (sandbox proxy blocks app.paceconsultant.in and onrender; Render tools need a workspace choice). Build queue for the next chat written in CONTEXT_WINDOW (R-342, R-333, R-320, R-343 — all owner-approved, D-0188…D-0191).

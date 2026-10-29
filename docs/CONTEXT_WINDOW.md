@@ -4,13 +4,31 @@
 
 **Updated**: 2026-10-29 (Session 55). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **069** (none added since 068).
 
-## START HERE (29 Oct, Session 55) — the owner's 29-note doc: built on `claude/funny-shannon-h83q83` (draft PR), NOT merged
+## START HERE (29 Oct, Session 55, end) — #378 MERGED (`21ef7ec`); the owner resumes in a NEW chat. Build the queue below in this order.
 
-R-335…R-341 built and tested (4 commits; archive "2026-10-29 (Session 55)" has the mechanisms). **Waiting on the owner:** the merge go-ahead;
-R-342 direct/office (needs migration 069); R-343 AI variants plan (`docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md`); R-344 Google consent-screen
-steps; R-345 notification actions; R-326 card contents; R-320 compose direction; R-333 which industries. **After merge, verify live:** a run that
-gets new mail mid-way starts a second pass (Render log "[Send] … new email(s) queued … fresh pass"); a Gmail "Message blocked" bounce marks Blocked;
-a 4–5 MB attachment sends from Gmail and Outlook.
+**Merged:** #378 = R-335…R-341 (blocked/invalid bounces, 5 MB attachments, send runs as passes + resume after restart, Pending per email ID
++ RA Lead live card, Assign from chosen email IDs with queue counts, RA Lead "Outreach — all users" insights, Rewrite with AI in Pending,
+re-write waiting first emails after a sequence edit, My leads / team leads, lead card on demand, admin role cards, sidebar arrow at the bottom,
+run-finished notice, wake-up retries, no-cache scripts). Clean worktree: 323/323 on Node 22 AND Node 26.11.1. **Deploy NOT confirmed from the
+sandbox** (proxy blocks both PACE hosts; Render tools need the owner to pick a workspace — ask first). First thing next session: confirm live
+(owner hard-refresh; Render log "[Send] … fresh pass"; a "Message blocked" bounce → Blocked; a 4–5 MB attachment from Gmail and Outlook).
+
+**BUILD QUEUE — owner already said yes (decisions recorded, do not re-ask):**
+1. **R-342 / D-0189 direct vs office** on an added email/phone: migration 069 (label per contact point), add to `models/tables.js` if needed;
+   apply to the live DB only with the owner's fresh go-ahead at merge.
+2. **R-333 / D-0190 all Find Leads industries** get real industry codes (NAICS, like D-0185 hospitals) + a live check each (~1 credit each).
+3. **R-320 / D-0191 company-first compose**: company (+location) → people from the provider-neutral contact layer (`services/contact-data.js`,
+   D-0175) → tick → AI writes one email per person (title + JD) → send or add to a sequence; 1 credit per email lookup.
+4. **R-343 / D-0188 all-template outreach**: up to 10 AI-written variants per step from the mother template (extend
+   `services/sequence-versions.js`, today max 2), JD read once per lead for blanks (skills, industry, project area, on-site/remote), no per-email
+   AI. Owner chose this OVER the recommended hybrid; recorded risk: AI first emails had ~2× replies (1.23 % vs 0.54 %). Keep a way to turn AI
+   first emails back on, and report first-email reply rate ~2 weeks after it ships. Plan: `docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md`.
+
+**WAITING ON THE OWNER (ask once, plainly):** R-326 what the lead card shows and does (and for candidates) · R-345 actions on the paused-mailbox
+/ notification centre · R-340 follow-up: start recording WHO assigned each lead so the RA Lead can see "only the leads I assigned" · R-344 Google
+sign-in steps (owner: put the Cloud project under the company Workspace + Internal user type, add redirect
+`https://app.paceconsultant.in/auth/google/callback`; then I switch `GOOGLE_REDIRECT_URI` in Render with their go-ahead) · paid Render
+instance (~$7/mo) for the slow first log-in, owner's call · older: R-328 new Render service security list, R-306, R-329 second vendor.
 
 ## START HERE (27 Oct, Session 54, evening) — #374, #375, #376 MERGED; clean-worktree 317/317 on Node 22 and Node 26.11.1 for each
 
