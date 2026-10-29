@@ -640,7 +640,12 @@ function renderEmail(){
             '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(pe.subject||'')+'</div>'+
           '</div>'+
           '<div class="fs-13" style="padding:14px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(pe.body||'')+'</div>'+
-          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
+          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">'+
+            // R-325 (owner, 29 Oct: "yes"): the same ✨ Rewrite with AI as the Find Leads review window, for a lead's FIRST email.
+            (!pe.followup_type||pe.followup_type==='initial'?(function(){ var rw=(STATE._pendRw||{})[pe.id]||{};
+              return (rw.note?'<div class="fs-12 c-text2" role="status" style="flex-basis:100%">'+htmlEsc(rw.note)+'</div>':'')+
+                '<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteAi(\''+pe.id+'\')">'+(rw.busy?'Working…':'✨ Rewrite with AI')+'</button>'+
+                (rw.prev?'<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteUndo(\''+pe.id+'\')">Undo rewrite</button>':''); })():'')+
             '<button class="btn btn-outline btn-sm" onclick="openDeletePendingConfirm([\''+pe.id+'\'])" title="Remove this email from Pending — it will not be sent">Delete email</button>'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
           '</div>':'')+
@@ -1155,3 +1160,27 @@ function pendingMailboxTable(ps){
       (rows.length>1?'<tr class="pend-mb-tot"><td class="fw6">All email IDs</td><td>'+tot.initial+'</td><td>'+tot.fu1+'</td><td>'+tot.fu2+'</td>'+(anyLater?'<td>'+tot.later+'</td>':'')+'<td class="fw6">'+tot.pending+'</td></tr>':'')+
     '</tbody></table></div></div>';
 }
+
+// ✨ Rewrite with AI in Email → Pending (R-325). The server writes it with the same writer and house checker as a send
+// (routes/email-rewrite.js); when it cannot, the wording stays and the reason is shown. Undo puts back what was there.
+function pendRwState(id){ STATE._pendRw=STATE._pendRw||{}; return (STATE._pendRw[id]=STATE._pendRw[id]||{}); }
+function pendApply(id, em){
+  (STATE.pendingEmails||[]).forEach(function(e){ if(e.id===id&&em){ e.subject=em.subject; e.body=em.body; e.ai_written=em.template_variant==='ai'; } });
+}
+window.pendRewriteAi=function(id){
+  var rw=pendRwState(id); if(rw.busy)return;
+  rw.busy=true; rw.note=''; render();
+  apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{}).then(function(r){
+    rw.busy=false;
+    if(r&&r.written&&r.email){ rw.prev=r.previous||null; pendApply(id,r.email); rw.note='Rewritten for this person. Read it — edit, send, or undo.'; }
+    else rw.note=(r&&r.reason)||'The AI could not write this one, so the wording was kept.';
+    render();
+  }).catch(function(e){ rw.busy=false; rw.note='Could not rewrite: '+((e&&e.message)||e); render(); });
+};
+window.pendRewriteUndo=function(id){
+  var rw=pendRwState(id); if(rw.busy||!rw.prev)return;
+  rw.busy=true; render();
+  apiPost('/emails/'+encodeURIComponent(id)+'/rewrite-ai',{restore:rw.prev}).then(function(r){
+    rw.busy=false; rw.prev=null; if(r&&r.email) pendApply(id,r.email); rw.note='Back to the earlier wording.'; render();
+  }).catch(function(e){ rw.busy=false; rw.note='Could not undo: '+((e&&e.message)||e); render(); });
+};

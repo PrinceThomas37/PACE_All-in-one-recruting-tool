@@ -1110,25 +1110,10 @@ async function loadSettingsByKeys(keys) {
   return out;
 }
 
-// Standalone generation function — called directly by autoSendForManager (no HTTP)
-async function generateEmailsForJobs(job_ids, callerUserId) {
-  // Batch fetch jobs in chunks to avoid Supabase URL length limits on .in()
-  const BATCH_SIZE = 50;
-  let jobs = [];
-  for (let i = 0; i < job_ids.length; i += BATCH_SIZE) {
-    const chunk = job_ids.slice(i, i + BATCH_SIZE);
-    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
-    if (error) {
-      console.error(`[GenerateEmails] Failed to fetch jobs batch ${i}-${i + chunk.length}:`, error.message);
-      throw error;
-    }
-    jobs = jobs.concat(data || []);
-  }
-  if (!jobs.length) {
-    console.log(`[GenerateEmails] No jobs found for IDs: ${job_ids.slice(0, 5).join(',')}...`);
-    return 0;
-  }
-  console.log(`[GenerateEmails] Fetched ${jobs.length} jobs (requested ${job_ids.length})`);
+// Who writes each lead's first email and in which words: the people, their first email IDs and every wording store the
+// builder reads (services/lead-outreach-queue.js). Shared by queuing new first emails and by re-writing the waiting ones
+// after the person changed their sequence (POST /my-setup/sequence/rewrite-pending).
+async function loadFirstEmailWording(jobs, callerUserId) {
   const bdIds = [...new Set(jobs.map(j => j.assigned_to_bd).filter(Boolean))];
   const { data: bdUsers } = bdIds.length ? await supabase.from('users').select('id,name,email').in('id', bdIds) : { data: [] };
   const bdMap = {};
@@ -1149,6 +1134,29 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   const tmplRows = await loadSettingsByKeys(tmplKeys);
   const tmplSettings = {};
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
+  return { bdMap, bdPrimaryEmailMap, tmplSettings };
+}
+
+// Standalone generation function — called directly by autoSendForManager (no HTTP)
+async function generateEmailsForJobs(job_ids, callerUserId) {
+  // Batch fetch jobs in chunks to avoid Supabase URL length limits on .in()
+  const BATCH_SIZE = 50;
+  let jobs = [];
+  for (let i = 0; i < job_ids.length; i += BATCH_SIZE) {
+    const chunk = job_ids.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
+    if (error) {
+      console.error(`[GenerateEmails] Failed to fetch jobs batch ${i}-${i + chunk.length}:`, error.message);
+      throw error;
+    }
+    jobs = jobs.concat(data || []);
+  }
+  if (!jobs.length) {
+    console.log(`[GenerateEmails] No jobs found for IDs: ${job_ids.slice(0, 5).join(',')}...`);
+    return 0;
+  }
+  console.log(`[GenerateEmails] Fetched ${jobs.length} jobs (requested ${job_ids.length})`);
+  const { bdMap, bdPrimaryEmailMap, tmplSettings } = await loadFirstEmailWording(jobs, callerUserId);
 
   const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
   const { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped, needsSequence } = buildPendingEmailsFromJobs(
@@ -1330,6 +1338,50 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     // An error before the answer was sent used to leave the request hanging for ever; the person is owed a reason.
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
+});
+
+// AFTER A PERSON CHANGES THEIR SEQUENCE (owner, 29 Oct: "if I sent outreach today and realise the wording is not working,
+// I should be able to edit it"). The sequence itself can always be edited; what did not change were the FIRST emails already
+// written and waiting in Pending — they keep the words they were written with. This re-writes those, from the person's
+// wording as it is now, the same way they were written (services/lead-outreach-queue.js: per-email-ID wording, versions).
+// Only the caller's own, only still 'pending' at the moment of writing (a send that has just claimed one is never touched).
+// Follow-ups are written on the day they go out, so they already use the new words. { dry:true } only counts.
+app.post('/my-setup/sequence/rewrite-pending', auth, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    let rows = [], from = 0;
+    for (;;) {
+      const { data, error } = await db.forRequest(req).from('emails').select('id,job_id,contact_id,followup_type')
+        .eq('sent_by', uid).eq('status', 'pending').order('id', { ascending: true }).range(from, from + 999);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      rows = rows.concat(data); if (data.length < 1000) break; from += 1000;
+    }
+    rows = rows.filter(r => !followupSteps.isFollowupType(r.followup_type) && r.job_id && r.contact_id);
+    if (req.body && req.body.dry) return res.json({ waiting: rows.length });
+    if (!rows.length) return res.json({ rewritten: 0, waiting: 0 });
+    const want = new Set(rows.map(r => `${r.job_id}:${r.contact_id}`));
+    const jobIds = [...new Set(rows.map(r => r.job_id))];
+    let jobs = [];
+    for (let i = 0; i < jobIds.length; i += 50) {
+      const { data } = await db.forRequest(req).from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', jobIds.slice(i, i + 50));
+      jobs = jobs.concat(data || []);
+    }
+    // Written in THIS person's words, for exactly the people whose first email is waiting.
+    jobs = jobs.map(j => Object.assign({}, j, { assigned_to_bd: uid, contacts: (j.contacts || []).filter(c => want.has(`${j.id}:${c.id}`)) }));
+    const { bdMap, bdPrimaryEmailMap, tmplSettings } = await loadFirstEmailWording(jobs, uid);
+    const { emailsToInsert, needsSequence } = buildPendingEmailsFromJobs(jobs, uid, bdMap, bdPrimaryEmailMap, tmplSettings, new Set());
+    if (needsSequence.length && !emailsToInsert.length) return res.status(400).json({ error: 'Save your sequence first — there is no wording to write them with.' });
+    const fresh = {}; emailsToInsert.forEach(e => { fresh[`${e.job_id}:${e.contact_id}`] = e; });
+    let rewritten = 0;
+    for (const r of rows) {
+      const e = fresh[`${r.job_id}:${r.contact_id}`]; if (!e) continue;
+      const { data: done } = await db.forRequest(req).from('emails').update({ subject: e.subject, body: e.body, template_variant: e.template_variant || null })
+        .eq('id', r.id).eq('sent_by', uid).eq('status', 'pending').select('id');
+      if (done && done.length) rewritten++;
+    }
+    res.json({ rewritten, waiting: rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // GET /emails/send-progress → extracted to routes/emails.js (mounted below).

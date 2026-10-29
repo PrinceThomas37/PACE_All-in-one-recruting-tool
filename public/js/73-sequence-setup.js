@@ -24,6 +24,9 @@
     {k:'city', label:'city', menu:'The city the job is in'},
     {k:'ind', label:'industry', menu:'Their industry'},
     {k:'job_resp', label:'top skills', menu:'Top skills from the job'},
+    // 29 Oct (owner: "project area is in my template, the AI takes it from the JD, but it is not in the drop-down"): the
+    // server always fills it (email-vars.js — the company's line of work from the job, else its industry).
+    {k:'company_service', label:'project area', menu:'Project area (from the job)'},
     {k:'pay', label:'pay', menu:'Pay, if known', optional:true}
   ];
   // Words for details an older sequence may already use, so they show as words too.
@@ -441,7 +444,16 @@
   function startStep(){
     if(named()) return namedStartStep();
     var p=Q.preview, ai=Q.mode==='ai';
+    // First emails already written and waiting keep the words they were written with (owner, 29 Oct: "I want to edit the
+    // sequence that has active leads in it"). Offer to re-write them in the new words; follow-ups are written on their day,
+    // so they already use these.
+    var rp=Q.rewritePending||{};
+    var rpHtml=rp.waiting>0&&!rp.done?'<div class="sq-ok"><b>'+rp.waiting+' first email'+(rp.waiting===1?' is':'s are')+' still waiting to go out with your old wording.</b> '+
+        'Re-write '+(rp.waiting===1?'it':'them')+' with this new wording? Any you changed by hand in Pending are re-written too. Follow-ups use the new wording by themselves.'+
+        '<div class="sq-row"><button type="button" class="btn btn-primary" data-sq="rwpend"'+(rp.busy?' disabled':'')+'>'+(rp.busy?'Re-writing…':'Re-write the '+rp.waiting+' waiting')+'</button></div>'+(rp.err?'<p class="sq-hint">'+esc(rp.err)+'</p>':'')+'</div>'
+      :rp.done?'<div class="sq-ok">'+rp.done+' waiting first email'+(rp.done===1?' was':'s were')+' re-written with your new wording.</div>':'';
     if(Q.saved) return '<div class="card sq-card"><div class="sq-ok"><b>Your sequence is on.</b> Leads assigned to you now go out by themselves'+(ai?' — the AI writes each email for that lead, and your backup goes on a day it cannot':'')+'. Follow-ups stop when someone replies.</div>'+
+      rpHtml+
       '<div class="sq-row"><button type="button" class="btn btn-primary" onclick="goPage(\'mysetup\')">Back to My Setup</button></div></div>';
     var mail='', shown=false;
     if(ai){ mail=aiTestHtml(); shown=!!(Q.aitest&&!Q.aitest.error); }
@@ -629,7 +641,8 @@
     if(named()) return saveNamed();
     Q.saving=true; say('save',''); repaint();
     apiPut('/my-setup/sequence', payload()).then(function(){ return savePerId(); }).then(function(){
-      Q.saving=false; Q.saved=true;
+      Q.saving=false; Q.saved=true; Q.rewritePending=null;
+      apiPost('/my-setup/sequence/rewrite-pending',{dry:true}).then(function(r){ Q.rewritePending={waiting:(r&&r.waiting)||0}; repaint(); }).catch(function(){});
       apiGet('/outreach-plan').then(function(p){ STATE.myOutreachPlan=p||{}; scheduleRender(); }).catch(function(){});
       if(typeof mySetupSync==='function') mySetupSync();
       repaint();
@@ -715,6 +728,10 @@
     if(a==='cancel'){ var back=named()?Q.target.back:'mysetup'; if(back==='seqsetup') back='email'; goPage(back); return; }
     if(a==='test'){ if(!Q.busy) test(); return; }
     if(a==='save'){ if(!Q.saving) save(); return; }
+    if(a==='rwpend'){ var rp=Q.rewritePending; if(!rp||rp.busy) return; rp.busy=true; rp.err=''; repaint();
+      apiPost('/my-setup/sequence/rewrite-pending',{}).then(function(r){ rp.busy=false; rp.done=(r&&r.rewritten)||0; if(!rp.done) rp.err='Nothing was re-written — they may have just gone out.'; repaint(); })
+        .catch(function(e){ rp.busy=false; rp.err='Could not re-write them: '+((e&&e.message)||e); repaint(); });
+      return; }
   });
   document.addEventListener('input',function(ev){
     var t=ev.target; if(!t.closest||!t.closest('#sq-root')) return;

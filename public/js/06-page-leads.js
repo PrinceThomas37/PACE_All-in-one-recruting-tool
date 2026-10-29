@@ -20,6 +20,16 @@ function renderJobs(){
   }
   // R-312: matched on the industry the lead actually carries (its own, else its company's), ignoring case and spaces.
   if(f.industries&&f.industries.length){var _inds=f.industries.map(function(x){return String(x).trim().toLowerCase();});jobs=jobs.filter(function(j){return _inds.indexOf(leadIndustryOf(j).toLowerCase())>-1;});}
+  // MY LEADS / MY TEAM'S LEADS (owner, 29 Oct: "the manager of a team does not need their team's leads in their lead list —
+  // show my leads, and the team's when I click for them, not in the default view"). A manager (someone with people reporting
+  // to them, not an admin or RA Lead, who work the whole pool) opens on their own leads; one click shows the team's.
+  var teamMgr=leadsIsTeamManager(u);
+  var whose=teamMgr?(f.whose||'mine'):'all';
+  var mineCount=0, teamCount=0;
+  // A lead nobody owns yet stays with "mine" — it is theirs to take or hand out; "team" is what someone else on the team owns.
+  var isTeams=function(j){ return !!j.assigned_to_bd&&j.assigned_to_bd!==u.id; };
+  if(teamMgr){ jobs.forEach(function(j){ if(isTeams(j)) teamCount++; else mineCount++; });
+    jobs=jobs.filter(function(j){ return whose==='mine'?!isTeams(j):isTeams(j); }); }
   // "Assigned to" — one person's leads, or the ones nobody owns (owner, 8 Oct: the admin should see leads per assigned user).
   if(f.assignee)jobs=jobs.filter(function(j){return f.assignee==='none'?!j.assigned_to_bd:j.assigned_to_bd===f.assignee;});
   if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
@@ -316,7 +326,11 @@ function renderJobs(){
         { icon:'refresh', title:'Refresh leads', onclick:'leadsRefreshNow()' }
       ],
       right:
-        assigneeSel+
+        (teamMgr?'<span class="seg-toggle" role="group" aria-label="Whose leads">'+
+          '<button type="button" class="btn btn-sm '+(whose==='mine'?'btn-primary':'btn-outline')+'" aria-pressed="'+(whose==='mine')+'" onclick="STATE.jobsFilter.whose=\'mine\';STATE.jobsFilter.assignee=\'\';STATE.leadsPage=0;render()">My leads ('+mineCount+')</button>'+
+          '<button type="button" class="btn btn-sm '+(whose==='team'?'btn-primary':'btn-outline')+'" aria-pressed="'+(whose==='team')+'" onclick="STATE.jobsFilter.whose=\'team\';STATE.leadsPage=0;render()">My team\'s leads ('+teamCount+')</button>'+
+        '</span>':'')+
+        (whose==='mine'?'':assigneeSel)+
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+
         mkChkDrop('Industry','industries',allIndustriesList,f.industries||[],indActive,indCount)+
         dateBtn+
@@ -913,3 +927,10 @@ window.leadsRefreshNow=function(){
   refreshJobs().then(function(){ showToast('Leads are up to date','success'); })
     .catch(function(e){ showToast('Could not refresh: '+((e&&e.message)||e),'error'); });
 };
+
+// Someone who runs a team: people report to them, and they are not an admin or an RA Lead (those two work the whole pool).
+function leadsIsTeamManager(u){
+  if(!u||userHasAnyRole(u,'admin','ra_lead'))return false;
+  if(userHasAnyRole(u,'bd_lead','director','associate_director'))return true;
+  return typeof directReportsOf==='function'&&directReportsOf(u.id).length>0;
+}

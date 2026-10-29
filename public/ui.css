@@ -1154,3 +1154,4 @@ body.ui-kit .adm-role-card{display:flex;flex-direction:column;align-items:flex-s
 body.ui-kit .oi-split-more{margin-top:10px}
 body.ui-kit .pend-mb-h{text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
 body.ui-kit .pend-mb-tot td{border-top:2px solid var(--line)}
+body.ui-kit .seg-toggle{display:inline-flex;gap:4px;flex-wrap:nowrap}
