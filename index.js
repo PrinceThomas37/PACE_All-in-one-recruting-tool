@@ -821,7 +821,7 @@ app.get('/api/version', (req, res) => res.json({
 // ══════════════════════════════════════════════════════════════
 // JOBS
 // ══════════════════════════════════════════════════════════════
-const JOB_SELECT = `*, research, company:companies(id,name,website,industry,location), contacts(id,job_id,first_name,last_name,designation,email,phone,extra_emails,extra_phones,linkedin,is_primary,email_status,ooo_until,email_sent_at,email_platform), creator:users!created_by(id,name,employee_id), assignee:users!assigned_to(id,name,employee_id), bd_assignee:users!assigned_to_bd(id,name,employee_id), sending_email:user_emails!sending_email_id(id,email_address,display_name)`;
+const JOB_SELECT = `*, research, company:companies(id,name,website,industry,location), contacts(id,job_id,first_name,last_name,designation,email,phone,extra_emails,extra_phones,contact_labels,linkedin,is_primary,email_status,ooo_until,email_sent_at,email_platform), creator:users!created_by(id,name,employee_id), assignee:users!assigned_to(id,name,employee_id), bd_assignee:users!assigned_to_bd(id,name,employee_id), sending_email:user_emails!sending_email_id(id,email_address,display_name)`;
 
 // The jobs list is by far the largest recurring payload (all jobs + nested
 // contacts, polled by every open tab), so it dominated Supabase egress. Cache

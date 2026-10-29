@@ -133,6 +133,11 @@ try {
     const explicit = await call('PUT', '/contacts/' + CT_EVE, { email: 'eve@bounced.dead', email_status: 'deactivated' });
     step('an explicit status in the same request is respected', explicit.status === 200 && row(CT_EVE).email_status === 'deactivated');
 
+    // Direct / office (R-342, D-0189): saved on the row, only for the person's own values
+    const lab = await call('PUT', '/contacts/' + CT_DANA, { contact_labels: { 'e:dana@old.com': 'office', 'e:someone@else.com': 'direct' } });
+    step('DIRECT/OFFICE: a label is saved for the person\'s own address, a stranger\'s is dropped', lab.status === 200 && J(row(CT_DANA).contact_labels) === '{"e:dana@old.com":"office"}', J(row(CT_DANA).contact_labels));
+    await call('PUT', '/contacts/' + CT_DANA, { email: 'dana@old.com', extra_emails: ['dana@new.com'] });
+    step('DIRECT/OFFICE: Make main keeps the label on the address it was given to', J(row(CT_DANA).contact_labels) === '{"e:dana@old.com":"office"}' && row(CT_DANA).email === 'dana@old.com', J([row(CT_DANA).email, row(CT_DANA).contact_labels]));
     const badPhone = await call('PUT', '/contacts/' + CT_BOB, { phone: 'someone@x.com' });
     step('a phone that is not a phone is refused on edit too', badPhone.status === 400 && row(CT_BOB).phone === '(555) 222-3333');
     const goodPhone = await call('PUT', '/contacts/' + CT_BOB, { phone: '(555) 777-8888', extra_phones: ['(555) 222-3333'] });

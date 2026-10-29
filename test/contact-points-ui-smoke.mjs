@@ -65,7 +65,7 @@ try {
   await ev(() => {
     window.__calls = []; window.__toasts = [];
     window.__server = { candidate: { id: 'c1', full_name: 'Jane Doe', candidate_code: 'CN-0001', email: 'jane@old.com', phone: '(555) 111-2222',
-      extra_emails: ['jane@new.com', 'jane@third.com'], extra_phones: ['(555) 987-6543'], owner: { name: 'Rita' } } };
+      extra_emails: ['jane@new.com', 'jane@third.com'], extra_phones: ['(555) 987-6543'], contact_labels: { 'e:jane@new.com': 'direct', 'p:5559876543': 'office' }, owner: { name: 'Rita' } } };
     window.__nextPost = null; window.__putError = null;
     window.apiGet = (u) => {
       window.__calls.push(['GET', u]);
@@ -193,6 +193,20 @@ try {
     keys: Array.from(document.querySelectorAll('.kv .kv-k')).map(k => k.textContent.trim()) }));
   step('the header shows the main, then the extras under it', same(hdr.more, ['jane@new.com', 'jane@third.com']) && same(hdr.morePh, ['(555) 987-6543']) && hdr.keys.includes('Email') && hdr.keys.includes('More emails'), JSON.stringify(hdr));
   if (SHOTS) { await page.waitForTimeout(700); await page.screenshot({ path: path.join(SHOTS, 'header.png') }); }   // after the drawer has slid in
+
+  // Direct / office (R-342, D-0189): each extra shows its label; a change SAVES AT ONCE
+  const labs = await ev(() => Array.from(document.querySelectorAll('[data-cp^="prof-"] .cp-lab')).map(s => s.value));
+  step('DIRECT/OFFICE: every extra has a label control showing its saved label', same(labs, ['direct', '', 'office']), JSON.stringify(labs));
+  await page.selectOption('[data-cp="prof-email"] [data-cp-row="email-1"] .cp-lab', 'office');
+  await page.waitForTimeout(250);
+  let lp = await lastCall('PUT', '/candidates/c1');
+  step('DIRECT/OFFICE: choosing a label saves at once, keyed by the address, keeping the others', lp && same(lp[2], { contact_labels: { 'e:jane@new.com': 'direct', 'p:5559876543': 'office', 'e:jane@third.com': 'office' } }), JSON.stringify(lp && lp[2]));
+  await page.selectOption('[data-cp="prof-email"] [data-cp-row="email-1"] .cp-lab', '');
+  await page.waitForTimeout(250);
+  lp = await lastCall('PUT', '/candidates/c1');
+  step('DIRECT/OFFICE: "Label" (none) removes it', lp && lp[2].contact_labels && lp[2].contact_labels['e:jane@third.com'] === undefined, JSON.stringify(lp && lp[2]));
+  const keyDrift = await ev((xs) => xs.map(x => CP.labelKey(x[0], x[1])), [['email', ' Jane@X.com '], ['phone', '+1 (555) 333-4444'], ['phone', '']]);
+  step('DIRECT/OFFICE: the browser keys a label exactly as the server does', same(keyDrift, [serverCp.labelKey('email', ' Jane@X.com '), serverCp.labelKey('phone', '+1 (555) 333-4444'), serverCp.labelKey('phone', '')]), JSON.stringify(keyDrift));
 
   await page.click('[data-cp="prof-email"] .cp-add');
   step('the header "+ add another email" opens one input, focused', await ev(() => document.activeElement && document.activeElement.id === 'cp-prof-email-new'));

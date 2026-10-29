@@ -851,3 +851,6 @@ Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.j
 
 ## 29 Oct 2026 (Session 55)
 - Leads list: a team manager opens on My leads (incl. unassigned), My team's leads one click (owner, 29 Oct).
+
+## 30 Oct 2026 (Session 56)
+- R-342 / D-0189 direct vs office: `contact_labels` jsonb object on `candidates` and `contacts` (migration 069 — WRITTEN, NOT APPLIED; apply before merge with the owner's go). Keyed by the normalised value (`e:<lower email>`, `p:<last 10 digits>`), so Make main needs nothing. `services/contact-points.js`: `LABELS` (direct, office), `labelKey`, `cleanLabels(input,row)` (only the person's own values, only the two labels), `labelOf`; `normaliseForWrite` writes labels when sent, or prunes them when the numbers change — ONLY if `prior` was read WITH the column (a blind caller cannot wipe them). Selected in `CANDIDATE_SELECT`, `JOB_SELECT` contacts, PUT /contacts existing read; `addLeadContact` stores them on create.

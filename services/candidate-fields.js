@@ -25,7 +25,7 @@ module.exports = function createCandidateFields(core) {
     'applicant_status','source','resume_url','resume_filename','resume_text'
   ];
   const CANDIDATE_SELECT =
-    'id,candidate_code,full_name,first_name,last_name,email,phone,extra_emails,extra_phones,linkedin_url,' +
+    'id,candidate_code,full_name,first_name,last_name,email,phone,extra_emails,extra_phones,contact_labels,linkedin_url,' +
     'current_location,city,state,country,zip,current_title,headline,skills,experience_years,' +
     'work_authorization,clearance,current_employer,availability,notice_period,current_ctc,expected_ctc,' +
     'bill_rate,pay_rate,pay_type,pay_currency,applicant_status,source,resume_url,resume_filename,resume_text,' +

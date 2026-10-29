@@ -44,7 +44,7 @@ module.exports = (ctx) => {
 
 router.post('/contacts', auth, async (req, res) => {
   try {
-    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, allow_same_name, extra_emails, extra_phones } = req.body;
+    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, allow_same_name, extra_emails, extra_phones, contact_labels } = req.body;
     if (!job_id || !first_name) return res.status(400).json({ error: 'job_id and first_name required' });
     if (!(await canTouchJob(req, job_id))) return res.status(403).json({ error: 'Forbidden' });
     // The one way a person is added to a lead — the POC finder's Accept uses
@@ -53,7 +53,7 @@ router.post('/contacts', auth, async (req, res) => {
     // on this lead or at this company is asked, and `allow_same_name` is the
     // person's "Add anyway".
     const data = await addLeadContact({ db, req, logActivity, allowSameName: allow_same_name === true,
-      fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, extra_emails, extra_phones } });
+      fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, extra_emails, extra_phones, contact_labels } });
     res.status(201).json(data);
   } catch (err) {
     if (err && err.code === 'bad_contact_point') return res.status(400).json({ error: err.message });
@@ -69,7 +69,7 @@ router.post('/contacts', auth, async (req, res) => {
 
 router.put('/contacts/:id', auth, async (req, res) => {
   try {
-    const existing = await db.forRequest(req).from('contacts').byId(req.params.id, 'job_id,email,phone,extra_emails,extra_phones,email_status');
+    const existing = await db.forRequest(req).from('contacts').byId(req.params.id, 'job_id,email,phone,extra_emails,extra_phones,contact_labels,email_status');
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (!(await canTouchJob(req, existing.job_id))) return res.status(403).json({ error: 'Forbidden' });
     const fields = ['first_name','last_name','designation','email','phone','linkedin','is_primary','email_status','ooo_until'];

@@ -124,6 +124,21 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   step('a create: the main is dropped from the extras, bad ones are reported with their kind', same(create.columns.extra_emails, ['q@x.com']) && create.rejected.length === 1 && create.rejected[0].kind === 'email' && same(create.columns.extra_phones, ['555-222-3333']));
 }
 
+// ── direct / office (R-342, D-0189) ─────────────────────────────────────────
+{
+  const prior = { email: 'a@x.com', phone: '555-111-2222', extra_emails: ['b@x.com'], extra_phones: ['(555) 333-4444'], contact_labels: { 'e:b@x.com': 'office' } };
+  const set = cp.normaliseForWrite({ contact_labels: { 'p:5553334444': 'DIRECT', 'e:b@x.com': 'office', 'e:stranger@z.com': 'direct', 'p:5551112222': 'mobile' } }, prior);
+  step('labels: only the person\'s own numbers, only direct/office, lower-cased', same(set.columns, { contact_labels: { 'p:5553334444': 'direct', 'e:b@x.com': 'office' } }), JSON.stringify(set.columns));
+  const removed = cp.normaliseForWrite({ extra_emails: [] }, prior);
+  step('removing an extra drops its label on the same write', same(removed.columns.contact_labels, {}));
+  const blind = cp.normaliseForWrite({ extra_emails: [] }, { email: 'a@x.com', extra_emails: ['b@x.com'] });
+  step('a caller that never read the labels never writes them (cannot wipe them)', blind.columns.contact_labels === undefined);
+  const swapped = Object.assign({}, prior, cp.makeMain(prior, 'email', 'b@x.com'));
+  step('Make main: the label follows the address into the main spot', cp.labelOf(swapped, 'email', 'b@x.com') === 'office' && cp.labelOf(swapped, 'email', 'a@x.com') === '');
+  step('a phone label matches however the number is written', cp.labelOf({ contact_labels: { 'p:5553334444': 'direct' } }, 'phone', '+1 555.333.4444') === 'direct');
+  step('labels: junk input is an empty object, never a crash', same(cp.cleanLabels(['x'], prior), {}) && same(cp.cleanLabels(null, prior), {}) && same(cp.cleanLabels('direct', prior), {}));
+}
+
 const pass = results.filter(Boolean).length;
 console.log(`\nSUMMARY: ${pass}/${results.length} passed`);
 process.exit(pass === results.length && results.length > 0 ? 0 : 1);

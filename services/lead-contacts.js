@@ -265,7 +265,7 @@ async function addLeadContact({ db, req, logActivity, fields, activityText, comp
   // Several emails / phones (D-0070). A typed phone must be a phone, an extra must be an address or
   // a number — said out loud (400), never stored as something else.
   if (row.phone && !contactPoints.looksLikePhone(row.phone)) throw new ContactPointError('"' + row.phone + '" does not look like a phone number.');
-  const cp = contactPoints.normaliseForWrite({ email: row.email, phone: row.phone, extra_emails: f.extra_emails, extra_phones: f.extra_phones }, {});
+  const cp = contactPoints.normaliseForWrite({ email: row.email, phone: row.phone, extra_emails: f.extra_emails, extra_phones: f.extra_phones, contact_labels: f.contact_labels }, {});
   if (cp.rejected.length) {
     const r = cp.rejected[0];
     throw new ContactPointError(r.reason === 'too_many'
@@ -274,6 +274,7 @@ async function addLeadContact({ db, req, logActivity, fields, activityText, comp
   }
   row.extra_emails = cp.columns.extra_emails || [];
   row.extra_phones = cp.columns.extra_phones || [];
+  if (cp.columns.contact_labels && Object.keys(cp.columns.contact_labels).length) row.contact_labels = cp.columns.contact_labels;
   // Already added? Checked BEFORE anything is written, for every caller.
   let co = companyId;
   if (co === undefined) {

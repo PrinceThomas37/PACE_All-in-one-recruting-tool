@@ -59,7 +59,7 @@ try {
     window.__raw = [{ id: 'j1', position: 'Senior Developer', stage: 'Assigned', company: { id: 'co1', name: 'Acme Build', website: 'acmebuild.com' }, company_name: 'Acme Build',
       assigned_to_bd: STATE.user.id, created_by: STATE.user.id, industry: 'Construction', created_at: new Date().toISOString(),
       contacts: [
-        { id: 'c1', job_id: 'j1', first_name: 'Maria', last_name: 'Lopez', designation: 'HR Director', email: 'maria@acme.com', phone: '(555) 111-2222', extra_emails: ['maria2@acme.com'], extra_phones: [], is_primary: true, email_status: 'valid' },
+        { id: 'c1', job_id: 'j1', first_name: 'Maria', last_name: 'Lopez', designation: 'HR Director', email: 'maria@acme.com', phone: '(555) 111-2222', extra_emails: ['maria2@acme.com'], extra_phones: [], contact_labels: { 'e:maria2@acme.com': 'direct' }, is_primary: true, email_status: 'valid' },
         { id: 'c2', job_id: 'j1', first_name: 'John', last_name: 'Carter', designation: 'GM', email: 'john@acme.com', phone: '', extra_emails: [], extra_phones: [], is_primary: false, email_status: 'valid' },
       ] }];
     window.apiGet = (u) => {
@@ -90,6 +90,8 @@ try {
   step('…the extra email under the main, and both add links', m && same(m.vals, ['maria2@acme.com']) && same(m.adds, ['+ add another email', '+ add another number']), JSON.stringify(m));
   step('the open row is on screen (the lead is expanded)', await ev(() => !!document.querySelector('tr.row-exp')));
   if (SHOTS) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(SHOTS, 'lead-contact-desktop.png') }); }
+  // Direct / office (R-342): the label saved on the contact survives the leads page's own copy of the contact
+  step('DIRECT/OFFICE: a lead contact\'s saved label is shown on its extra', await ev(() => { const s = document.querySelector('[data-cp^="lc"][data-cp$="-email"] .cp-lab'); return !!s && s.value === 'direct'; }));
 
   // add a number
   await ev(() => { const r = Array.from(document.querySelectorAll('.lx-contact')).find(x => /Maria/.test(x.textContent)); r.querySelector('.cp-add:nth-of-type(1)'); const b = Array.from(r.querySelectorAll('.cp-add')).find(x => /number/.test(x.textContent)); b.click(); });

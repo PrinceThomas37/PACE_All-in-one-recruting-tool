@@ -16,6 +16,10 @@
 //     the same PUT the form uses, and the profile is reloaded.
 // A place registers itself with CP.register(scope, cfg); `cfg.save` present = live.
 //
+// Each extra carries a Direct / Office label (R-342, D-0189), held in `contact_labels`
+// keyed by the normalised value ("e:jane@x.com", "p:5551234567") — the twin of
+// services/contact-points.js `labelKey`. Keyed by value, so Make main needs nothing.
+//
 // The swap below is the browser's twin of services/contact-points.js `makeMain`
 // (a form that is not saved cannot ask the server). test/contact-points-ui-smoke
 // runs both over the same cases so they cannot drift apart.
@@ -33,6 +37,14 @@
   function norm(kind, v){
     v = String(v==null?'':v).trim();
     return kind==='email' ? v.toLowerCase() : v.replace(/\D/g,'').slice(-10);
+  }
+  function labelKey(kind, v){ var n = norm(kind, v); return n ? (kind==='email'?'e:':'p:')+n : ''; }
+  function labelsOf(m){ var l = m && m.contact_labels; return (l && typeof l==='object' && !Array.isArray(l)) ? l : {}; }
+  function labelSel(scope, kind, i, v, m){
+    var cur = labelsOf(m)[labelKey(kind, v)] || '';
+    var opt = function(val, txt){ return '<option value="'+val+'"'+(cur===val?' selected':'')+'>'+txt+'</option>'; };
+    return '<select class="sel cp-lab'+(cur?' cp-lab-on':'')+'" title="Is this their own line or the company\'s?" aria-label="Direct or office" '+
+      'onchange="CP.label(\''+scope+'\',\''+kind+'\','+i+',this.value)">'+opt('','Label')+opt('direct','Direct')+opt('office','Office')+'</select>';
   }
   function extrasOf(m, kind){ var a = m && m[KINDS[kind].extra]; return Array.isArray(a) ? a : []; }
 
@@ -82,6 +94,7 @@
       return '<div class="cp-row" data-cp-row="'+kind+'-'+i+'">'+
         '<input class="sel" id="cp-'+scope+'-'+kind+'-'+i+'" type="'+k.type+'" value="'+esc(v)+'" placeholder="'+esc(k.ph)+'" '+
           'oninput="CP.set(\''+scope+'\',\''+kind+'\','+i+',this.value)">'+
+        labelSel(scope, kind, i, v, m)+
         '<button type="button" class="cp-link" title="Send emails to this '+k.word+' instead" onclick="CP.makeMain(\''+scope+'\',\''+kind+'\','+i+')">Make main</button>'+
         '<button type="button" class="cp-x" title="Remove" aria-label="Remove this '+k.word+'" onclick="CP.remove(\''+scope+'\',\''+kind+'\','+i+')">✕</button>'+
       '</div>';
@@ -96,6 +109,7 @@
         ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(v).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE">'+esc(v)+'</a>'
         : '<a href="tel:'+esc(String(v).replace(/[^0-9+]/g,''))+'">'+esc(v)+'</a>';
       return '<div class="cp-row cp-live" data-cp-row="'+kind+'-'+i+'"><span class="cp-val">'+shown+'</span>'+
+        labelSel(scope, kind, i, v, m)+
         '<button type="button" class="cp-link" title="Send emails to this '+k.word+' instead" onclick="CP.makeMain(\''+scope+'\',\''+kind+'\','+i+')">Make main</button>'+
         '<button type="button" class="cp-x" title="Remove" aria-label="Remove this '+k.word+'" onclick="CP.remove(\''+scope+'\',\''+kind+'\','+i+')">✕</button></div>';
     }).join('');
@@ -110,7 +124,7 @@
   }
 
   var CP = {
-    KINDS: KINDS, swap: swap, norm: norm,
+    KINDS: KINDS, swap: swap, norm: norm, labelKey: labelKey,
 
     register: function(scope, cfg){ scopes[scope] = cfg; },
     // a place that is drawn many times (one per contact row) registers ONCE — a repeat would reset its state
@@ -125,7 +139,23 @@
 
     set: function(scope, kind, idx, v){
       var m = modelOf(scope); if (!m) return;
-      var list = extrasOf(m, kind); if (idx < list.length) list[idx] = v;
+      var list = extrasOf(m, kind); if (idx >= list.length) return;
+      // a label belongs to the value: retyping the value carries its label along
+      var was = labelKey(kind, list[idx]), now = labelKey(kind, v), l = labelsOf(m);
+      if (was !== now && l[was]){ var next = Object.assign({}, l); if (now) next[now] = l[was]; delete next[was]; m.contact_labels = next; }
+      list[idx] = v;
+    },
+
+    // Direct / Office / no label on one extra (R-342). Live: saved at once; form: kept until Save.
+    label: function(scope, kind, idx, val){
+      var cfg = cfgOf(scope), m = modelOf(scope); if (!cfg || !m) return;
+      var list = extrasOf(m, kind); if (idx >= list.length) return;
+      var key = labelKey(kind, list[idx]); if (!key) return;
+      var next = Object.assign({}, labelsOf(m));
+      if (val === 'direct' || val === 'office') next[key] = val; else delete next[key];
+      if (cfg.save){ cfg.save({ contact_labels: next }); return; }
+      m.contact_labels = next;
+      if (!refreshBlock(scope, kind)) cfg.rerender();
     },
 
     add: function(scope, kind){

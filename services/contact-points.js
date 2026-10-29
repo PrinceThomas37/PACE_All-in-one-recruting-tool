@@ -100,6 +100,35 @@ function sharesContactPoint(a, b) {
       || allPhones(b).some(function (x) { return pa.has(normPhone(x)); });
 }
 
+// ── direct / office (R-342, D-0189) ─────────────────────────────────────────
+// Each email or number can carry ONE label: is it the person's own line (direct) or the company's
+// (office)? Stored beside the lists as `contact_labels` (migration 069), keyed by the NORMALISED
+// value — "e:jane@x.com", "p:5551234567" — so a label follows its number wherever it moves
+// (Make main is a swap of strings; the labels need no change). A label for a value the person no
+// longer has is dropped on the next write; an unknown label is dropped.
+const LABELS = ['direct', 'office'];
+function labelKey(kind, v) {
+  const n = kind === 'email' ? normEmail(v) : normPhone(v);
+  return n ? (kind === 'email' ? 'e:' : 'p:') + n : '';
+}
+function cleanLabels(input, row) {
+  const have = new Set(
+    allEmails(row).map(function (v) { return labelKey('email', v); })
+      .concat(allPhones(row).map(function (v) { return labelKey('phone', v); })));
+  const out = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  Object.keys(input).forEach(function (k) {
+    const v = String(input[k] == null ? '' : input[k]).trim().toLowerCase();
+    if (have.has(k) && LABELS.indexOf(v) > -1) out[k] = v;
+  });
+  return out;
+}
+function labelOf(row, kind, v) {
+  const m = row && row.contact_labels;
+  const k = labelKey(kind, v);
+  return (m && k && LABELS.indexOf(m[k]) > -1) ? m[k] : '';
+}
+
 // ── switching the main ──────────────────────────────────────────────────────
 // Swap the chosen extra into the main spot; the old main takes its place in the
 // extras list. Returns the two columns to write, or null when `value` is not one
@@ -273,6 +302,19 @@ function normaliseForWrite(src, prior) {
     const r = cleanPhoneList(from, main);
     out.extra_phones = r.list; rejected.push.apply(rejected, tag('phone', r.rejected));
   }
+  // Labels (R-342): written when the form sent them, or — when the numbers changed — pruned to the
+  // numbers that are left. Never written from a `prior` that was read WITHOUT the column (that would
+  // wipe every label on a caller that only knows about the lists).
+  const pointsChanged = Object.keys(out).length > 0 || src.email !== undefined || src.phone !== undefined;
+  if (src.contact_labels !== undefined || (pointsChanged && prior.contact_labels !== undefined)) {
+    const after = {
+      email: src.email !== undefined ? src.email : prior.email,
+      phone: src.phone !== undefined ? src.phone : prior.phone,
+      extra_emails: out.extra_emails !== undefined ? out.extra_emails : prior.extra_emails,
+      extra_phones: out.extra_phones !== undefined ? out.extra_phones : prior.extra_phones,
+    };
+    out.contact_labels = cleanLabels(src.contact_labels !== undefined ? src.contact_labels : prior.contact_labels, after);
+  }
   return { columns: out, rejected };
 }
 
@@ -281,4 +323,5 @@ module.exports = {
   cleanEmailList, cleanPhoneList, allEmails, allPhones, sharesContactPoint,
   makeMain, firstSuppressed, suppressedFor, extractContactPoints, normaliseForWrite,
   looksLikePhone, splitPhones, tidyImportedContact, describeImportFixes,
+  LABELS, labelKey, cleanLabels, labelOf,
 };

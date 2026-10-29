@@ -294,3 +294,6 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 
 ## 29 Oct 2026 (Session 55)
 - Admin people-by-role cards + window (`adminRoleGroups`, `openAdminRoleGroup`); sidebar fold arrow moved to the footer, 22px; insights split lists 8 + Show all; Pending per-email-ID table (`pendingMailboxTable`) + RA Lead live card; assign window email-ID picker (`paintAssignBoxes`), stays on Assign Leads with a 20 s pool poll; Rewrite with AI in the Pending preview; My leads / My team's leads (`leadsIsTeamManager`); lead card behind "Lead in PACE"; `paceNotify`; first load retries ~55 s; "Outreach — all users" insights tab.
+
+## 30 Oct 2026 (Session 56)
+- R-342: `26a-contact-points.js` draws a Direct / Office / "Label" picker on every EXTRA email and phone (form and live scopes); `CP.label` saves at once (live) or keeps until Save (form); `CP.set` carries a label to the retyped value; `CP.labelKey` is the twin of the server's. CSS `.cp-row .sel.cp-lab` (ui.css), 16px on a phone (mobile.css). Not on the MAIN row (owner asked for "added" ones); a labelled extra made main keeps its label but it is not shown there.
