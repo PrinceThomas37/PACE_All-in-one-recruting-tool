@@ -4,6 +4,13 @@
 
 **Updated**: 2026-10-30 (Session 56). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **070** (069 applied live 30 Oct).
 
+## START HERE (30 Oct, Session 57, end) — the owner resumes the week of 2 Nov
+
+**Live (#383 `320b35c`):** R-346 missed first emails repaired by themselves (`first_email_repair`, 148 written on release), R-347 send queues run per person + "Sending has stalled", R-348 sign-in does not wait for the lead list (migration 070 APPLIED). Sam Wilson's mailbox: owner resumed it.
+**Next week, in order:** (1) R-350 "Needs you" drops stay dropped — BUILT on `claude/magical-curie-srm3yp`, draft PR #384: run the full suite (Node 22 + 26.11.1), then release. (2) R-349 lead list page by page from the server. (3) R-343 per `docs/PLAN_NEXT_WEEK_2026-11-02.md`.
+**Offered, waiting on the owner:** a paused mailbox resumes itself next morning at a lower pace; checking addresses before the first email (costs provider credits); the ~$7 always-on server (parked).
+**Watch:** whether the owner still has to click "Send all pending"; GET /jobs still 8–20 s in the background.
+
 ## START HERE (30 Oct, Session 56, end) — the owner resumes the week of 2 Nov. READ `docs/PLAN_NEXT_WEEK_2026-11-02.md` FIRST.
 
 **Done this session:** #378 confirmed live on Render (workspace "My Workspace", the only one — no need to ask). **#380 MERGED**

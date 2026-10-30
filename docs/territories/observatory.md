@@ -751,3 +751,5 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 
 ## 30 Oct 2026 (Session 56)
 - R-320: `services/people-apollo.js` `searchPeople` gained `locations` (Apollo `person_locations`), used by Compose → "Find at a company". The AI writing for that flow is the unchanged `/outreach/generate` writer, called once per ticked person (no new prompt).
+
+- R-350 (30 Oct): `services/next-action-dismissals.js` fingerprint = last activity + state only (was + overdue_days, which voided every drop at midnight — owner: "it re-emerges the other day"). `sameFact` ignores the middle part, so drops stored before the fix keep holding. A new message or a changed state still brings an item back.
