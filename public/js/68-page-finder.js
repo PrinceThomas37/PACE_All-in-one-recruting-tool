@@ -605,6 +605,8 @@
     return '<div class="fd-label">Industries</div>'+
       (picked?'<div class="fd-pills">'+picked+'</div>':'')+
       (strict&&(f.source||'apollo')==='apollo'?'<div class="fd-hint">Searches only companies classed in '+(f.sectors.length>1?'these industries':'this industry')+', not every company posting these titles.</div>':'')+
+      // a job type (Sales, HR…) has no industry code: mixed with a real industry the code filter is off — say so, never silently (R-333)
+      (!strict&&(f.source||'apollo')==='apollo'&&f.sectors.some(function(id){ var s=sectorById(id); return s&&s.filters; })?(function(){ var jt=f.sectors.map(sectorById).filter(function(s){ return s&&!s.filters; }).map(function(s){ return s.label; }); return '<div class="fd-hint">'+esc(jt.join(', '))+(jt.length>1?' are job types':' is a job type')+', not an industry — so every kind of company posting these titles is searched.</div>'; })():'')+
       (f.sectors.length<MAX_SECTORS?'<select id="fd-f-sector-add" class="sel fd-wide" onchange="fdAddSector(this.value)"><option value="">+ Add an industry…</option>'+left+'</select>':'<div class="fd-hint">That is the most industries at once ('+MAX_SECTORS+').</div>');
   }
   function renderTitles(f){

@@ -52,6 +52,7 @@
   input,select,textarea,
   .inp,.sel,.fsel,.tbar-search input,.seq-in,.seq-ta,.seq-sel,.seq-delay input,
   .cmp-fld select,.cmp-fld .cmp-static,.chipf-in,.mb-editor{font-size:16px}
+  .cp-row .sel.cp-lab{font-size:16px}
   /* …except where a control is decorative-sized on purpose and cannot hold
      16px without breaking its own row. These are all non-text or numeric, so
      they never trigger the zoom. */

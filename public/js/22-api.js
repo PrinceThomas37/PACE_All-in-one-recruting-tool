@@ -143,7 +143,7 @@ window.loadLeadPosting=function(id){
     return cur;
   });
 };
-function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||[]).forEach(function(c){out.push({id:c.id,job_id:c.job_id,first_name:c.first_name,last_name:c.last_name||'',designation:c.designation||'',email:c.email||'',phone:c.phone||'',extra_emails:Array.isArray(c.extra_emails)?c.extra_emails:[],extra_phones:Array.isArray(c.extra_phones)?c.extra_phones:[],linkedin:c.linkedin||'',is_primary:!!c.is_primary,email_status:c.email_status||'valid',ooo_until:c.ooo_until||null});});});return out;}
+function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||[]).forEach(function(c){out.push({id:c.id,job_id:c.job_id,first_name:c.first_name,last_name:c.last_name||'',designation:c.designation||'',email:c.email||'',phone:c.phone||'',extra_emails:Array.isArray(c.extra_emails)?c.extra_emails:[],extra_phones:Array.isArray(c.extra_phones)?c.extra_phones:[],contact_labels:(c.contact_labels&&typeof c.contact_labels==="object")?c.contact_labels:{},linkedin:c.linkedin||'',is_primary:!!c.is_primary,email_status:c.email_status||'valid',ooo_until:c.ooo_until||null});});});return out;}
 
 function loadAppData(opts){
   opts=opts||{};

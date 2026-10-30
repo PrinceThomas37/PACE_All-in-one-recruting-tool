@@ -1263,3 +1263,7 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 
 ## 29 Oct 2026 (Session 55)
 - New: `GET /distribute/mailboxes`, `GET /insights/outreach-team`, `POST /my-setup/sequence/rewrite-pending`; `send-progress?user_id=` (admin/ra_lead, same company); `retry-pending-window` checks company + pause; `/distribute/execute` takes `email_ids`, claims leads conditionally, one write per mailbox; `.js/.css` no-cache; JSON cap 8 MB.
+
+## 30 Oct 2026 (Session 56)
+- R-342: `index.js` `JOB_SELECT` contacts now name `contact_labels`; `routes/contacts.js` POST passes `contact_labels` to `addLeadContact`, PUT reads it in the existing row (so `normaliseForWrite` may prune). Needs migration 069 live first.
+- Live log (pre-existing, not from #378): `MaxListenersExceededWarning: 11 finish listeners added to [ServerResponse]` on many requests — too many per-request `res.on('finish')` hooks; harmless warning, unexamined.

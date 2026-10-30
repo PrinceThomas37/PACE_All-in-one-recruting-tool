@@ -999,6 +999,8 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .cp-val a{color:var(--accent);text-decoration:none}
 .cp-link,.cp-add{background:none;border:0;padding:3px 4px;font:inherit;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;white-space:nowrap}
 .cp-add{align-self:flex-start;font-weight:500}
+.cp-row .sel.cp-lab{flex:0 0 auto;width:auto;min-width:0;padding:2px 6px;font-size:12px;color:var(--text3)}
+.cp-row .sel.cp-lab.cp-lab-on{color:var(--text);font-weight:600}
 .cp-x{background:none;border:0;padding:3px 6px;font:inherit;font-size:13px;line-height:1;color:var(--text3);cursor:pointer}
 @media (hover:hover) and (pointer:fine){
   .cp-link:hover,.cp-add:hover{text-decoration:underline}

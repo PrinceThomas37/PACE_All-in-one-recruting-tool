@@ -392,12 +392,13 @@ try {
   await page.evaluate(() => { window.fdAddSector('hospital'); });
   h = await html();
   step('a mix of a filtering industry and an ordinary one does not claim to filter', !/Searches only companies classed in/.test(h));
+  step('…and SAYS why: the ones without a code are named as job types (R-333)', /Medical &amp; dental, IT &amp; software are job types, not an industry/.test(h));
   await page.evaluate(() => { window.fdDropSector('medical'); window.fdDropSector('it'); });
   h = await html();
   step('Hospitals alone says plainly that only that kind of company is searched', /Searches only companies classed in this industry/.test(h) && /fd-chip">Hospitals &amp; health care/.test(h) && /Registered Nurse/.test(h));
   await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); window.fdDropSector('hospital'); });
   h = await html();
-  step('…and it goes away with the industry', !/Searches only companies classed in/.test(h) && /fd-chip">Medical &amp; dental/.test(h));
+  step('…and it goes away with the industry', !/Searches only companies classed in/.test(h) && /fd-chip">Medical &amp; dental/.test(h) && !/job type/.test(h));
   step('each picked industry is drawn exactly ONCE (one Select all and one Clear per industry — a screenshot once showed every block twice)', (h.match(/fdTitlesAll\('medical'\)/g) || []).length === 1 && (h.match(/fdTitlesAll\('it'\)/g) || []).length === 1 && (h.match(/fdTitlesNone\('medical'\)/g) || []).length === 1 && (h.match(/Dental Hygienist/g) || []).length === 1);
   step('…an unnamed run is named after the first industry, and nothing is ticked yet (0 of 4)', /value="Medical &amp; dental"/.test(h) && /0 of 4 ticked/.test(h) && !/aria-pressed="true"/.test(h));
   const titlesNow = () => page.evaluate(() => window.STATE.finder.form.titles.join('|'));

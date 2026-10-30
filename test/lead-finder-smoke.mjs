@@ -48,9 +48,24 @@ step('keywords and domains are passed only when there are some', f.q_organizatio
   const h = F.apolloFilters({ titles: ['Registered Nurse'], locations: ['Texas'], sectors: ['hospital'] }, NOW);
   step('picking it asks Apollo for hospitals only (NAICS 622, Apollo\'s own organization_naics_codes), not just the titles', h.organization_naics_codes && h.organization_naics_codes.join() === '622', JSON.stringify(h));
   step('the ordinary filters are untouched beside it', h.q_organization_job_titles.join() === 'Registered Nurse' && h.organization_job_locations.join() === 'Texas');
-  step('picked WITH an industry that has no code (IT), no code filter at all — IT companies must not be dropped', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['hospital', 'it'] }, NOW)));
-  step('industries without a code behave exactly as before (no code filter)', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['medical'] }, NOW)) && !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)));
+  step('picked WITH a job type that has no code (Office & administration), no code filter at all — those companies must not be dropped', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['hospital', 'admin'] }, NOW)));
+  step('job types without a code behave exactly as before (no code filter), and so does no industry', !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['sales'] }, NOW)) && !('organization_naics_codes' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)));
   step('a saved search keeps the hospital industry', F.normalizeSearch({ name: 'RN', titles: 'Registered Nurse', locations: 'Texas', sectors: ['hospital'] }).value.sectors.join() === 'hospital');
+}
+
+// ── EVERY INDUSTRY a real filter (R-333, D-0190, owner 29 Oct: "All industries") ─────────────────────────────────────────────
+{
+  const JOB_TYPES = ['admin', 'hr', 'customer', 'sales'];
+  const missing = Object.keys(F.SECTORS).filter((id) => !JOB_TYPES.includes(id) && !(Array.isArray(F.SECTORS[id].naics) && F.SECTORS[id].naics.length));
+  step('every industry that is an industry carries its codes (only the four job types do not)', missing.length === 0, missing.join());
+  step('the four job types carry NO code (an admin assistant works in every industry; 5613 is staffing firms)', JOB_TYPES.every((id) => F.SECTORS[id] && !F.SECTORS[id].naics));
+  const bad = Object.keys(F.SECTORS).filter((id) => (F.SECTORS[id].naics || []).some((c) => !/^\d{2,6}$/.test(c)));
+  step('every code is 2–6 digits (Apollo matches by prefix)', bad.length === 0, bad.join());
+  step('no industry asks for staffing firms (5613) — Find Leads leaves those out on purpose', !Object.keys(F.SECTORS).some((id) => (F.SECTORS[id].naics || []).some((c) => c.startsWith('5613') || '5613'.startsWith(c) && c.length >= 3)));
+  const two = F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['legal', 'accounting'] }, NOW);
+  step('two industries together: the codes of both (any match counts)', two.organization_naics_codes && two.organization_naics_codes.join() === '5411,5412', JSON.stringify(two.organization_naics_codes));
+  step('Media never asks for software publishers (live check 30 Oct: 511/513 returned Apple and OpenAI)', !F.SECTORS.media.naics.some((c) => ['511', '513', '5112', '5132'].includes(c) || '5112'.startsWith(c) || '5132'.startsWith(c)), F.SECTORS.media.naics.join());
+  step('IT asks for both the 2017 and 2022 software code', F.apolloFilters({ titles: ['a'], sectors: ['it'] }, NOW).organization_naics_codes.join().includes('5112') && F.SECTORS.it.naics.includes('5132'));
 }
 
 // ── finding a company by name ──────────────────────────────────────────────
