@@ -60,14 +60,18 @@ function itemKey(item) {
 
 // The fact being dismissed. Anything that would make this action NEW again
 // belongs in here. Currently: the last thing that happened on the thread.
+// R-350 (owner, 30 Oct: "even if I drop a to-do in Needs you, it re-emerges the other day … and the list keeps building up"): the
+// fingerprint used to carry `overdue_days`, which grows by one EVERY DAY on its own — so every drop and snooze stopped matching at
+// midnight and the item came back, though nothing had happened on the thread. Only a real new fact counts now: the last activity
+// and the state. (The middle part stays, empty, so a record written before this fix still matches — see sameFact.)
 function fingerprintOf(item) {
   if (!item) return '';
-  const parts = [
-    item.last_activity_at || '',
-    item.overdue_days === null || item.overdue_days === undefined ? '' : Math.floor(item.overdue_days),
-    item.state || '',
-  ];
-  return parts.join('|');
+  return [item.last_activity_at || '', '', item.state || ''].join('|');
+}
+// A stored fingerprint and today's describe the same fact when activity and state agree; the old middle part (a day count) is ignored.
+function sameFact(stored, current) {
+  const a = String(stored || '').split('|'), b = String(current || '').split('|');
+  return (a[0] || '') === (b[0] || '') && (a[a.length - 1] || '') === (b[b.length - 1] || '');
 }
 
 function horizonFor(scope, now = Date.now()) {
@@ -108,7 +112,7 @@ function isDismissed(store, item, now = Date.now()) {
   const t = new Date(rec.until).getTime();
   if (!Number.isFinite(t) || t <= now) return false;
   // A new message on the thread voids the snooze — see the header note.
-  return (rec.fp || '') === fingerprintOf(item);
+  return sameFact(rec.fp, fingerprintOf(item));
 }
 
 // Returns the items still worth showing, plus how many were held back. The

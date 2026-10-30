@@ -58,8 +58,15 @@ const replied = { ...item, last_activity_at: '2026-09-10T11:00:00Z' };
 ok('a NEW message on the thread voids even a drop',
   d.isDismissed(store, replied, NOW + DAY) === false);
 const sameThreadOlderCount = { ...item, overdue_days: 5 };
-ok('the silence growing also voids it',
-  d.isDismissed(store, sameThreadOlderCount, NOW + DAY) === false);
+// R-350 (owner, 30 Oct): the day count growing by itself used to void every drop at midnight — the item came back daily.
+ok('a day passing (the overdue count growing on its own) does NOT bring a dropped item back',
+  d.isDismissed(store, sameThreadOlderCount, NOW + DAY) === true);
+ok('…nor does a whole month of it', d.isDismissed(store, { ...item, overdue_days: 40 }, NOW + 30 * DAY) === true);
+// A drop recorded BEFORE the fix carries the old day count in its fingerprint: it still holds.
+const oldStore = { [d.itemKey(item)]: { until: new Date(NOW + 100 * DAY).toISOString(), fp: (item.last_activity_at || '') + '|18|' + (item.state || '') } };
+ok('a drop made before the fix still holds the next day', d.isDismissed(oldStore, { ...item, overdue_days: 19 }, NOW + DAY) === true);
+ok('…and a new message still voids it', d.isDismissed(oldStore, replied, NOW + DAY) === false);
+ok('a changed state still voids a drop', d.isDismissed(store, { ...item, state: 'something_else' }, NOW + DAY) === false);
 ok('an unchanged thread stays snoozed',
   d.isDismissed(store, { ...item }, NOW + DAY) === true);
 
