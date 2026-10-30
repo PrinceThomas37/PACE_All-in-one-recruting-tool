@@ -9,8 +9,8 @@
 **Done this session:** #378 confirmed live on Render (workspace "My Workspace", the only one — no need to ask). **#380 MERGED**
 (`b527424`): R-342 Direct / Office on added emails and phones (migration 069 APPLIED live, owner's go) + R-333 every Find Leads
 industry a real filter (36 coded, each checked live for 36 credits with the owner's go; Media narrowed after the check; 4 job types
-uncoded and said on screen). Clean worktree 323/323 on Node 22 and Node 26.11.1. **R-320** Compose → "Find at a company" built
-(owner: "do 320 and merge it next … merge it after the test") — its own PR after #380, merged once its full suite passes.
+uncoded and said on screen). Clean worktree 323/323 on Node 22 and Node 26.11.1. **R-320** Compose → "Find at a company" **MERGED** (#381 `29cbb70`,
+clean worktree 324/324 on Node 22 and Node 26.11.1; owner: "merge it after the test").
 **Next:** R-343 (all-template outreach, D-0188) per the plan; the owner's open questions are listed there (ask once, plainly).
 
 ## START HERE (29 Oct, Session 55, end) — #378 MERGED (`21ef7ec`); the owner resumes in a NEW chat. Build the queue below in this order.
