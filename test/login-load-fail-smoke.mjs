@@ -26,8 +26,12 @@ const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const TOKEN = b64({ alg: 'HS256' }) + '.' + b64({ id: 'u-ash', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.sig';
 const USER = { id: 'u-ash', name: 'Ash Sayyad', email: 'ash@example.test', role: 'bd', roles: ['bd'] };
 
-let jobsMode = 'fail';      // 'fail' → 500; 'ok' → []; 'expired' → 401 Invalid token
+// R-348: the lead list no longer holds the sign-in, so the "first load fails" cases are driven through /users (one of the calls
+// that still does), and the lead list has its own cases below.
+let jobsMode = 'fail';      // the first-load call: 'fail' → 500; 'ok' → []; 'expired' → 401 Invalid token
 let jobsCalls = 0;
+let leadsMode = 'ok';       // the lead list: 'ok' → one lead; 'slow' → answers after 1.5 s; 'fail' → 500
+let leadsCalls = 0;
 let browser; const errs = [];
 try {
   browser = await chromium.launch({ executablePath: findChromium(), headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
@@ -38,10 +42,17 @@ try {
     const json = (status, body) => rt.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (u.pathname === '/auth/login') return json(200, { token: TOKEN, user: USER });
     if (u.pathname === '/jobs') {
+      leadsCalls++;
+      if (leadsMode === 'fail') return json(500, { error: 'canceling statement due to statement timeout' });
+      const one = [{ id: 'j1', position: 'Nurse', stage: 'Assigned', contacts: [], company: { name: 'Acme' }, created_at: '2026-10-30T00:00:00Z' }];
+      if (leadsMode === 'slow') return new Promise((ok) => setTimeout(ok, 1500)).then(() => json(200, one));
+      return json(200, one);
+    }
+    if (u.pathname === '/users') {
       jobsCalls++;
       if (jobsMode === 'fail') return json(500, { error: 'upstream timeout' });
       if (jobsMode === 'expired') return json(401, { error: 'Invalid token' });
-      return json(200, []);
+      return json(200, [USER]);
     }
     if (u.pathname === '/me/preferences' || u.pathname === '/app-settings' || u.pathname === '/outreach-plan') return json(200, {});
     return json(200, []);
@@ -84,6 +95,31 @@ try {
   await signIn(); await page.waitForTimeout(800);
   step('a sign-in the server calls expired still goes to the login page, with the expiry sentence (not the busy screen)',
     await ev(() => !!document.getElementById('login-email') && !document.getElementById('app-loadfail') && /session expired/i.test(document.body.innerText)));
+  // ── R-348: the app opens WITHOUT waiting for the lead list ──
+  await ev(() => { window.LEADS_RETRY_S = [0.2, 0.2, 0.2, 0.2, 0.2]; });
+  jobsMode = 'ok'; leadsMode = 'slow'; leadsCalls = 0;
+  await signIn();
+  await page.waitForSelector('#sidebar', { timeout: 1200 }).catch(() => {});
+  step('a slow lead list does not hold the sign-in: PACE is open before the leads arrive', await ev(() => !!document.getElementById('sidebar') && STATE.jobsLoading === true));
+  step('…and says the leads are on their way (an empty list never reads as "no leads")', await ev(() => /Loading your leads/.test((document.getElementById('leads-loading-note') || {}).innerText || '')));
+  await page.waitForFunction(() => !STATE.jobsLoading, null, { timeout: 5000 }).catch(() => {});
+  step('when the list arrives the leads are there and the note is gone', await ev(() => STATE.jobs.length === 1 && !document.getElementById('leads-loading-note')));
+  step('…asked once, not once per screen', leadsCalls === 1, String(leadsCalls));
+  await ev(() => doLogout()); await page.waitForTimeout(100);
+
+  leadsMode = 'fail'; leadsCalls = 0;
+  await signIn();
+  await page.waitForSelector('#sidebar', { timeout: 3000 }).catch(() => {});
+  step('a lead list the server cannot give still lets the person in', await ev(() => !!document.getElementById('sidebar') && !document.getElementById('app-loadfail')));
+  await page.waitForFunction(() => /could not load/.test((document.getElementById('leads-loading-note') || {}).innerText || ''), null, { timeout: 6000 }).catch(() => {});
+  step('…it is asked again a few times, then the note says so with Try again', leadsCalls === 6 && await ev(() => /Try again/.test(document.getElementById('leads-loading-note').innerText)), String(leadsCalls));
+  leadsMode = 'ok';
+  await ev(() => document.querySelector('#leads-loading-note button').click());
+  await page.waitForFunction(() => STATE.jobs.length === 1, null, { timeout: 4000 }).catch(() => {});
+  step('Try again loads the leads and the note goes away', await ev(() => STATE.jobs.length === 1 && !document.getElementById('leads-loading-note')));
+  await ev(() => doLogout()); await page.waitForTimeout(100);
+  step('signing out removes any lead-loading note', await ev(() => !document.getElementById('leads-loading-note')));
+
   step('no page errors', errs.length === 0, errs.join(' | '));
 } catch (e) { step('the suite ran', false, e.stack || String(e)); }
 finally { if (browser) await browser.close(); server.close(); }

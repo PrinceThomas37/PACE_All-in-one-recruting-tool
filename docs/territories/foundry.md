@@ -1374,3 +1374,4 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - R-320: `finder-routes-smoke` 211 (+10 compose: free people search with places, 1-credit reveal counted first, cache org-scoped — a test that passed vacuously on a 403 was fixed to prove it, unverified never returned, daily limit before the call, no access → 403); new `compose-company-ui-smoke` 18 (real browser, screenshots via COMPOSE_SHOT_DIR).
 
 - R-346: `test/first-email-repair-smoke.mjs` (20) — which leads are written/left alone, retry classification, runner on a fake db, wiring. Mutation checked (dropping the has-email guard fails it).
+- R-347/R-348: `send-stall-smoke` (14), `lead-list-light-smoke` (16); `lead-list-cache-smoke` now pins ≤ 2 pages at once (was "4 at once", changed on purpose); `login-load-fail-smoke` drives the first-load failure through /users and adds 8 checks for the list loading behind the open app. Each new guard mutation-checked.

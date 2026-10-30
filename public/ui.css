@@ -1178,3 +1178,7 @@ body.ui-kit .oi-split-more{margin-top:10px}
 body.ui-kit .pend-mb-h{text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
 body.ui-kit .pend-mb-tot td{border-top:2px solid var(--line)}
 body.ui-kit .seg-toggle{display:inline-flex;gap:4px;flex-wrap:nowrap}
+
+/* R-348: "Loading your leads…" while the lead list fills in behind the open app (22-api.js leadsNote). A float: opaque. */
+.leads-loading-note{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:10px;
+  padding:8px 14px;border-radius:10px;background:var(--card-solid);border:1px solid var(--border2);box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:calc(100vw - 32px)}

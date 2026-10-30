@@ -467,6 +467,7 @@ function renderEmail(){
       '</div>'+
       '<div class="fs-12 c-text3">'+(sp.active&&sp.current?'Currently sending to: '+htmlEsc(sp.current):(sp.done?(sp.interrupted?'Stopped at ':'Completed at ')+(sp.completedAt?new Date(sp.completedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''):''))+'</div>'+
       failPanel+
+      (sp.active&&sp.stalled?'<div class="fs-12_5 c-text2" style="margin-top:8px" role="alert"><strong>Sending has stalled</strong> — nothing has moved for 45 minutes. PACE starts a fresh run by itself after an hour; nothing is sent twice. You can also press <strong>Send all pending</strong>.</div>':'')+
       (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending, and PACE carries on by itself a minute after it is back. You can also press <strong>Send all pending</strong>.</div>':'')+
       (sp.deferredNote?'<div class="fs-12" style="margin-top:8px;color:#b45309">'+htmlEsc(sp.deferredNote)+'</div>':'')+
     '</div>';
@@ -551,6 +552,7 @@ function renderEmail(){
       if(STATE.watchedProgressFor!==bdId){ STATE.watchedProgressFor=bdId; STATE.watchedProgress=null; loadWatchedProgress(); }
       var wp=STATE.watchedProgress;
       var wpLine=!wp?'<span class="c-text3">Checking whether they are sending…</span>'
+        :(wp.active&&wp.stalled)?'<strong class="c-amber">Sending has stalled</strong> — nothing has moved for 45 minutes ('+(wp.sent||0)+' sent of '+(wp.total||0)+'). PACE starts a fresh run by itself after an hour; nothing is sent twice.'
         :wp.active?'<strong class="c-green">Sending now</strong> — '+(wp.sent||0)+' sent of '+(wp.total||0)+(wp.failed?' · '+wp.failed+' failed':'')+(wp.current?' · now: '+htmlEsc(String(wp.current).slice(0,90)):'')
         :wp.done?'<strong>Last run finished</strong> — '+(wp.sent||0)+' sent'+(wp.interrupted?' (cut off by a restart — PACE picks it up again by itself)':'')
         :'<strong class="c-amber">Not sending right now</strong>';

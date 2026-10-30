@@ -88,6 +88,7 @@ window.doLogout=function(){
   endSessionCalls();
   if(window.stopBackgroundPoll)stopBackgroundPoll();
   if(window.stopProgressPoll)stopProgressPoll();
+  if(window.leadsNote)leadsNote(null);STATE.jobsLoading=false;
   STATE.loading=false;STATE.user=null;STATE.token=null;STATE.loginNotice=null;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');sessionStorage.removeItem('fg_resume');
   STATE.jobs=[];STATE.contacts=[];STATE.page='login';render();

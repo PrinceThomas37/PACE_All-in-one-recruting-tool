@@ -35,7 +35,7 @@ const DEAD_RUN_GRACE_MS = 90 * 1000;
 
 function reconcileProgress(progress, { alive, now = Date.now(), graceMs = DEAD_RUN_GRACE_MS } = {}) {
   if (!progress || typeof progress !== 'object' || !progress.active) return progress;
-  if (alive) return progress;
+  if (alive) return (isStalled(progress, now) && !progress.stalled) ? Object.assign({}, progress, { stalled: true }) : progress;
   const started = progress.startedAt ? new Date(progress.startedAt).getTime() : NaN;
   if (Number.isFinite(started) && now - started <= graceMs) return progress;
   return Object.assign({}, progress, { active: false, done: true, interrupted: true, current: '', completedAt: new Date(now).toISOString() });
@@ -50,4 +50,20 @@ function tryStartRun(active, userId) {
   return true;
 }
 
-module.exports = { isStaleProgress, reconcileProgress, tryStartRun, DONE_TTL_MS, DEAD_RUN_GRACE_MS };
+// ── a run that is alive but no longer moving (R-347, owner 30 Oct) ──────────
+// "Many a times I have to come and manually click Send all pending." Measured 27-30 Oct: one person's run held the send for 105
+// minutes. Every progress write stamps `touchedAt` (setSendProgress); a run that has not moved for STALL_MS is shown as stalled on
+// its card, and one that has not moved for RELEASE_MS no longer blocks a fresh run from starting for that person. Releasing is
+// safe from double sends: every email is CLAIMED (pending → sending) before it is sent, so a run that wakes up late finds the
+// emails already taken.
+const STALL_MS = 45 * 60 * 1000;
+const RELEASE_MS = 60 * 60 * 1000;
+function quietFor(progress, now = Date.now()) {
+  if (!progress || typeof progress !== 'object' || !progress.active) return 0;
+  const at = new Date(progress.touchedAt || progress.startedAt || 0).getTime();
+  return Number.isFinite(at) && at > 0 ? Math.max(0, now - at) : 0;
+}
+const isStalled = (progress, now = Date.now()) => quietFor(progress, now) >= STALL_MS;
+const shouldRelease = (progress, now = Date.now()) => quietFor(progress, now) >= RELEASE_MS;
+
+module.exports = { isStaleProgress, reconcileProgress, tryStartRun, isStalled, shouldRelease, DONE_TTL_MS, DEAD_RUN_GRACE_MS, STALL_MS, RELEASE_MS };
