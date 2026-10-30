@@ -7165,3 +7165,10 @@ Owner: "merge them". Clean worktree of head `3a…` (branch tip before squash) r
 - R-320 (D-0191) built: Compose → "Find at a company" (see gateway/surface memory). Owner: "do 320 and merge it next". Tests: finder-routes 211, compose-company-ui 18 (new). Screens: pick a company, people with emails found, drafts, phone.
 - #380 squash-merged as `b527424` after clean-worktree 323/323 on Node 22 and Node 26.11.1 (owner: "Merge it after the test"). Branch restarted from main; R-320 carried over as `cfaafae`. Owner: "document the plan for the rest, we will do it next week" → `docs/PLAN_NEXT_WEEK_2026-11-02.md` (R-343 build steps, the owner's open questions, small items, R-328 at the paid move). CONTEXT_WINDOW START HERE rewritten.
 - #381 (R-320 + next week's plan) squash-merged as `29cbb70` after clean-worktree 324/324 on Node 22 and Node 26.11.1. Session closes; next: `docs/PLAN_NEXT_WEEK_2026-11-02.md`.
+
+### 30 Oct, Session 57 — owner: "assigned emails for BD Lead 1, BD Lead 2, Martin; don't see them in Pending or FU1/FU2" (R-346)
+- Live read (Supabase + Render logs, read-only). Distribute at 13:52 (BD Lead 1, 65 leads), 13:53 (BD Lead 2, 13), 13:58 (Martin, 85).
+- BD Lead 1: `[GenerateEmails] Insert batch 0-138 failed: canceling statement due to statement timeout` → 0 emails; 138 follow_ups rows active; leads Assigned. Server was slow (generate-ratio 10–39 s) at the time.
+- BD Lead 2: 24 written, 20 sent, 4 pending. Martin: 165 written, 84 sent, 80 pending (send window / 28 inactive-mailbox deferrals).
+- FU1/FU2 not due: fu1 day 3 (BD leads) / day 2 (Martin) after the first email — earliest 1–2 Nov. Expected.
+- Waiting on owner: code fix (batched insert + visible failure) and the one-off repair for BD Lead 1's 65 leads.
