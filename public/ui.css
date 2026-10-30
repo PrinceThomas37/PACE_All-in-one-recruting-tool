@@ -1006,6 +1006,25 @@ select.na-act-do{padding:4px 6px;max-width:132px}
   .cp-link:hover,.cp-add:hover{text-decoration:underline}
   .cp-x:hover{color:var(--red)}
 }
+/* Compose → Find at a company (R-320) */
+.ogc-line{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.ogc-line .inp{flex:1;min-width:0}
+.ogc-note{margin-top:8px}
+.ogc-list{border:1px solid var(--border2);border-radius:var(--r);max-height:320px;overflow:auto;margin:8px 0}
+.ogc-row{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--border2);padding:8px 10px;font:inherit;color:var(--text);cursor:pointer}
+.ogc-row:last-child,.ogc-person:last-child{border-bottom:0}
+.ogc-co{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-bottom:10px}
+.ogc-co-name,.ogc-who{display:flex;flex-direction:column;min-width:0;flex:1}
+.ogc-free{margin-left:8px}
+.ogc-person{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border2);min-width:0}
+.ogc-person .btn{white-space:nowrap}
+.ogc-empty{text-align:center;padding:36px 16px}
+.ogc-draft{border-top:1px solid var(--border2);padding-top:10px;margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.ogc-draft-h{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.ogc-body{min-height:150px}
+.ogc-actions{display:flex;justify-content:flex-end}
+.ogc-sig{margin-bottom:4px}
+@media (hover:hover) and (pointer:fine){ .ogc-row:hover{background:var(--accent-l)} }
 .cp-found{border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg);margin:0 0 14px}
 .cp-found-h{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:6px;letter-spacing:.2px}
 .cp-found label{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;min-width:0}

@@ -352,6 +352,44 @@ r = await call('/finder/cards/:id/reveal', 'post', 'ra1', { person_id: 'perT' },
 step('a reveal with no title keeps the title the search showed (the person\'s details do not go missing)', r.code === 200 && r.out.person.title === 'Plant Manager' && r.out.person.first_name === 'Tess' && r.out.person.last_name === 'Ortega' && r.out.person.email === 'tess@brazosmachining.example', JSON.stringify(r.out.person));
 
 
+// ═════ 5b. Compose, company first (R-320, D-0191) ══════════════════════════════════════════════════════
+console.log('\nCompose → Find at a company');
+{
+  await settings.setSettings(st.supabase, { finder_reveals_per_day: 30 });
+  apollo.people = [{ id: 'cp1', first_name: 'Nina', last_name: '', last_name_masked: true, title: 'Talent Acquisition Lead', has_email: true }, { id: 'cp2', first_name: 'Omar', last_name: 'Diaz', title: 'Controller', has_email: true }];
+  apollo.reveal = { ok: true, first_name: 'Nina', last_name: 'Park', title: '', email: 'NINA@brazosmachining.example', email_verified: true };
+  let r = await call('/finder/compose/people', 'post', 'ra1', {});
+  step('R-320: listing people needs the company (its website) first (400)', r.code === 400 && /Pick the company first/.test(r.out.error));
+  const credKey = 'finder_credits_o1_2026-10-07', credBefore = Number((st.tables.app_settings.find((x) => x.key === credKey) || {}).value || 0);
+  r = await call('/finder/compose/people', 'post', 'ra1', { domain: 'https://www.brazosmachining.example/careers', location: 'Waco, Texas; Austin', title: 'Talent Acquisition, Controller' });
+  const pc2 = apollo.calls.filter((c) => c[0] === 'people').pop();
+  step('R-320: people at the company, by the typed titles AND where they work — FREE (no credit), by the company\'s website', r.code === 200 && r.out.people.length === 2 && pc2[1].domain === 'brazosmachining.example' && pc2[1].titles.join() === 'Talent Acquisition,Controller' && pc2[1].locations.join('|') === 'Waco, Texas|Austin' && Number((st.tables.app_settings.find((x) => x.key === credKey) || {}).value || 0) === credBefore, JSON.stringify(pc2 && pc2[1]));
+  r = await call('/finder/compose/people', 'post', 'ra1', { domain: 'brazosmachining.example' });
+  step('R-320: no titles typed → the usual hiring titles; no place → no place filter', apollo.calls.filter((c) => c[0] === 'people').pop()[1].titles.includes('HR Manager') && apollo.calls.filter((c) => c[0] === 'people').pop()[1].locations.length === 0);
+  const rc = apollo.calls.length;
+  r = await call('/finder/compose/reveal', 'post', 'ra1', { person_id: 'cp1', seen: { first_name: 'Nina', title: 'Talent Acquisition Lead' } });
+  step('R-320: finding one email costs ONE credit, a VERIFIED address comes back lower-cased, and the list\'s title is kept when the reveal has none', r.code === 200 && r.out.person.email === 'nina@brazosmachining.example' && r.out.person.title === 'Talent Acquisition Lead' && r.out.person.last_name === 'Park' && Number(st.tables.app_settings.find((x) => x.key === credKey).value) === credBefore + 1 && apollo.calls.length === rc + 1, JSON.stringify(r.out));
+  r = await call('/finder/compose/reveal', 'post', 'ra1', { person_id: 'cp1' });
+  step('R-320: the same person again is free (no second call, no second credit)', r.out.cached === true && apollo.calls.length === rc + 1 && Number(st.tables.app_settings.find((x) => x.key === credKey).value) === credBefore + 1);
+  r = await call('/finder/compose/people', 'post', 'ra1', { domain: 'brazosmachining.example' });
+  step('R-320: the list then shows that person\'s email as already found', r.out.people.find((p) => p.id === 'cp1').email === 'nina@brazosmachining.example' && r.out.people.find((p) => p.id === 'cp2').email === null);
+  apollo.reveal = { ok: true, first_name: 'Omar', last_name: 'Diaz', title: 'Controller', email: 'omar.guess@brazosmachining.example', email_verified: false };
+  r = await call('/finder/compose/reveal', 'post', 'ra1', { person_id: 'cp2' });
+  step('R-320: an address the provider did NOT verify is never handed back (D-0049), said in words', r.code === 200 && r.out.person.email === null && /no verified email/.test(r.out.note));
+  st.tables.app_settings.find((x) => x.key === finder.accessKey('ra9')).value = JSON.stringify({ enabled: true });
+  const rc9 = apollo.calls.length;
+  r = await call('/finder/compose/reveal', 'post', 'ra9', { person_id: 'cp1' });
+  step('R-320: another organisation never gets this organisation\'s found email (with no key of its own it is refused, not served from o1\'s list)', r.code === 409 && !r.out.person && r.out.cached !== true && apollo.calls.length === rc9, r.code + ' ' + JSON.stringify(r.out));
+  await settings.setSettings(st.supabase, { finder_reveals_per_day: 1 });
+  const rc3 = apollo.calls.length;
+  r = await call('/finder/compose/reveal', 'post', 'ra2', { person_id: 'cp9' });
+  r = await call('/finder/compose/reveal', 'post', 'ra2', { person_id: 'cp8' });
+  step('R-320: the person\'s daily email limit stops the next one BEFORE the provider is asked (429)', r.code === 429 && /found your 1 email for today/.test(r.out.error) && apollo.calls.length === rc3 + 1, r.code + ' ' + JSON.stringify(r.out));
+  await settings.setSettings(st.supabase, { finder_reveals_per_day: 30 });
+  r = await call('/finder/compose/reveal', 'post', 'rec1', { person_id: 'cp1' });
+  step('R-320: somebody Find Leads is not switched on for cannot spend credits here either (403)', r.code === 403);
+}
+
 // ═════ 6. Accept ═════════════════════════════════════════════════════════════════════════════════════════
 console.log('\nAccept');
 r = await call('/finder/cards/:id/accept', 'post', 'ra1', { contacts: [{ person_id: 'per1' }] }, { id: brazos });

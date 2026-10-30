@@ -19,6 +19,8 @@
 //   POST   /finder/cards/:id/people        find people by job title (free)
 //   POST   /finder/cards/:id/reveal        reveal one person's verified work email (1 credit)
 //   POST   /finder/cards/:id/accept        save the lead + up to 3 contacts — the ONLY thing that writes a lead
+//   POST   /finder/compose/people          Compose → "Find at a company": people at one company, by title and place (free)
+//   POST   /finder/compose/reveal          …one person's verified work email (1 credit, never paid twice for the same person)
 //
 // RULES that hold across all of it:
 //   * Nothing is written as a lead until Accept (the owner: storage). A card is a short-lived suggestion.
@@ -795,6 +797,71 @@ module.exports = (ctx) => {
       const { error } = await db.forRequest(req).from('finder_cards').update({ postings }).eq('id', card.id);
       if (error) throw error;
       res.json({ postings, signals: finder.postingSignals(postings), credits: { used: budget.used, limit: budget.limit } });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ═════════ COMPOSE, COMPANY FIRST (R-320, D-0191) ════════════════════════════════════════════════════
+  // The Email page's "Find at a company": a company (found by POST /finder/companies/suggest, or its website pasted) → the people
+  // who work there → tick → reveal each email → the AI writes one email per person (POST /outreach/generate, unchanged) → send or
+  // add to a sequence (POST /outreach/send, unchanged). Nothing here writes a lead: sending into a sequence does, as before.
+  // Same rules as the cards: searching people is free, each email is one credit counted BEFORE the call against the person's daily
+  // reveal number and the organisation's daily credit limit, only a VERIFIED address is handed back (D-0049), never retried.
+  const composeReveals = new Map();            // org:person → { person, at } — a second press for the same person costs nothing
+  const COMPOSE_REVEAL_TTL_MS = 24 * 3600 * 1000;
+  router.post('/finder/compose/people', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const domain = finder.websiteFrom(String((req.body && req.body.domain) || '').slice(0, 200));
+      if (!domain) return res.status(400).json({ error: 'Pick the company first (or paste its website), so its people can be looked up.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.status(409).json({ error: pn(req) + ' is not connected. An admin adds its key in Admin → Integrations.' });
+      const split = (v, sep) => String(v || '').split(sep).map((t) => t.trim()).filter(Boolean);
+      const typed = split(req.body && req.body.title, /[,;\n]+/).slice(0, 10);
+      // A place keeps its comma ("Waco, Texas" is one place); several places are separated by ";" or a new line.
+      const places = split(req.body && req.body.location, /[;\n]+/).slice(0, 5);
+      const r = await req._cd.adapter.searchPeople({ key, domain, titles: typed.length ? typed : DEFAULT_PEOPLE_TITLES, locations: places, perPage: 25 });
+      await noteApollo('compose_people_search', r);
+      if (!r.ok) return res.status(502).json({ error: r.error });
+      const orgId = orgOf(req), now = clock().getTime();
+      const people = (r.people || []).map((p) => {
+        const hit = composeReveals.get(orgId + ':' + p.id);
+        const fresh = hit && now - hit.at < COMPOSE_REVEAL_TTL_MS;
+        return Object.assign({}, p, { revealed: !!fresh, email: fresh ? hit.person.email : null });
+      });
+      res.json({ people, total: r.total, domain, provider: pn(req) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  router.post('/finder/compose/reveal', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const personId = String((req.body && req.body.person_id) || '').slice(0, 80);
+      if (!personId) return res.status(400).json({ error: 'Say whose email to find.' });
+      const orgId = orgOf(req), now = clock(), cacheKey = orgId + ':' + personId;
+      const hit = composeReveals.get(cacheKey);
+      if (hit && now.getTime() - hit.at < COMPOSE_REVEAL_TTL_MS) return res.json({ person: hit.person, cached: true });
+      const mineKey = finder.revealKey(req.user.id, now), used = await readCount(mineKey), limit = await num('finder_reveals_per_day', orgId);
+      if (used >= limit) return res.status(429).json({ error: 'You have found your ' + limit + ' email' + (limit === 1 ? '' : 's') + ' for today. More tomorrow, or ask an admin to raise it.' });
+      const cdx = await useContact(req); const key = cdx.key;
+      if (!key) return res.status(409).json({ error: pn(req) + ' is not connected. An admin adds its key in Admin → Integrations.' });
+      const budget = await budgetFor(orgId, now);
+      if (budget.left() < 1) return res.status(429).json({ error: 'Your organisation has used today\'s ' + pn(req) + ' credit limit (' + budget.limit + ').' });
+      await budget.spend(1); await writeSetting(mineKey, used + 1);              // counted BEFORE the answer is trusted
+      const r = await req._cd.adapter.revealPerson({ key, id: personId });
+      await noteApollo('compose_reveal', r);
+      if (!r.ok) return res.status(502).json({ error: r.error });
+      const seen = (req.body && req.body.seen) || {};                        // what the list said, when the reveal says nothing
+      const person = {
+        id: personId,
+        first_name: r.first_name || String(seen.first_name || '').slice(0, 80),
+        last_name: r.last_name || '',
+        title: r.title || String(seen.title || '').slice(0, 120),
+        linkedin_url: r.linkedin_url || null,
+        email: r.email && r.email_verified ? String(r.email).toLowerCase() : null,            // D-0049: a guess is never handed back
+      };
+      composeReveals.set(cacheKey, { person, at: now.getTime() });
+      if (composeReveals.size > 5000) composeReveals.delete(composeReveals.keys().next().value);
+      res.json({ person, note: person.email ? null : pn(req) + ' has no verified email for this person.', credits: { used: budget.used, limit: budget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
