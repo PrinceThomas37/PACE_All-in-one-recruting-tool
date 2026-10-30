@@ -88,7 +88,7 @@ let fk = makeFake(T2);
 let t0 = Date.now();
 let got = await loadLeadList({ supabase: fk.supabase, select: '*', orgId: 'o1', pageSize: 500 });
 step('all 2,061 leads come back, each once, newest first', got.length === 2061 && new Set(got.map((r) => r.id)).size === 2061 && got[0].id === 'L02060' && got[2060].id === 'L00000');
-step('…the pages after the first are read AT THE SAME TIME (two waits, not five)', fk.stats.maxInFlight === 4 && fk.stats.reads === 5, JSON.stringify(fk.stats) + ' ' + (Date.now() - t0) + 'ms');
+step('…the pages after the first are read together, but never more than TWO at once (R-348: six at once ran into the 8 s limit)', fk.stats.maxInFlight === 2 && fk.stats.reads === 5, JSON.stringify(fk.stats) + ' ' + (Date.now() - t0) + 'ms');
 step('…and no posting text is in the list', got.every((r) => !('jd_raw' in r.research)));
 // A lead added between the first read and the rest pushes everything down one: the boundary lead is seen twice → kept once,
 // and the extra lead at the end is still read.

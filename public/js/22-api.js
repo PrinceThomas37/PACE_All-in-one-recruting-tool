@@ -150,28 +150,28 @@ function loadAppData(opts){
   STATE.loadFailed=null;
   STATE.loading=true;render();
   _jobsTag=null;   // a full load: never answered "not changed"
-  var calls=[apiGet('/users'),apiGetJobsList(),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
+  // R-348 (owner, 30 Oct: "it can load after the login"): the lead list is NOT waited for. The app opens as soon as the small
+  // things arrive; the list fills in behind, with a note saying so (loadLeadsInBackground). It used to be one of these calls,
+  // so the slowest, biggest answer held the whole sign-in — 2+ minutes on 30 Oct.
+  if(!opts.retried)loadLeadsInBackground();
+  var calls=[apiGet('/users'),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
   var u=STATE.user;
   var isBD=(u&&(u.role==='bd'||u.role==='bd_lead'||u.role==='admin'||u.role==='ra_lead'));
   if(isBD)calls.push(apiGet('/emails?status=pending'));
   if(isBD)calls.push(apiGet('/emails?status=queued'));
   return Promise.all(calls).then(function(r){
     STATE.users=r[0].map(normaliseUser);
-    var jl=r[1]||{data:[],keep:function(){}};
-    STATE.jobs=(jl.data||[]).map(normaliseJob);
-    STATE.contacts=flattenContacts(jl.data||[]);
-    jl.keep();
-    STATE.companies=r[2].map(function(c){return{id:c.id,name:c.name,web:c.website,ind:c.industry,loc:c.location};});
-    STATE.reminders=r[3]||[];
-    STATE.industriesList=r[4]||[];
+    STATE.companies=r[1].map(function(c){return{id:c.id,name:c.name,web:c.website,ind:c.industry,loc:c.location};});
+    STATE.reminders=r[2]||[];
+    STATE.industriesList=r[3]||[];
     STATE.emailAccounts=[];
     // Load pool stats for ra_lead/admin
     if(STATE.user&&(STATE.user.role==='ra_lead'||STATE.user.role==='admin')){
       apiGet('/distribute/pool-stats').then(function(d){STATE.distributePoolStats=d;scheduleRender();}).catch(function(){});
     }
     if(isBD){
-      STATE.pendingEmails=(r[5]||[]);
-      STATE.emails=(r[6]||[]);
+      STATE.pendingEmails=(r[4]||[]);
+      STATE.emails=(r[5]||[]);
       // R-302: every SENT email was downloaded here (4,421 with bodies) and no screen read it — the Sent tab became All mail
       // (50-all-mail.js, its own 90-day view). Not asked for any more.
     }
@@ -261,6 +261,41 @@ function loadAppData(opts){
     render();
   });
 }
+// THE LEAD LIST, LOADED BEHIND THE OPEN APP (R-348). Until it arrives every screen shows an empty list, so a note says the leads
+// are on their way — an empty list must never read as "you have no leads". A busy server is asked again, further apart each
+// time; if it still cannot, the note says so and offers Try again. The note is its own element on <body>, outside the render
+// engine, so a repaint never removes it.
+var LEADS_RETRY_S=[3,6,10,20,30];
+function leadsNote(text,canRetry){
+  if(typeof document==='undefined')return;
+  var el=document.getElementById('leads-loading-note');
+  if(!text){if(el)el.remove();return;}
+  if(!el){el=document.createElement('div');el.id='leads-loading-note';el.className='leads-loading-note fs-12 c-text2';el.setAttribute('role','status');document.body.appendChild(el);}
+  el.innerHTML=htmlEsc(text)+(canRetry?' <button class="btn btn-sm" onclick="loadLeadsInBackground()">Try again</button>':'');
+}
+function loadLeadsInBackground(tries){
+  tries=tries||0;
+  var who=STATE.token;
+  STATE.jobsLoading=true;
+  if(!tries){STATE.jobs=[];STATE.contacts=[];_jobsTag=null;}
+  leadsNote(tries?'Still loading your leads — the server is busy…':'Loading your leads…');
+  return apiGetJobsList().then(function(jl){
+    if(STATE.token!==who)return;   // signed out (or someone else signed in) meanwhile
+    STATE.jobsLoading=false;leadsNote(null);
+    applyJobsList(jl||{data:[],keep:function(){}});
+    render();
+  }).catch(function(err){
+    if(STATE.token!==who||(err&&err.expired))return;
+    if(tries<LEADS_RETRY_S.length){
+      return new Promise(function(res){setTimeout(res,LEADS_RETRY_S[tries]*1000);}).then(function(){
+        if(STATE.token!==who)return;
+        return loadLeadsInBackground(tries+1);
+      });
+    }
+    STATE.jobsLoading=false;
+    leadsNote('Your leads could not load — the server is busy.',true);
+  });
+}
 var LOAD_RETRY_MS=4000;
 var LOAD_RETRY_STEPS=[1,1.5,2,2.5,3,3.75];   // × LOAD_RETRY_MS: 4, 6, 8, 10, 12, 15 s — about 55 s in all
 window.loadAppDataRetry=function(){STATE.loadFailed=null;loadAppData();};
@@ -285,8 +320,8 @@ function backgroundPollTick(){
     if(!STATE.user||!STATE.token)return;
     if(document.hidden)return; // no point refreshing a tab nobody is looking at
     var pg=STATE.page;
-    // Always refresh jobs (stage changes, new leads, assignments)
-    apiGetJobsList().then(applyJobsList).catch(function(){});
+    // Always refresh jobs (stage changes, new leads, assignments) — unless the first load is still on its way (R-348).
+    if(!STATE.jobsLoading)apiGetJobsList().then(applyJobsList).catch(function(){});
     // Always refresh users — STATE.users otherwise only loads once at login, so a
     // name/role change made by someone else (or in another tab) never showed up
     // anywhere that reads from it (avatars, assignee labels, pickers) until a

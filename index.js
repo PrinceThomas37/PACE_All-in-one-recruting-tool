@@ -89,6 +89,7 @@ const aiFirstChoice = require('./services/ai-first-choice');
 const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
+const firstEmailRepair = require('./services/first-email-repair');   // R-346: an assigned lead with no first email is found and written
 const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
 const sequenceVersions = require('./services/sequence-versions');
@@ -584,9 +585,10 @@ function buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skipped
   return parts.length ? parts.join(' · ') : undefined;
 }
 
-const { tryStartRun } = require('./services/send-progress');
+const { tryStartRun, shouldRelease: sendRunShouldRelease } = require('./services/send-progress');
 const sendPasses = require('./services/send-passes');
 const activeSendByUser = new Set();
+const autoSendRunToken = new Map();   // R-347: which auto-send run holds each person's guard
 // "Is a send for this person running in THIS process?" — the two ways a run starts (Send all pending registers in
 // activeSendByUser; Send selected registers here). A progress record that says `active` with neither is a run a
 // restart killed (services/send-progress.js reconcileProgress).
@@ -835,13 +837,18 @@ const JOB_SELECT = `*, research, company:companies(id,name,website,industry,loca
 // writing emails) still drops it at once (writeMayChangeLeads), so people see their own changes immediately; only changes the
 // background engine makes (the send loop marking a contact emailed, a reply sweep) can show up to 5 minutes late. The tabs poll
 // every 3 minutes, so with a 1-minute copy nearly every poll — even a "nothing changed" one — rebuilt the whole list.
+// R-348 (30 Oct): the list reads every lead column EXCEPT the posting text — `research_list` is research without `jd_raw`, and the
+// posting's size comes as numbers (migration 070, columns the database keeps itself). The full text loads with one lead (JOB_SELECT).
+// A new jobs column that the list needs must be added here (test/lead-list-light-smoke.mjs checks this list against JOB_SELECT's).
+const JOB_LIST_COLUMNS = 'id,company_id,position,location,source,job_url,stage,notes,created_by,assigned_to,created_date,created_at,updated_at,deleted_at,assigned_to_bd,assigned_at,is_duplicate,duplicate_of,salary_range,job_created_date,job_opened_date,timezone,freshness,bdm_assigned_name,industry,sending_email_id,lead_code,org_id,recycled_count,last_recycled_at,auto_replied_at';
+const JOB_LIST_SELECT = JOB_LIST_COLUMNS + ',research:research_list,posting_all_chars,posting_chars,posting_words' + JOB_SELECT.slice(JOB_SELECT.indexOf(', company:'));
 const JOBS_CACHE_TTL_MS = 5 * 60 * 1000;
 const JOBS_PAGE = 500;   // rows per read while loading the list — 3 trips to the database for today's leads, each page cut before the next (a technical batch size, not a customer limit)
 // R-324: one load per organisation at a time — everyone asking meanwhile shares it (services/lead-list-cache.js).
 // R-301: read in pages, each lead's posting text dropped as its page arrives (services/lead-list.js).
 const jobsCache = leadListCache.createLeadListCache({
   ttlMs: JOBS_CACHE_TTL_MS,
-  load: (orgId) => loadLeadList({ supabase, select: JOB_SELECT, orgId, pageSize: JOBS_PAGE }),
+  load: (orgId) => loadLeadList({ supabase, select: JOB_LIST_SELECT, fallbackSelect: JOB_SELECT, orgId, pageSize: JOBS_PAGE }),
 });
 function invalidateJobsCache() { jobsCache.invalidate(); }
 function loadAllJobs(orgId) { return jobsCache.get(orgId); }
@@ -1170,18 +1177,28 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   if (needsSequence.length) console.log(`[GenerateEmails] no emails written for ${needsSequence.map(n => n.name || n.user_id).join(', ')} — they have not written their own sequence yet`);
   if (contactsSkipped) console.log(`[GenerateEmails] ${contactsSkipped} jobs had no valid contacts — skipped`);
   if (alreadyOutreachedSkipped) console.log(`[GenerateEmails] ${alreadyOutreachedSkipped} contacts already had an initial outreach for their job — skipped to avoid duplicate cold emails`);
-  // Insert emails in batches of 500 to avoid Supabase payload limits
-  const INSERT_BATCH = 500;
-  let totalInserted = 0;
+  // Small batches, each retried while the database is only busy (R-346: one 138-row insert was cut off by the statement
+  // timeout and the whole assignment got nothing). A cancelled statement is rolled back, so a retry never doubles an email.
+  // A batch that still fails is skipped, not fatal: what was written goes out, and services/first-email-repair.js writes the
+  // rest on its next run.
+  const INSERT_BATCH = 25;
+  let totalInserted = 0, firstErr = null;
   for (let i = 0; i < emailsToInsert.length; i += INSERT_BATCH) {
     const batch = emailsToInsert.slice(i, i + INSERT_BATCH);
-    const { error: insErr } = await supabase.from('emails').insert(batch);
+    let insErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 2000 * attempt));
+      ({ error: insErr } = await supabase.from('emails').insert(batch));
+      if (!insErr || !firstEmailRepair.isRetryableDbError(insErr)) break;
+    }
     if (insErr) {
       console.error(`[GenerateEmails] Insert batch ${i}-${i + batch.length} failed:`, insErr.message);
-      throw insErr;
+      firstErr = firstErr || insErr;
+      continue;
     }
     totalInserted += batch.length;
   }
+  if (firstErr && !totalInserted) throw firstErr;
   console.log(`[GenerateEmails] Inserted ${totalInserted} emails for ${jobs.length} jobs (${job_ids.length} requested)`);
   return totalInserted;
 }
@@ -2507,7 +2524,11 @@ async function retryDeferredPendingSends() {
     const { data, error } = await supabase.from('emails').select('sent_by').eq('status', 'pending');
     if (error) throw error;
     const userIds = [...new Set((data || []).map(r => r.sent_by).filter(Boolean))];
-    for (const uid of userIds) await autoSendForManager(uid);
+    // R-347: each person's queue is started ON ITS OWN, not one after another — a person whose run is long (a big queue, a slow
+    // mailbox) used to hold everybody else's for up to 105 minutes (27-30 Oct), and this whole check with it. Each run still has
+    // its own one-at-a-time guard (autoSendForManager).
+    for (const uid of userIds) autoSendForManager(uid).catch(err => console.error('[SendWindowRetry] ' + uid + ':', err && err.message));
+    return { people: userIds.length };
   } catch (e) {
     console.error('[SendWindowRetry] Error:', e.message);
   }
@@ -2518,11 +2539,19 @@ async function autoSendForManager(managerId) {
     console.log(`[EmergencyStop] Sending paused (global or manager) — not starting auto-send for manager ${managerId}`);
     return;
   }
+  if (activeSendByUser.has(managerId) && sendRunShouldRelease(sendProgressCache.get(managerId))) {
+    // R-347: a run that has not moved for an hour no longer blocks this person's queue. Safe: every email is claimed before it
+    // is sent, so if the old run ever wakes it finds those emails already taken.
+    console.warn(`[SendWatch] the send for ${managerId} has not moved for an hour — starting a fresh run`);
+    activeSendByUser.delete(managerId);
+  }
   if (activeSendByUser.has(managerId)) {
     console.log(`[AutoSend] Already running for manager ${managerId}, skipping`);
     return;
   }
   activeSendByUser.add(managerId);
+  const runToken = {};
+  autoSendRunToken.set(managerId, runToken);
   try {
     let fetchedAt = new Date().toISOString();
     let pendingEmails = await fetchPendingEmailsForUser(managerId);
@@ -2560,7 +2589,8 @@ async function autoSendForManager(managerId) {
   } catch (err) {
     console.error(`[AutoSend] Error for manager ${managerId}:`, err.message);
   } finally {
-    activeSendByUser.delete(managerId);
+    // Only the run that holds the guard lets go of it — an old run released by the watch must not free a newer one's guard.
+    if (autoSendRunToken.get(managerId) === runToken) { activeSendByUser.delete(managerId); autoSendRunToken.delete(managerId); }
   }
 }
 
@@ -3026,6 +3056,18 @@ async function setLastFollowupRun(dateStr) {
 // Render's free tier, a sleeping service missed the whole day's follow-ups and
 // nothing said so. At-or-past is self-healing: whenever the service next wakes,
 // the day's run still happens.
+// R-346: an Assign Leads batch whose first emails were never written (the database cut the write off) is found and written —
+// the owner should not have to notice it. services/first-email-repair.js says which leads, and why it can never double-send.
+engineRunner.register('first_email_repair', {
+  everyMs: 15 * 60 * 1000,
+  quiet: true,
+  description: 'Write the first emails of assigned leads that never got one (e.g. the database was too busy at assignment)',
+  run: firstEmailRepair.createFirstEmailRepair({
+    supabase, generateEmailsForJobs, getRaMode: getManagerRaMode,
+    onWritten: (managerId) => emit(EVENTS.OUTREACH_QUEUED, { managerId }),
+  }),
+});
+
 engineRunner.register('followup', {
   everyMs: 5 * 60 * 1000,
   quiet: true,               // polled often, fires once a day — don't log the no-ops
@@ -4046,6 +4088,7 @@ function randomDelay(minSec = 1, maxSec = 120) {
 const sendProgressCache = new Map();
 async function setSendProgress(userId, data) {
   const key = `send_progress_${userId}`;
+  if (data && data.active) data = Object.assign({}, data, { touchedAt: new Date().toISOString() });   // R-347: when the run last moved
   sendProgressCache.set(userId, data);
   try { await supabase.from('app_settings').upsert({ key, value: JSON.stringify(data) }, { onConflict: 'key' }); } catch(_) {}
 }

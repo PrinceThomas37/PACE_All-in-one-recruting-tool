@@ -2315,3 +2315,7 @@ Owner: "All industries" (R-333): each industry gets its industry codes and a liv
 ### D-0191 — Compose to a new company starts from the company (29 Oct 2026)
 
 Owner: "Company first" (R-320): company (+ location) → its people from the company's contact-data provider → tick one or more → AI writes one email per person from title and job → send or add to a sequence; one credit per email lookup. Built on the provider-neutral layer (D-0175).
+
+### D-0192 — PACE repairs its own missed outreach; sign-in does not wait for the lead list (30 Oct 2026)
+
+Owner: "initiate those emails again … what I am concerned is that I have to come back every day on this outreach issue". Yes to: an automatic check that writes the first emails of assigned leads that never got one (R-346); each person's send queue run on its own with a "Sending has stalled" warning and an automatic fresh run after an hour (R-347); sign-in opens the app without waiting for the lead list, and the list stops reading the job-description text (R-348 steps 1–2, migration 070 — owner's go for "one small database change"). Page-by-page lead loading (R-349) is for the week of 2 Nov. The ~$7/month always-on server: not now — decide after the stall warning has been watched.

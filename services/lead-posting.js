@@ -60,6 +60,16 @@ function withPosting(research, position, text) {
 // The text itself loads with the one lead (GET /jobs/:id) when someone opens it.
 function forList(job) {
   if (!job || typeof job !== 'object') return job;
+  // R-348: the light list read (migration 070) has no posting text, only its size — the same three numbers, worked out by the
+  // database with the same rule. The helper columns are not passed on.
+  if (typeof job.posting_all_chars === 'number') {
+    const { posting_all_chars: all, posting_chars: chars, posting_words: words, ...rest } = job;
+    const r = parseResearch(rest.research);
+    const allLen = all || (txt(rest.position) ? ('Title: ' + txt(rest.position)).length : 0);
+    const posting = { has_posting: allLen >= THIN_POSTING_CHARS, chars: chars || 0, words: words || 0 };
+    if (!all) return Object.assign({}, rest, { posting });
+    return Object.assign({}, rest, { research: Object.assign({}, r, { jd_raw_omitted: true }), posting });
+  }
   const r = parseResearch(job.research);
   const posting = postingState(job);
   if (!txt(r.jd_raw)) return Object.assign({}, job, { posting });
