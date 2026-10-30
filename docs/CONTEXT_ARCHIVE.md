@@ -7172,3 +7172,4 @@ Owner: "merge them". Clean worktree of head `3a…` (branch tip before squash) r
 - BD Lead 2: 24 written, 20 sent, 4 pending. Martin: 165 written, 84 sent, 80 pending (send window / 28 inactive-mailbox deferrals).
 - FU1/FU2 not due: fu1 day 3 (BD leads) / day 2 (Martin) after the first email — earliest 1–2 Nov. Expected.
 - Waiting on owner: code fix (batched insert + visible failure) and the one-off repair for BD Lead 1's 65 leads.
+- R-346 built on `claude/magical-curie-srm3yp`: batched+retried first-email insert and the `first_email_repair` engine job (repairs BD Lead 1's 65 + BD Lead 2's 10 once live). Owner: "initiate those emails again". Full suite running; NOT yet merged/deployed.

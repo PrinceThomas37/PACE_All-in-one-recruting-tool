@@ -1372,3 +1372,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - R-342 labels: `contact-points-smoke` 51 (+6), `lead-contact-points-routes-smoke` 33 (+2), `contact-points-ui-smoke` 37 (+4, incl. browser/server key parity; the fake candidate carries labels).
 - R-333: `lead-finder-smoke` 89 (every industry coded except the four job types, 2–6 digits, no staffing 5613, two industries = both codes); `finder-page-smoke` 211 (job-type hint).
 - R-320: `finder-routes-smoke` 211 (+10 compose: free people search with places, 1-credit reveal counted first, cache org-scoped — a test that passed vacuously on a 403 was fixed to prove it, unverified never returned, daily limit before the call, no access → 403); new `compose-company-ui-smoke` 18 (real browser, screenshots via COMPOSE_SHOT_DIR).
+
+- R-346: `test/first-email-repair-smoke.mjs` (20) — which leads are written/left alone, retry classification, runner on a fake db, wiring. Mutation checked (dropping the has-email guard fails it).

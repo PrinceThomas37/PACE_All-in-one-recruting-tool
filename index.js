@@ -89,6 +89,7 @@ const aiFirstChoice = require('./services/ai-first-choice');
 const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
+const firstEmailRepair = require('./services/first-email-repair');   // R-346: an assigned lead with no first email is found and written
 const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
 const sequenceVersions = require('./services/sequence-versions');
@@ -1170,18 +1171,28 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   if (needsSequence.length) console.log(`[GenerateEmails] no emails written for ${needsSequence.map(n => n.name || n.user_id).join(', ')} — they have not written their own sequence yet`);
   if (contactsSkipped) console.log(`[GenerateEmails] ${contactsSkipped} jobs had no valid contacts — skipped`);
   if (alreadyOutreachedSkipped) console.log(`[GenerateEmails] ${alreadyOutreachedSkipped} contacts already had an initial outreach for their job — skipped to avoid duplicate cold emails`);
-  // Insert emails in batches of 500 to avoid Supabase payload limits
-  const INSERT_BATCH = 500;
-  let totalInserted = 0;
+  // Small batches, each retried while the database is only busy (R-346: one 138-row insert was cut off by the statement
+  // timeout and the whole assignment got nothing). A cancelled statement is rolled back, so a retry never doubles an email.
+  // A batch that still fails is skipped, not fatal: what was written goes out, and services/first-email-repair.js writes the
+  // rest on its next run.
+  const INSERT_BATCH = 25;
+  let totalInserted = 0, firstErr = null;
   for (let i = 0; i < emailsToInsert.length; i += INSERT_BATCH) {
     const batch = emailsToInsert.slice(i, i + INSERT_BATCH);
-    const { error: insErr } = await supabase.from('emails').insert(batch);
+    let insErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 2000 * attempt));
+      ({ error: insErr } = await supabase.from('emails').insert(batch));
+      if (!insErr || !firstEmailRepair.isRetryableDbError(insErr)) break;
+    }
     if (insErr) {
       console.error(`[GenerateEmails] Insert batch ${i}-${i + batch.length} failed:`, insErr.message);
-      throw insErr;
+      firstErr = firstErr || insErr;
+      continue;
     }
     totalInserted += batch.length;
   }
+  if (firstErr && !totalInserted) throw firstErr;
   console.log(`[GenerateEmails] Inserted ${totalInserted} emails for ${jobs.length} jobs (${job_ids.length} requested)`);
   return totalInserted;
 }
@@ -3026,6 +3037,18 @@ async function setLastFollowupRun(dateStr) {
 // Render's free tier, a sleeping service missed the whole day's follow-ups and
 // nothing said so. At-or-past is self-healing: whenever the service next wakes,
 // the day's run still happens.
+// R-346: an Assign Leads batch whose first emails were never written (the database cut the write off) is found and written —
+// the owner should not have to notice it. services/first-email-repair.js says which leads, and why it can never double-send.
+engineRunner.register('first_email_repair', {
+  everyMs: 15 * 60 * 1000,
+  quiet: true,
+  description: 'Write the first emails of assigned leads that never got one (e.g. the database was too busy at assignment)',
+  run: firstEmailRepair.createFirstEmailRepair({
+    supabase, generateEmailsForJobs, getRaMode: getManagerRaMode,
+    onWritten: (managerId) => emit(EVENTS.OUTREACH_QUEUED, { managerId }),
+  }),
+});
+
 engineRunner.register('followup', {
   everyMs: 5 * 60 * 1000,
   quiet: true,               // polled often, fires once a day — don't log the no-ops
