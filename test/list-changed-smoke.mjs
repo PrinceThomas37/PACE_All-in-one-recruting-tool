@@ -83,7 +83,8 @@ m.apiGetJobsList(); await new Promise(r => setTimeout(r, 10));
 ok('after sign-out / a new sign-in the tag is gone', sent[6].inm === null);
 STATE.jobs = [];
 ok('an empty list never sends a tag (nothing to keep)', (() => { const n = sent.length; m.apiGetJobsList(); return sent[n].inm === null; })());
-ok('the first screen after sign-in always asks in full', /_jobsTag=null;[^\n]*\n\s*var calls=\[apiGet\('\/users'\),apiGetJobsList\(\)/.test(api));
+// R-348: the list now loads BEHIND the open app (loadLeadsInBackground) — its first try still drops the tag, so it asks in full.
+ok('the first screen after sign-in always asks in full', /_jobsTag=null;[^\n]*\n[\s\S]{0,400}loadLeadsInBackground\(\)/.test(api) && /if\(!tries\)\{STATE\.jobs=\[\];STATE\.contacts=\[\];_jobsTag=null;\}/.test(api));
 
 // ── no download of every sent email ────────────────────────────────────────
 const bind = fs.readFileSync(new URL('../public/js/11-bind-and-actions.js', import.meta.url), 'utf8');

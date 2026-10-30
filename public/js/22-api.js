@@ -267,6 +267,7 @@ function loadAppData(opts){
 // engine, so a repaint never removes it.
 var LEADS_RETRY_S=[3,6,10,20,30];
 function leadsNote(text,canRetry){
+  if(typeof document==='undefined')return;
   var el=document.getElementById('leads-loading-note');
   if(!text){if(el)el.remove();return;}
   if(!el){el=document.createElement('div');el.id='leads-loading-note';el.className='leads-loading-note fs-12 c-text2';el.setAttribute('role','status');document.body.appendChild(el);}
