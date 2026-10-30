@@ -390,3 +390,4 @@ The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was 
 
 ## 30 Oct 2026 (Session 56)
 - Migration 069 `contact_labels` (R-342, D-0189): jsonb object, NOT NULL default '{}', on `candidates` and `contacts`, CHECK is-object; additive, idempotent, no backfill. NOT APPLIED — apply before merging (the lead `JOB_SELECT` and `CANDIDATE_SELECT` name it). No new table, so `models/tables.js` unchanged. Next migration: 070.
+- 30 Oct: migration 069 APPLIED to the live DB (owner's go "Yes"), verified: `contact_labels` NOT NULL default '{}' on candidates and contacts.
