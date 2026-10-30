@@ -64,6 +64,7 @@ step('keywords and domains are passed only when there are some', f.q_organizatio
   step('no industry asks for staffing firms (5613) — Find Leads leaves those out on purpose', !Object.keys(F.SECTORS).some((id) => (F.SECTORS[id].naics || []).some((c) => c.startsWith('5613') || '5613'.startsWith(c) && c.length >= 3)));
   const two = F.apolloFilters({ titles: ['a'], locations: ['b'], sectors: ['legal', 'accounting'] }, NOW);
   step('two industries together: the codes of both (any match counts)', two.organization_naics_codes && two.organization_naics_codes.join() === '5411,5412', JSON.stringify(two.organization_naics_codes));
+  step('Media never asks for software publishers (live check 30 Oct: 511/513 returned Apple and OpenAI)', !F.SECTORS.media.naics.some((c) => ['511', '513', '5112', '5132'].includes(c) || '5112'.startsWith(c) || '5132'.startsWith(c)), F.SECTORS.media.naics.join());
   step('IT asks for both the 2017 and 2022 software code', F.apolloFilters({ titles: ['a'], sectors: ['it'] }, NOW).organization_naics_codes.join().includes('5112') && F.SECTORS.it.naics.includes('5132'));
 }
 
