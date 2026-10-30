@@ -748,3 +748,6 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 
 ## 29 Oct 2026 (Session 55)
 - Measured 1–29 Oct: AI first emails 1.23 % replies vs 0.54 % template; AI follow-ups below template. ~430k tokens/day, ~250 calls. Plan R-343 in docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md (waiting on the owner). `company_service` (project area) offered in the detail menu.
+
+## 30 Oct 2026 (Session 56)
+- R-320: `services/people-apollo.js` `searchPeople` gained `locations` (Apollo `person_locations`), used by Compose → "Find at a company". The AI writing for that flow is the unchanged `/outreach/generate` writer, called once per ticked person (no new prompt).

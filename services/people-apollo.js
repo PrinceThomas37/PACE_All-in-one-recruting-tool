@@ -93,7 +93,7 @@ function normalizePerson(p) {
  * `domains`: the company's website domain and, when its staff mail uses a
  * different one, that too — Apollo files a company under its website.
  */
-async function searchPeople({ key, domain, domains, titles, perPage = 25, fetchImpl } = {}) {
+async function searchPeople({ key, domain, domains, titles, locations, perPage = 25, fetchImpl } = {}) {
   if (!key) return { ok: false, status: 0, error: 'Apollo is not connected — add its key in Admin → Integrations.' };
   const orgDomains = Array.from(new Set([].concat(domains || [], domain || []).filter(Boolean)));
   if (!orgDomains.length) return { ok: false, status: 0, error: 'This company has no website or email domain to search by.' };
@@ -103,6 +103,9 @@ async function searchPeople({ key, domain, domains, titles, perPage = 25, fetchI
   const wanted = (titles || []).map(t => String(t || '').trim()).filter(Boolean).slice(0, 25);
   const body = { q_organization_domains_list: orgDomains, page: 1, per_page: Math.min(Math.max(1, perPage), 100) };
   if (wanted.length) Object.assign(body, { person_titles: wanted, include_similar_titles: true });
+  // Where the PERSON works (city, state or country as typed) — "people at Acme in Dallas" (R-320). Left out when blank.
+  const places = (locations || []).map(t => String(t || '').trim()).filter(Boolean).slice(0, 5);
+  if (places.length) body.person_locations = places;
   let r;
   try {
     r = await post('/mixed_people/api_search', key, body, fetchImpl);

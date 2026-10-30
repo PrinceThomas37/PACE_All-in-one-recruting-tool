@@ -51,6 +51,10 @@
       sequences:null, sequenceId:'',
       // Recipient search — the "someone already in PACE" half of the composer.
       recipMode:'new', recipQuery:'', recipResults:null, recipSearching:false,
+      // "Find at a company" (R-320): company → its people → tick → find emails → one AI email each.
+      co:{ q:'', suggestions:null, looking:false, note:'', picked:null, location:'', title:'', people:null, peopleLoading:false,
+           ticked:{}, revealing:{}, credits:null },
+      batch:null, batchWriting:false, batchSending:false,
       // What you have already sent from here, and what came back.
       sent:null, sentLoading:false, converting:null
     };
@@ -533,12 +537,13 @@
 
     return '<div class="card cp mb3">'+
       '<div style="display:flex;gap:6px;margin-bottom:10px">'+
-        tab('existing','Someone in PACE')+tab('new','Someone new')+
+        tab('existing','Someone in PACE')+tab('new','Someone new')+tab('company','Find at a company')+
       '</div>'+
-      (g.recipMode==='existing'
+      (g.recipMode==='company' ? companyFinderHtml() :
+       g.recipMode==='existing'
         ? '<input class="inp" placeholder="Search by name, email or company" value="'+esc(g.recipQuery)+'" oninput="outreachRecipSearch(this.value)">'+results
         : '<div class="fs-11_5 c-text3">Fill in the contact and company below — nothing is saved to PACE unless you convert a reply into a lead.</div>')+
-      chosen+
+      (g.recipMode==='company'?'':chosen)+
     '</div>';
   }
 
@@ -553,6 +558,7 @@
       '<div class="fgrp"><label class="flbl">Outreach type</label>'+
         '<div style="display:flex;gap:16px">'+radio('first','First outreach')+radio('followup','Follow-up (no reply yet)')+'</div>'+
       '</div>'+
+      (G().recipMode==='company'?'':
       '<div class="fpair">'+
         '<div class="fgrp"><label class="flbl">Contact first name</label>'+
           '<input class="inp" id="og-first" placeholder="Susan" value="'+esc(f.contact_first_name)+'" oninput="outreachGenField(\'contact_first_name\',this.value)"></div>'+
@@ -569,7 +575,7 @@
       '<div class="fgrp"><label class="flbl">Send to</label>'+
         '<input class="inp" id="og-to" placeholder="susan@company.com" value="'+esc(f.to)+'" oninput="outreachGenField(\'to\',this.value)">'+
         '<div class="fs-11_5 c-text3" style="margin-top:4px">Where the finished email goes. Leave it blank to write a draft and copy it out.</div>'+
-      '</div>'+
+      '</div>')+
       '<div class="fgrp"><label class="fs-13" style="display:flex;align-items:flex-start;gap:8px">'+
         '<input type="checkbox" '+(f.no_agencies?'checked':'')+' onchange="outreachGenToggle(\'no_agencies\',this.checked)" style="margin-top:3px">'+
         '<span>Posting says no agencies / no calls / inquiries through a form only</span></label>'+
@@ -590,8 +596,11 @@
       '<div class="fgrp"><label class="flbl">Your title in the sign-off</label>'+
         '<input class="inp" id="og-sendertitle" placeholder="Account Manager" value="'+esc(f.sender_title)+'" oninput="outreachGenField(\'sender_title\',this.value)"></div>'+
       '<div style="display:flex;gap:8px;align-items:center;margin-top:6px">'+
-        '<button class="btn btn-primary" onclick="outreachGenerate(false)" '+(G().loading?'disabled style="opacity:.6"':'')+'>'+
-          (G().loading?'Writing…':'Generate email')+'</button>'+
+        (G().recipMode==='company'
+          ? '<button class="btn btn-primary" onclick="ogcWriteAll()" '+(G().batchWriting?'disabled':'')+'>'+
+              (G().batchWriting?'Writing…':'Write '+ogcReadyCount()+' email'+(ogcReadyCount()===1?'':'s'))+'</button>'
+          : '<button class="btn btn-primary" onclick="outreachGenerate(false)" '+(G().loading?'disabled style="opacity:.6"':'')+'>'+
+          (G().loading?'Writing…':'Generate email')+'</button>')+
         '<button class="btn btn-outline btn-sm" onclick="outreachGenReset()">Clear form</button>'+
       '</div>'+
     '</div>';
@@ -838,6 +847,206 @@
   }
 
   // The Email page calls this for its Generator tab.
+  // ═════════ FIND AT A COMPANY (R-320, D-0191) ════════════════════════════════════════════════════════
+  // Company first: type the company (or paste its website) → pick it → its people, by title and place, from the company's own
+  // contact database (free) → tick → "Find email" on each (1 credit, never twice for the same person, only a verified address) →
+  // the AI writes one email per person from their title and the posting (the same writer as above) → send each, or all, and
+  // optionally add them to a sequence (which is what creates the lead — sending alone does not, as above).
+  // No vendor is named here: the server answers with the provider's own name where a sentence needs one.
+  function C(){ return G().co; }
+  window.ogcField=function(k,v){ C()[k]=v; };
+  window.ogcLookup=function(){
+    var c=C(), el=document.getElementById('ogc-q'); if(el) c.q=el.value;
+    var q=String(c.q||'').trim();
+    if(q.length<2){ c.note='Type at least two letters of the company name, or paste its website.'; render(); return; }
+    c.looking=true; c.note=''; c.suggestions=null; render();
+    apiPost('/finder/companies/suggest',{q:q}).then(function(r){
+      c.looking=false; c.suggestions=(r&&r.suggestions)||[]; c.note=(r&&r.note)||'';
+      if(r&&r.used_credit) c.note=(c.note?c.note+' ':'')+'That lookup used 1 credit.';
+      if(c.suggestions.length===1&&c.suggestions[0].website_only) ogcPick(0);
+      else render();
+    }).catch(function(e){ c.looking=false; c.note=(e&&e.message)||'Could not look the company up.'; render(); });
+  };
+  window.ogcPick=function(i){
+    var c=C(), co=(c.suggestions||[])[i]; if(!co) return;
+    c.picked=co; c.suggestions=null; c.people=null; c.ticked={}; G().batch=null;
+    G().form.company=co.website_only?'':(co.name||'');
+    render();
+    ogcPeople();
+  };
+  window.ogcChange=function(){ var c=C(); c.picked=null; c.people=null; c.ticked={}; G().batch=null; render(); };
+  window.ogcPeople=function(){
+    var c=C(); if(!c.picked) return;
+    var loc=document.getElementById('ogc-loc'), ti=document.getElementById('ogc-title');
+    if(loc) c.location=loc.value; if(ti) c.title=ti.value;
+    c.peopleLoading=true; c.note=''; render();
+    apiPost('/finder/compose/people',{domain:c.picked.domain,location:c.location,title:c.title}).then(function(r){
+      c.peopleLoading=false; c.people=(r&&r.people)||[];
+      if(!c.people.length) c.note='Nobody found there'+(c.location?' in '+c.location:'')+(c.title?' with those titles':'')+'. Try fewer words, or leave the place blank.';
+      render();
+    }).catch(function(e){ c.peopleLoading=false; c.people=[]; c.note=(e&&e.message)||'Could not list the people.'; render(); });
+  };
+  function personById(id){ return (C().people||[]).filter(function(p){ return p.id===id; })[0]||null; }
+  window.ogcTick=function(id,on){ var c=C(); if(on) c.ticked[id]=true; else delete c.ticked[id]; render(); };
+  window.ogcReveal=function(id){
+    var c=C(), p=personById(id); if(!p||c.revealing[id]) return;
+    c.revealing[id]=true; render();
+    apiPost('/finder/compose/reveal',{person_id:id,seen:{first_name:p.first_name,title:p.title}}).then(function(r){
+      delete c.revealing[id];
+      var got=(r&&r.person)||{};
+      p.revealed=true; p.email=got.email||null;
+      if(got.last_name) p.last_name=got.last_name;
+      if(got.title) p.title=got.title;
+      if(r&&r.credits) c.credits=r.credits;
+      if(p.email) c.ticked[id]=true;
+      if(r&&r.note) showToast(r.note,'info');
+      render();
+    }).catch(function(e){ delete c.revealing[id]; showToast((e&&e.message)||'Could not find the email.','error'); render(); });
+  };
+  // Ticked AND with a verified address — the only people an email can be written for.
+  function readyPeople(){ var c=C(); return (c.people||[]).filter(function(p){ return c.ticked[p.id]&&p.email; }); }
+  window.ogcReadyCount=function(){ return readyPeople().length; };
+
+  function companyFinderHtml(){
+    var c=C(), co=c.picked;
+    var note=c.note?'<div class="ogc-note fs-12 c-text3">'+esc(c.note)+'</div>':'';
+    if(!co){
+      var sug='';
+      if(c.suggestions&&c.suggestions.length){
+        sug='<div class="ogc-list">'+c.suggestions.map(function(x,i){
+          var where=[x.city,x.state].filter(Boolean).join(', ');
+          return '<button type="button" class="ogc-row" onclick="ogcPick('+i+')"><b>'+esc(x.name||x.domain)+'</b>'+
+            '<span class="fs-11_5 c-text3">'+esc([where,x.domain].filter(Boolean).join(' · '))+'</span></button>';
+        }).join('')+'</div>';
+      }
+      return '<div class="ogc-line"><input class="inp" id="ogc-q" placeholder="Company name, or paste its website" value="'+esc(c.q)+'" '+
+          'oninput="ogcField(\'q\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();ogcLookup()}">'+
+          '<button type="button" class="btn btn-primary btn-sm" onclick="ogcLookup()" '+(c.looking?'disabled':'')+'>'+(c.looking?'Looking…':'Find')+'</button></div>'+
+        '<div class="fs-11_5 c-text3">A name lookup uses 1 credit when the company is found. A pasted website is free.</div>'+
+        note+sug;
+    }
+    var where=[co.city,co.state].filter(Boolean).join(', ');
+    var head='<div class="ogc-co"><div class="ogc-co-name"><b>'+esc(co.name||co.domain)+'</b>'+
+        '<span class="fs-11_5 c-text3">'+esc([where,co.domain].filter(Boolean).join(' · '))+'</span></div>'+
+        '<button type="button" class="cp-link" onclick="ogcChange()">Change</button></div>';
+    var filters='<div class="fpair">'+
+        '<div class="fgrp"><label class="flbl">Where they work (optional)</label><input class="inp" id="ogc-loc" placeholder="e.g. Dallas, Texas" value="'+esc(c.location)+'" oninput="ogcField(\'location\',this.value)"></div>'+
+        '<div class="fgrp"><label class="flbl">Job titles (optional)</label><input class="inp" id="ogc-title" placeholder="HR, Talent Acquisition, Controller" value="'+esc(c.title)+'" oninput="ogcField(\'title\',this.value)"></div>'+
+      '</div>'+
+      '<button type="button" class="btn btn-outline btn-sm" onclick="ogcPeople()" '+(c.peopleLoading?'disabled':'')+'>'+(c.peopleLoading?'Looking…':'Show people')+'</button>'+
+      '<span class="fs-11_5 c-text3 ogc-free">Free — only finding an email uses a credit.</span>';
+    var list='';
+    if(c.people&&c.people.length){
+      list='<div class="ogc-list ogc-people">'+c.people.map(function(p){
+        var name=(p.first_name+' '+(p.last_name||p.last_name_hint||'')).trim();
+        var right=p.email
+          ? '<span class="fs-12 c-accent fw6">'+esc(p.email)+'</span>'
+          : (p.revealed
+              ? '<span class="fs-11_5 c-text3">No verified email</span>'
+              : '<button type="button" class="btn btn-outline btn-sm" onclick="ogcReveal(\''+esc(p.id)+'\')" '+(c.revealing[p.id]?'disabled':'')+'>'+
+                  (c.revealing[p.id]?'Finding…':'Find email · 1 credit')+'</button>');
+        return '<label class="ogc-person"><input type="checkbox" '+(c.ticked[p.id]?'checked':'')+(p.email?'':' disabled')+
+            ' onchange="ogcTick(\''+esc(p.id)+'\',this.checked)" title="'+(p.email?'Write to this person':'Find the email first')+'">'+
+          '<span class="ogc-who"><b>'+esc(name||'Name hidden')+'</b><span class="fs-11_5 c-text3">'+esc(p.title||'')+'</span></span>'+right+'</label>';
+      }).join('')+'</div>'+
+      '<div class="fs-11_5 c-text3">'+readyPeople().length+' ticked with an email'+
+        (c.credits?' · credits used today: '+c.credits.used+' of '+c.credits.limit:'')+'</div>';
+    }
+    return head+filters+note+list;
+  }
+
+  // ── one email per ticked person ───────────────────────────────────────────
+  window.ogcWriteAll=function(){
+    var g=collectDom(), f=g.form, people=readyPeople();
+    if(!people.length){ g.error='Tick at least one person with an email (press "Find email" first).'; render(); return; }
+    if(!String(f.job_description||'').trim()){ g.error='Paste the job posting — each email is written from it.'; render(); return; }
+    var co=C().picked||{};
+    g.error=null; g.batchWriting=true;
+    g.batch=people.map(function(p){ return { person:p, status:'writing', subject:'', email:'', error:null }; });
+    render();
+    // One at a time: each is a full AI call against the organisation's daily allowance, and the screen fills in as they arrive.
+    var i=0;
+    (function next(){
+      if(i>=g.batch.length){ g.batchWriting=false; bumpUsage(); render(); return; }
+      var row=g.batch[i++], p=row.person;
+      apiPost('/outreach/generate',{
+        outreach_type:f.outreach_type, contact_first_name:p.first_name, contact_title:p.title,
+        company:f.company||co.name||'', location:C().location||[co.city,co.state].filter(Boolean).join(', '),
+        no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text, notes:f.notes,
+        job_title:f.job_title, job_description:f.job_description, sender:{title:f.sender_title}
+      }).then(function(r){
+        var v=(r&&r.variants&&r.variants[0])||r||{};
+        row.subject=v.subject||r.subject||''; row.email=v.email||r.email||''; row.status='ready';
+        row.signature_html=r&&r.signature_html;
+      }).catch(function(e){ row.status='error'; row.error=(e&&e.message)||'Could not write this one.'; })
+        .then(function(){ render(); next(); });
+    })();
+  };
+  window.ogcEdit=function(i,k,v){ var b=G().batch; if(b&&b[i]) b[i][k]=v; };
+  function sendRow(i){
+    var g=G(), row=g.batch[i], f=g.form, co=C().picked||{};
+    row.status='sending'; row.error=null; render();
+    return apiPost('/outreach/send',{
+      to:row.person.email, subject:row.subject, body:row.email, sequence_id:g.sequenceId||'',
+      company:f.company||co.name||'', location:C().location||'', name:row.person.first_name,
+      title:row.person.title, position:f.job_title
+    }).then(function(r){
+      row.status='sent'; row.sequence=r&&r.sequence;
+      if(r&&r.sequence&&r.sequence.error) row.error='Sent, but not added to the sequence: '+r.sequence.error;
+    }).catch(function(e){
+      row.status='ready';
+      row.error=(e&&e.message)==='no_connected_mailbox'?'No connected mailbox — connect one under Email Accounts before sending.':((e&&e.message)||'The send failed.');
+    }).then(function(){ g.sent=null; loadOutreachSent(true); render(); });
+  }
+  window.ogcSend=function(i){ var b=G().batch; if(b&&b[i]&&b[i].status==='ready') sendRow(i); };
+  window.ogcSendAll=function(){
+    var g=G(); if(!g.batch||g.batchSending) return;
+    var idx=g.batch.map(function(r,i){ return r.status==='ready'?i:-1; }).filter(function(i){ return i>=0; });
+    if(!idx.length) return;
+    g.batchSending=true; render();
+    var k=0;
+    (function next(){
+      if(k>=idx.length){ g.batchSending=false; var n=g.batch.filter(function(r){ return r.status==='sent'; }).length; showToast(n+' sent','success'); render(); return; }
+      sendRow(idx[k++]).then(next);
+    })();
+  };
+
+  function batchSeqHtml(){
+    var g=G(), seqs=g.sequences||[];
+    if(!seqs.length) return '';
+    var opts='<option value="">Don\'t add to a sequence — just send</option>'+seqs.map(function(sq){
+      return '<option value="'+esc(sq.id)+'"'+(g.sequenceId===sq.id?' selected':'')+'>'+esc(sq.name)+' · '+sq.steps+' steps</option>';
+    }).join('');
+    return '<div class="fgrp"><label class="flbl">Add everyone to a sequence</label><select class="inp" onchange="outreachSetSequence(this.value)">'+opts+'</select>'+
+      '<div class="fs-11_5 c-text3">Picking one creates the lead and enrols each person; this email counts as step 1. Without one, nothing is saved as a lead.</div></div>';
+  }
+
+  function batchCard(){
+    var g=G(), b=g.batch;
+    if(!b){
+      return '<div class="card cp c-text3 fs-13 ogc-empty">Pick the company, tick the people you want, find their emails, paste the posting, then press Write. One email per person shows up here.</div>';
+    }
+    var ready=b.filter(function(r){ return r.status==='ready'; }).length;
+    var rows=b.map(function(r,i){
+      var p=r.person, name=(p.first_name+' '+(p.last_name||'')).trim();
+      var state=r.status==='writing'?'<span class="bdg">Writing…</span>':r.status==='sending'?'<span class="bdg">Sending…</span>':
+        r.status==='sent'?'<span class="bdg bdg-green">Sent</span>':r.status==='error'?'<span class="bdg bdg-red">Not written</span>':'';
+      var body=(r.status==='ready'||r.status==='sent'||r.status==='sending')
+        ? '<input class="inp" value="'+esc(r.subject)+'" oninput="ogcEdit('+i+',\'subject\',this.value)" '+(r.status==='ready'?'':'disabled')+' aria-label="Subject for '+esc(name)+'">'+
+          '<textarea class="txta w100 ogc-body" oninput="ogcEdit('+i+',\'email\',this.value)" '+(r.status==='ready'?'':'disabled')+' aria-label="Email to '+esc(name)+'">'+esc(r.email)+'</textarea>'+
+          (r.status==='ready'?'<div class="ogc-actions"><button type="button" class="btn btn-outline btn-sm" onclick="ogcSend('+i+')">Send this one</button></div>':'')
+        : '';
+      return '<div class="ogc-draft"><div class="ogc-draft-h"><span class="ogc-who"><b>'+esc(name)+'</b><span class="fs-11_5 c-text3">'+esc([p.title,p.email].filter(Boolean).join(' · '))+'</span></span>'+state+'</div>'+
+        (r.error?'<div class="fs-12 c-red">'+esc(r.error)+'</div>':'')+body+'</div>';
+    }).join('');
+    return '<div class="card cp">'+
+      '<div class="ogc-draft-h"><b>'+b.length+' email'+(b.length===1?'':'s')+'</b>'+
+        '<button type="button" class="btn btn-primary btn-sm" onclick="ogcSendAll()" '+((ready&&!g.batchSending)?'':'disabled')+'>'+(g.batchSending?'Sending…':'Send all ('+ready+')')+'</button></div>'+
+      batchSeqHtml()+
+      '<div class="fs-11_5 c-text3 ogc-sig">Each goes from your outreach mailbox, with its signature added when it is sent.</div>'+
+      rows+'</div>';
+  }
+
   window.renderOutreachGenBody=function(){
     var g=G();
     if(!g.sender&&!g.senderLoading) setTimeout(loadOutreachSender,0);
@@ -846,7 +1055,7 @@
     return senderCard()+meterCard()+err+
       '<div class="og-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">'+
         '<div>'+recipientCard()+inputsCard()+'</div>'+
-        '<div>'+outputCard()+sentCard()+'</div>'+
+        '<div>'+(g.recipMode==='company'?batchCard():outputCard())+sentCard()+'</div>'+
       '</div>';
   };
 })();
