@@ -205,7 +205,7 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
 - **Never `git add -A`** where an agent is working — stage the paths the commit is about. **Never pipe `git push`
   into `tail`.** Before moving any file read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP".
 
-## How I write code (D-0197, adapted from "Ponytail", owner's yes 2 Nov 2026)
+## How I write code (D-0198, adapted from "Ponytail", owner's yes 2 Nov 2026)
 
 - **Before new code, take the first option that fully works:** does it need to exist at all → reuse what PACE already has → a built-in Node/browser feature → a library already installed → only then new code.
 - **No new library for something a few lines can do.**

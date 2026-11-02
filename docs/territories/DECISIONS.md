@@ -2336,6 +2336,6 @@ Owner (answers, 2 Nov): "Keep the AI write option as it can be used to create th
 
 Owner: "do not put the 10 number as default, let the user choose the number, maybe 1,2,3,4 anything keep the admin limit on the higher end not lower end." Admin ceiling `sequence_versions_max` starts at **20** (admin can lower it); each person picks 1…ceiling for their own emails; before they pick, they **keep what they have** (own email + the 0–2 versions already saved). Replaces D-0195's "10 in total". Same message: "Yes, put it live" for R-351 (the email ID fix) and the AI call record (migration 071 applied live 2 Nov).
 
-### D-0197 — Adopt five "Ponytail" coding rules into CLAUDE.md, not the plugin (2 Nov 2026)
+### D-0198 — Adopt five "Ponytail" coding rules into CLAUDE.md, not the plugin (2 Nov 2026)
 
 Owner uploaded the Ponytail plugin (a rulebook for the coding AI, not a product feature) and said "Yes add those" to the recommendation: copy only the parts not already in PACE's rules (choice ladder, no library for a few lines, `shortcut:` comments, end each reply with what was skipped) plus one line that PACE's growth rule wins on conflict. The plugin and its hooks are NOT installed (they duplicate existing rules and would add text to every message).
