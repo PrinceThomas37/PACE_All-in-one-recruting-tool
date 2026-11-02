@@ -2339,3 +2339,7 @@ Owner: "do not put the 10 number as default, let the user choose the number, may
 ### D-0197 — Work arrangement detail: a lead whose posting does not say loses that sentence (2 Nov 2026)
 
 Owner: "A. Leave the sentence out" — the new "Work arrangement" detail (full phrase: "fully on-site (Dallas, TX)", "100% remote", "hybrid (3 days in office)") behaves like "Pay, if known": when the posting does not say, the sentence holding it is dropped and the email goes on time. Read by keyword rules (no AI). Also: the Compose generator stays visible with AI off and writes by rules ("make it work without AI if AI is not enabled").
+
+### D-0198 — Adopt five "Ponytail" coding rules into CLAUDE.md, not the plugin (2 Nov 2026)
+
+Owner uploaded the Ponytail plugin (a rulebook for the coding AI, not a product feature) and said "Yes add those" to the recommendation: copy only the parts not already in PACE's rules (choice ladder, no library for a few lines, `shortcut:` comments, end each reply with what was skipped) plus one line that PACE's growth rule wins on conflict. The plugin and its hooks are NOT installed (they duplicate existing rules and would add text to every message).
