@@ -2319,3 +2319,11 @@ Owner: "Company first" (R-320): company (+ location) → its people from the com
 ### D-0192 — PACE repairs its own missed outreach; sign-in does not wait for the lead list (30 Oct 2026)
 
 Owner: "initiate those emails again … what I am concerned is that I have to come back every day on this outreach issue". Yes to: an automatic check that writes the first emails of assigned leads that never got one (R-346); each person's send queue run on its own with a "Sending has stalled" warning and an automatic fresh run after an hour (R-347); sign-in opens the app without waiting for the lead list, and the list stops reading the job-description text (R-348 steps 1–2, migration 070 — owner's go for "one small database change"). Page-by-page lead loading (R-349) is for the week of 2 Nov. The ~$7/month always-on server: not now — decide after the stall warning has been watched.
+
+### D-0193 — Interview mail leaves from the mailbox the sender picks; no "main" mailbox (2 Nov 2026)
+
+Owner: "There is no main email ID for any user, all emails are equally important, i just want option to choose the emails from which the interview email should go to client and candidate without causing any error." No primary is set for anyone. The From picker sends exactly what it shows; until someone picks, the same mailbox is shown every time (oldest connected). R-351.
+
+### D-0194 — R-343 first half, with an import progress line and an AI timing record (2 Nov 2026)
+
+Owner: "Start the build." First half = up to 10 versions per step (admin-set), "Write versions with AI", the job posting read once per lead in the background (keyword rules for skills / on-site-remote, AI for industry / project area), a progress line on the Leads tab and an "import finished" notice for the importer and **their own team's RA Lead only** ("their own team"), and a record of every AI call (what for, model, seconds, tries, success, text in/out) shown in Admin with an estimated paid-model cost. New database table: owner "DO it" (go-ahead to apply live). Records kept **120 days** (owner changed 90 → 120). Owner: "Ask me anything that you need clarity on … Do not guess work on your own."
