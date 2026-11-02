@@ -104,6 +104,7 @@ window.openIntegrationsModal=function(){
     .catch(function(e){ closeModal(); showToast('Failed to load integrations: '+(e&&e.message||e),'error'); });
   // The budget loads alongside: an empty meter is fine, a missing one is not —
   // nobody should paste a key without seeing what it is allowed to spend.
+  STATE.aiUsage=null; STATE._aiUsageDays=30; loadAiUsage();
   apiGet('/admin/ai-budget').then(function(r){
     STATE.aiBudget=r; renderIntegrationsModal();
     // Never tested, but a provider IS configured → answer the question without
@@ -175,7 +176,7 @@ function renderIntegrationsModal(){
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
-      (cat.category==='AI'?aiProviderNote()+aiHealthCard()+aiBudgetCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
+      (cat.category==='AI'?aiProviderNote()+aiHealthCard()+aiBudgetCard()+aiUsageCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
@@ -365,6 +366,46 @@ function aiBudgetCard(){
         rows+
       '</table>'+aiProviderLimitsBlock(b.provider_limits):'')+
   '</div>';
+}
+// D-0194 (owner, 2 Nov 2026): "how much time does it take for AI … and how many times it has to do it to be successful, for us to
+// calculate the cost and AI model later". One line per kind of AI request, from the record of every call (GET /admin/ai-calls).
+// The cost is only shown when the admin has typed a paid model's prices (Admin settings → AI); PACE never makes a price up.
+function loadAiUsage(){
+  apiGet('/admin/ai-calls?days='+(STATE._aiUsageDays||30)).then(function(r){ STATE.aiUsage=r; if(STATE.integrations) renderIntegrationsModal(); })
+    .catch(function(e){ STATE.aiUsage={ error:(e&&e.message)||'Could not load' }; if(STATE.integrations) renderIntegrationsModal(); });
+}
+window.setAiUsageDays=function(d){ STATE._aiUsageDays=d; STATE.aiUsage=null; renderIntegrationsModal(); loadAiUsage(); };
+function aiUsageCard(){
+  var u=STATE.aiUsage, days=STATE._aiUsageDays||30;
+  var pick=[7,30,120].map(function(d){ return '<button type="button" class="btn btn-sm '+(d===days?'btn-primary':'btn-outline')+'" onclick="setAiUsageDays('+d+')">'+d+' days</button>'; }).join(' ');
+  var head='<div class="fs-13" style="font-weight:600;margin-bottom:2px">AI usage — what each request took</div>'+
+    '<div class="fs-11_5 c-text3" style="line-height:1.5;margin-bottom:8px">Every AI request is recorded for 120 days: how long it took, how many tries it needed, and how much text went in and out. Use it to judge speed, reliability and what a paid model would cost.</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+pick+'</div>';
+  var box=function(inner){ return '<div class="ai-usage-card" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+head+inner+'</div>'; };
+  if(!u) return box('<div class="fs-11_5 c-text3">Loading…</div>');
+  if(u.error) return box('<div class="fs-11_5 c-red">Could not load the AI usage: '+htmlEsc(u.error)+'</div>');
+  if(!u.all||!u.all.calls) return box('<div class="fs-11_5 c-text3">No AI requests in the last '+days+' days yet.</div>');
+  var labels=u.labels||{};
+  var n=function(x,dp){ return x==null?'—':Number(x).toLocaleString(undefined,{maximumFractionDigits:dp||0,minimumFractionDigits:dp||0}); };
+  var pc=function(x){ return x==null?'—':Math.round(x*100)+'%'; };
+  var money=function(x){ return x==null?'—':'$'+Number(x).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:x<1?4:2}); };
+  var row=function(l,strong){
+    var name=l.feature==='All'?'All requests':(labels[l.feature]||l.feature);
+    var models=(l.models||[]).slice(0,2).map(function(m){ return htmlEsc(m.model)+' ('+m.calls+')'; }).join('<br>')||'—';
+    return '<tr'+(strong?' style="font-weight:600"':'')+'><td>'+htmlEsc(name)+'</td><td class="num">'+n(l.calls)+'</td><td class="num">'+pc(l.success_rate)+'</td>'+
+      '<td class="num">'+n(l.avg_seconds,1)+'</td><td class="num">'+n(l.avg_tries,1)+'</td><td class="num">'+n(l.avg_input_tokens)+' / '+n(l.avg_output_tokens)+'</td>'+
+      (u.priced?'<td class="num">'+money(l.est_cost)+'</td><td class="num">'+money(l.est_cost_per_1000)+'</td>':'')+
+      '<td class="fs-10_5 c-text3">'+models+'</td></tr>';
+  };
+  var table='<div class="ai-usage-scroll"><table class="ai-usage-table fs-11"><thead><tr class="c-text3 fs-9_5">'+
+    '<th>Request</th><th class="num">Requests</th><th class="num">Worked</th><th class="num">Avg seconds</th><th class="num">Avg tries</th><th class="num">Avg text in / out (tokens)</th>'+
+    (u.priced?'<th class="num">Est. cost</th><th class="num">Per 1,000</th>':'')+'<th>Answered by</th></tr></thead><tbody>'+
+    (u.lines||[]).map(function(l){ return row(l,false); }).join('')+row(u.all,true)+'</tbody></table></div>';
+  var note=u.priced
+    ? '<div class="fs-11 c-text3" style="margin-top:6px">Cost estimated at $'+u.prices.in+' (text sent) and $'+u.prices.out+' (text written) per million tokens — the prices in Admin settings → AI. Today\'s free models cost nothing.</div>'
+    : '<div class="fs-11 c-text3" style="margin-top:6px">No cost shown: type a paid model\'s prices in Admin settings → AI ("Paid AI price") to see what these requests would cost.</div>';
+  var fails=u.all.failed||u.all.over_budget ? '<div class="fs-11 c-text3" style="margin-top:4px">Did not work: '+n(u.all.failed)+' failed at every model tried · '+n(u.all.over_budget)+' skipped because the day\'s budget was used.</div>' : '';
+  return box(table+note+fails+(u.truncated?'<div class="fs-11 c-text3">Only the newest 50,000 requests are counted.</div>':''));
 }
 // R-040: PACE's own budget above is what PACE ALLOWS. This is what each AI
 // account says it allows, read from the numbers the provider sends back with
