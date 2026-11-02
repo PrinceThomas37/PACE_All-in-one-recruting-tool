@@ -168,8 +168,9 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   // (migration 037) and the two OAuth token tables that migration 039 gives an
   // org_id — all three registered ahead of being applied, because the registry
   // states what a table IS and the code that touches it degrades safely.
-  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048/052/058/063/067 add',
-    TENANT_TABLES.size === 50, String(TENANT_TABLES.size));
+  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048/052/058/063/067/071 add',
+    TENANT_TABLES.size === 51, String(TENANT_TABLES.size));
+  ok('ai_calls (migration 071, D-0194) is a tenant table', TENANT_TABLES.has('ai_calls') && !GLOBAL_TABLES.has('ai_calls'));
   ok('scheduled_sends (migration 067) is a tenant table', TENANT_TABLES.has('scheduled_sends') && !GLOBAL_TABLES.has('scheduled_sends'));
   // Migration 063 — a mailbox connected with an app password; holds an ENCRYPTED password, so it is tenant data like the OAuth tokens.
   ok('smtp_credentials (migration 063) is a tenant table', TENANT_TABLES.has('smtp_credentials') && !GLOBAL_TABLES.has('smtp_credentials'));
