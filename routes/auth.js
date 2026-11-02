@@ -137,6 +137,30 @@ router.get('/users', auth, async (req, res) => {
   const warnLine = async (req) => getSetting(supabase, 'daily_limit_warn_above', orgIdFor(req) || undefined).catch(() => null);
 
 // Who changed which mailbox's daily limit, newest first (admin only). Literal path, above every '/users/:id…' route.
+// D-0195 (owner, 2 Nov 2026): AI on/off per person. Literal paths, above every '/users/:id…' route.
+const aiAccess = require('../services/ai-access');
+router.get('/users/ai-access', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    const { data, error } = await withOrg(supabase.from('users').select('id').is('deleted_at', null), req);
+    if (error) throw error;
+    res.json({ access: await aiAccess.forUsers(supabase, (data || []).map((u) => u.id)) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.get('/me/ai-access', auth, async (req, res) => {
+  try { res.json({ on: await aiAccess.isOn(supabase, req.user.id), message: aiAccess.OFF_MESSAGE }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put('/users/:id/ai-access', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (typeof (req.body || {}).on !== 'boolean') return res.status(400).json({ error: 'Say on (true) or off (false).' });
+    if (!(await guardUser(req, res, req.params.id))) return;          // same company only
+    await aiAccess.set(supabase, req.params.id, req.body.on);
+    res.json({ id: req.params.id, on: req.body.on });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/users/email-limit-changes', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });

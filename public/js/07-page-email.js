@@ -646,7 +646,7 @@ function renderEmail(){
             // R-325 (owner, 29 Oct: "yes"): the same ✨ Rewrite with AI as the Find Leads review window, for a lead's FIRST email.
             (!pe.followup_type||pe.followup_type==='initial'?(function(){ var rw=(STATE._pendRw||{})[pe.id]||{};
               return (rw.note?'<div class="fs-12 c-text2" role="status" style="flex-basis:100%">'+htmlEsc(rw.note)+'</div>':'')+
-                '<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteAi(\''+pe.id+'\')">'+(rw.busy?'Working…':'✨ Rewrite with AI')+'</button>'+
+                '<button data-ai="1" class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteAi(\''+pe.id+'\')">'+(rw.busy?'Working…':'✨ Rewrite with AI')+'</button>'+
                 (rw.prev?'<button class="btn btn-outline btn-sm" '+(rw.busy?'disabled ':'')+'onclick="pendRewriteUndo(\''+pe.id+'\')">Undo rewrite</button>':''); })():'')+
             '<button class="btn btn-outline btn-sm" onclick="openDeletePendingConfirm([\''+pe.id+'\'])" title="Remove this email from Pending — it will not be sent">Delete email</button>'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
@@ -836,7 +836,7 @@ function renderEmail(){
         '<div class="fgrp"><label class="flbl">Subject</label><input class="inp" id="'+activeTmpl.subjId+'" value="'+htmlEsc(activeTmpl.subjVal)+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'subject\')"/></div>'+
         '<div class="fgrp"><label class="flbl">Body</label><textarea class="txta w100" style="min-height:200px" id="'+activeTmpl.bodyId+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'body\')">'+htmlEsc(activeTmpl.bodyVal)+'</textarea></div>'+
         '<div class="seq-ai">'+
-          '<button type="button" class="btn btn-outline btn-sm" onclick="planDraftAi(\'rewrite\')">Rewrite with AI</button>'+
+          '<button data-ai="1" type="button" class="btn btn-outline btn-sm" onclick="planDraftAi(\'rewrite\')">Rewrite with AI</button>'+
           '<button type="button" class="btn btn-outline btn-sm" onclick="planDraftAi(\'variant\')">Write a variant</button>'+
           '<span class="fs-12 c-text3" id="plan-ai-note"></span>'+
         '</div>'+

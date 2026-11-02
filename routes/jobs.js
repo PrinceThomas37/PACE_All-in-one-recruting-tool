@@ -60,7 +60,8 @@ module.exports = (ctx) => {
     loadAllJobs, JOB_SELECT, getTimezoneFromLocation, persistLearnedSkills,
     orgIdFor, withOrg, orgStamp, userOrgId, mailboxOrgId,
   } = ctx;
-  const { reportingChainIds } = require('../hierarchy')(supabase);
+  const importRuns = require('../services/import-runs');   // R-343 step 4: import progress + finished notice
+const { reportingChainIds } = require('../hierarchy')(supabase);
   const leadDb = ctx.db || createDb(supabase);   // org-scoped access for the add rule (services/lead-check.js)
 
   // The caller's D-0034 view scope — self + reporting chain, or the whole org
@@ -254,6 +255,22 @@ function cleanImportExtra(x) {
   return Object.keys(out).length ? out : null;
 }
 
+// R-343 step 4 (owner, 2 Nov 2026): imports running now and finished in the last day — your own, your team's (an RA Lead's
+// reporting chain), or the company's for an admin.
+router.get('/imports/recent', auth, async (req, res) => {
+  try {
+    const orgId = orgIdFor(req), isAdmin = hasRole(req, 'admin');
+    const teamIds = isAdmin ? [] : await reportingChainIds(req.user.id, orgId);
+    const since = new Date(Date.now() - importRuns.FINISHED_SHOWN_MS).toISOString();
+    let q = supabase.from('activity_log').select('id,org_id,user_id,created_at,new_value').eq('action_type', 'import_finished').gte('created_at', since)
+      .order('created_at', { ascending: false }).limit(50);
+    if (orgId) q = q.eq('org_id', orgId);
+    if (!isAdmin) q = q.in('user_id', [req.user.id].concat(teamIds));
+    const { data } = await q;
+    res.json({ runs: importRuns.visible({ orgId, viewerId: req.user.id, teamIds, isAdmin, stored: (data || []).map(importRuns.fromLog) }) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/jobs/bulk', auth, async (req, res) => {
   try {
     const { jobs } = req.body;
@@ -350,8 +367,23 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         }
       }
     } catch (e) { /* history lookup is best-effort — never block an import */ }
-    const { data: insertedJobs, error: jobErr } = await supabase.from('jobs').insert(jobRows).select('id');
-    if (jobErr) throw jobErr;
+    // R-343 step 4: the import is visible while it runs (the importer, their team's RA Lead, admins) and says when it finished.
+    // Written in batches of 50 so a big sheet never meets the database's time limit in one statement (the R-346 lesson) and
+    // the progress line can move.
+    const run = importRuns.start({ orgId: orgIdFor(req), userId: req.user.id, userName: req.user.name || req.user.email || '', total: jobRows.length });
+    const insertedJobs = [];
+    try {
+      for (let i = 0; i < jobRows.length; i += 50) {
+        const { data: part, error: jobErr } = await supabase.from('jobs').insert(jobRows.slice(i, i + 50)).select('id');
+        if (jobErr) throw jobErr;
+        insertedJobs.push(...(part || []));
+        importRuns.progress(run.id, insertedJobs.length);
+      }
+    } catch (e) {
+      const failedRun = importRuns.finish(run.id, { failed: true, imported: insertedJobs.length, error: String(e.message || e).slice(0, 200) });
+      try { await supabase.from('activity_log').insert(importRuns.logRow(failedRun)); } catch (_) {}
+      throw e;
+    }
     const contactRows = [];
     // What the tidy-up changed in the sheet's contacts (an address that sat in the Phone column, several
     // numbers in one cell…) — counted so the import can SAY so; nothing is repaired silently (R-014, D-0070).
@@ -373,7 +405,9 @@ router.post('/jobs/bulk', auth, async (req, res) => {
       await supabase.from('contacts').insert(contactRows);
     }
     const invalidContacts = contactRows.filter(c => c.email_status === 'invalid').length;
-    res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped,
+    const doneRun = importRuns.finish(run.id, { imported: insertedJobs.length, contacts: contactRows.length, invalid_emails: invalidContacts, skipped });
+    try { await supabase.from('activity_log').insert(importRuns.logRow(doneRun)); } catch (_) { /* the notice is best-effort; the leads are saved */ }
+    res.status(201).json({ run_id: run.id, imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped,
       owned: false, job_ids: [],
       contactFixes, contactFixesNote: contactPoints.describeImportFixes(contactFixes),
       tidied: tidiedLeads, tidiedNote: tidiedLeads ? tidiedLeads + (tidiedLeads === 1 ? ' lead had' : ' leads had') + ' a value in the wrong column (for example a description under "Found by") — moved to the lead\'s Notes, nothing lost.' : '' });

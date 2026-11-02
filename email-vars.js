@@ -344,7 +344,7 @@ function resolveVar(vars, key) {
 // ── A DETAIL WHOSE SENTENCE GOES WHEN IT IS MISSING (owner, 15 Oct 2026, D-0151 / D-0152) ─────────────────────────────────────────
 // Pay is known on about one lead in four. "The pay is {{pay}}." for a lead without pay must not go out as "The pay is ." — the whole
 // sentence holding the detail is left out instead. Only the details listed here behave like this; every other detail is unchanged.
-const SENTENCE_DROPS_WHEN_EMPTY = ['pay'];
+const SENTENCE_DROPS_WHEN_EMPTY = ['pay', 'work_arrangement'];   // work_arrangement: D-0197, a posting that does not say
 function dropEmptyDetailSentences(tmpl, map) {
   const t = String(tmpl == null ? '' : tmpl);
   const empty = SENTENCE_DROPS_WHEN_EMPTY.filter((k) => !String(map[k] == null ? '' : map[k]).trim());
@@ -424,6 +424,8 @@ function ensureJobsListed(filledBody, template, job) {
   return paras.join('\n\n');
 }
 
+const workArrangement = require('./services/work-arrangement');   // D-0197
+
 /**
  * Build merge variables from job, contact, and sender display name.
  */
@@ -467,6 +469,9 @@ function buildEmailVars({ job, contact, senderDisplayName }) {
     salary_range: salaryDisplay,
     salary_line: salaryLine,
     pay: salaryDisplay,                          // D-0151: in a template, a missing pay drops its whole sentence (fillTemplate)
+    // D-0197: "fully on-site (Dallas, TX)" / "100% remote" / "hybrid (3 days in office)" from the posting, by rules; '' = not said
+    // → its sentence is left out (fillTemplate). A stored reading on the lead (requirements.work_arrangement) wins.
+    work_arrangement: typeof req.work_arrangement === 'string' ? req.work_arrangement : workArrangement.read(research.jd_raw || '', loc).phrase,
     local_line: localLine,
     city
   };

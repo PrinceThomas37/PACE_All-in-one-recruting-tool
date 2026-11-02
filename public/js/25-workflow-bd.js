@@ -789,7 +789,7 @@
         '<label class="fs-11_5 c-text2">Job Description <span class="c-red">*</span></label>'+
         '<div style="display:flex;gap:6px;align-items:center">'+
           (f._jdPrev!=null?'<button type="button" class="btn btn-sm btn-outline" onclick="bdUndoJdRewrite()" style="font-size:12px">Undo rewrite</button>':'')+
-          '<button type="button" id="bd-jd-ai" class="btn btn-sm btn-outline" onclick="bdRewriteJd()" style="font-size:12px">'+(f._jdBusy?'Rewriting…':'✨ Rewrite with AI')+'</button>'+
+          '<button data-ai="1" type="button" id="bd-jd-ai" class="btn btn-sm btn-outline" onclick="bdRewriteJd()" style="font-size:12px">'+(f._jdBusy?'Rewriting…':'✨ Rewrite with AI')+'</button>'+
         '</div>'+
       '</div>'+
       (url?'<div class="fs-12 c-text2" style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
@@ -1719,7 +1719,7 @@
           '<label class="fs-12_5" style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer"><input type="checkbox" id="pjd-replace" style="width:15px;height:15px;accent-color:var(--accent)"/> Replace the current job description with this text <span class="c-text3">— keeps the old one viewable until the job ends</span></label>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
-          '<button class="btn btn-outline" onclick="bdGeneratePostingJD(\''+jid+'\')">✨ Generate from internal JD</button>'+
+          '<button data-ai="1" class="btn btn-outline" onclick="bdGeneratePostingJD(\''+jid+'\')">✨ Generate from internal JD</button>'+
           '<div style="display:flex;gap:8px">'+
             '<button class="btn btn-outline" onclick="bdCopyPostingJD()">Copy</button>'+
             '<button class="btn btn-outline" onclick="closeModal()">Close</button>'+

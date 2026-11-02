@@ -370,7 +370,7 @@
         '<div class="fs-12" style="font-weight:600">How the role is described</div>'+
         '<div style="display:flex;align-items:center;gap:8px">'+
           '<span class="bdg '+(isAi?'bdg-blue':'')+' fs-10">'+(isAi?'written by AI':'built-in writer')+'</span>'+
-          '<button class="btn btn-outline btn-sm" '+(s.briefLoading?'disabled':'')+' onclick="candOutreachWriteBrief()">'+
+          '<button data-ai="1" class="btn btn-outline btn-sm" '+(s.briefLoading?'disabled':'')+' onclick="candOutreachWriteBrief()">'+
             (s.briefLoading?'Writing…':(isAi?'Rewrite':'Write it with AI'))+'</button>'+
         '</div>'+
       '</div>'+

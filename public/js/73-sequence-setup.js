@@ -27,7 +27,9 @@
     // 29 Oct (owner: "project area is in my template, the AI takes it from the JD, but it is not in the drop-down"): the
     // server always fills it (email-vars.js — the company's line of work from the job, else its industry).
     {k:'company_service', label:'project area', menu:'Project area (from the job)'},
-    {k:'pay', label:'pay', menu:'Pay, if known', optional:true}
+    {k:'pay', label:'pay', menu:'Pay, if known', optional:true},
+    // D-0197 (owner, 2 Nov 2026): on-site / remote / hybrid from the posting, a full phrase; not said → its sentence is left out.
+    {k:'work_arrangement', label:'work arrangement', menu:'Work arrangement (on-site / remote / hybrid), if known', optional:true}
   ];
   // Words for details an older sequence may already use, so they show as words too.
   var MORE={ ln:'last name', desig:'their title', loc:'location', jobs:'all the jobs', skills_line:'skills phrase', salary_line:'salary',
@@ -50,7 +52,7 @@
   function fresh(){ return { loaded:false, err:'', step:1, mode:null, first:{subject:'',body:'',versions:[]}, fus:[], max:5, sample:null,
     menu:'', busy:'', msg:{}, stuck:false, offer:'', preview:null, aitest:null, saved:false, saving:false,
     teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{}, target:null,
-    scope:'all', mbs:[], mbText:{}, mbTab:'person', personSave:null }; }
+    scope:'all', mbs:[], mbText:{}, mbTab:'person', personSave:null, vCount:null, vMax:20 }; }
   function teachFu(i){ while(Q.teach.fus.length<=i) Q.teach.fus.push({angle:Q.teach.fus.length?'detail':'nudge',note:''}); return Q.teach.fus[i]; }
 
   // ── text with details ↔ the editor's html ──────────────────────────────────
@@ -123,6 +125,8 @@
     loadSenders();
     apiGet('/my-setup/sequence').then(function(r){
       Q.loaded=true; Q.mode=r.mode||null; Q.max=r.followup_max==null?5:r.followup_max; Q.sample=r.sample||null;
+      // D-0196: the person's own number of versions (null = not chosen yet) and the admin's ceiling.
+      Q.vCount=r.versions_count==null?null:Number(r.versions_count); Q.vMax=Number(r.versions_max)||20;
       Q.first={ subject:tokensToHtml(r.first&&r.first.subject), body:tokensToHtml(r.first&&r.first.body),
         versions:((r.first&&r.first.versions)||[]).map(function(v){ return {subject:v.subject||'', body:v.body||''}; }) };
       Q.fus=(r.followups||[]).map(function(f){ return { day:f.day, subject:f.subject||'', body:tokensToHtml(f.body), thread:f.thread==='new'?'new':'same', versions:(f.versions||[]).map(function(v){ return {subject:v.subject||'',body:v.body||''}; }) }; });
@@ -234,7 +238,7 @@
     return { mode:Q.mode,
       first:{ subject:htmlToTokens(fs).replace(/\n/g,' ').trim(), body:htmlToTokens(fb).trim(), versions:Q.mode==='template'?Q.first.versions:[] },
       followups:Q.fus.map(function(f,i){ var p=pt&&pt.fus[i]; return { day:Number(f.day), subject:p?p.subject:f.subject, body:htmlToTokens(p?p.body:f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }),
-      teach:teachPayload() };
+      teach:teachPayload(), versions_count:Q.mode==='template'&&Q.vCount?Q.vCount:undefined };
   }
   function teachPayload(){
     var t=Q.teach; return { purpose:t.purpose, use:t.use.slice(), end:t.end, len:t.len, voice:t.voice,
@@ -252,21 +256,36 @@
   function msgHtml(key){ var m=Q.msg[key]; return m?'<p class="sq-hint" aria-live="polite">'+esc(m)+'</p>':''; }
   function dayOptions(cur, min){ var o=''; for(var n=Math.max(1,min);n<=90;n++){ if(n>30&&n%7) continue; o+='<option value="'+n+'"'+(n===Number(cur)?' selected':'')+'>'+n+(n===1?' day':' days')+'</option>'; } return o; }
   function versionsHtml(slot, list, skel){
-    var first=slot==='first', room=2-list.length, busy=!!Q.busy;
+    var first=slot==='first', busy=!!Q.busy;
+    // D-0196: room = the person's chosen number − their own email − what is already there. Not chosen yet: keep what they have, and
+    // the button waits for a number (the card above).
+    var room=Q.vCount?Math.max(0,Q.vCount-1-list.length):0;
     var h=list.map(function(v,i){
       return '<div class="sq-ver"><div class="sq-ver-h"><span>Version '+(i+2)+'</span><button type="button" class="btn btn-sm btn-outline" data-sq="rmv" data-slot="'+slot+'" data-i="'+i+'">Remove</button></div>'+
         '<div class="sq-ver-t">'+(skel?'':esc((first?'Subject: '+fill(v.subject||htmlToTokens(Q.first.subject))+'\n\n':'')+fill(v.body)))+'</div></div>';
     }).join('');
-    if(room>0) h+='<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
-      (Q.busy==='vary'+slot?'Writing…':'+ Add '+(first&&room>1?'2 versions':'a version')+' with AI')+'</button></div>';
-    h+='<p class="sq-hint">'+(list.length?'PACE picks one version at random for each lead.':'Optional. A version says the same thing in other words, so leads do not all get the same email.')+'</p>'+msgHtml('vary'+slot);
+    if(room>0) h+='<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
+      (Q.busy==='vary'+slot?('Writing '+(Q.varyAt||1)+' of '+(Q.varyOf||room)+'…'):'Write '+room+' version'+(room===1?'':'s')+' with AI')+'</button></div>';
+    var hint=!Q.vCount?'Choose how many versions you want (top of the page) to let AI write them.'
+      :(list.length+1>Q.vCount?'You have '+(list.length+1)+' versions but chose '+Q.vCount+' — remove '+(list.length+1-Q.vCount)+' before saving.'
+      :Q.vCount===1?'You chose 1 version: only your own email goes out.'
+      :(list.length+1)+' of '+Q.vCount+' versions'+(room?'':' — all written')+'. PACE picks one at random for each lead.');
+    h+='<p class="sq-hint" data-ai="1">'+hint+'</p>'+msgHtml('vary'+slot);
     return h;
+  }
+  // D-0196 (owner, 2 Nov 2026): "let the user choose the number, maybe 1,2,3,4 anything" — up to the admin's ceiling.
+  function versionCountCard(){
+    var o='<option value=""'+(Q.vCount?'':' selected')+' disabled>Choose…</option>';
+    for(var n=1;n<=(Q.vMax||20);n++) o+='<option value="'+n+'"'+(n===Q.vCount?' selected':'')+'>'+n+(n===1?' (only my own email)':' (my email + '+(n-1)+' AI version'+(n===2?'':'s')+')')+'</option>';
+    return '<div class="card sq-card" data-ai="1"><h2 class="sq-h2">How many versions of each email?</h2>'+
+      '<p class="sq-sub">Your own email is version 1. AI writes the rest from it — same facts, other words — and PACE picks one at random for each lead, so your leads do not all get the same email. Your company allows up to '+(Q.vMax||20)+'.</p>'+
+      '<select class="sq-sel" data-sq-vcount="1" aria-label="How many versions of each email">'+o+'</select></div>';
   }
   function editor(id, html, ph, one, skel){
     return '<div id="'+id+'" class="sq-ed'+(one?' is-one':'')+'" contenteditable="true" role="textbox"'+(one?'':' aria-multiline="true"')+' data-ph="'+esc(ph)+'">'+(skel?'':html)+'</div>';
   }
   function modeCards(){
-    function c(m,t,l){ return '<button type="button" class="sq-choice" role="radio" aria-checked="'+(Q.mode===m)+'" data-sq="mode" data-mode="'+m+'"><b>'+t+'</b><span>'+l+'</span></button>'; }
+    function c(m,t,l){ return '<button type="button"'+(m==='ai'?' data-ai="1"':'')+' class="sq-choice" role="radio" aria-checked="'+(Q.mode===m)+'" data-sq="mode" data-mode="'+m+'"><b>'+t+'</b><span>'+l+'</span></button>'; }
     return '<div class="card sq-card"><h2 class="sq-h2">How should your first email be written?</h2>'+
       '<div class="sq-choices" role="radiogroup" aria-label="How your first email is written">'+
       (Q.target&&Q.target.cand
@@ -325,16 +344,18 @@
     var h=named()?nameCard(skel)+(cand?modeCards():''):modeCards();
     if(ai&&!named()) h+=teachCard(skel);
     h+=perIdHtml();
+    h+=(window.aiOffNote?aiOffNote():'');   // D-0195: AI off for this person — one plain line
+    if(!ai&&!cand&&Q.mbTab==='person') h+=versionCountCard();
     h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
       (ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
         :'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>'):'')+
       '<label class="sq-lbl" for="sq-subj">Subject</label>'+editor('sq-subj',Q.first.subject,'A short subject line',true,skel)+
       '<label class="sq-lbl" for="sq-body">Message</label>'+editor('sq-body',Q.first.body,'Write it the way you would write to one person: why you are writing, what you can offer, and one question.',false,skel)+
-      '<div class="sq-row">'+menuHtml('first')+(cand?'':(ai?'<button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
-        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>'))+'</div>'+
+      '<div class="sq-row">'+menuHtml('first')+(cand?'':(ai?'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
+        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>'))+'</div>'+
       (ai||cand?'':'<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
         '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
-        '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
+        '<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
       (cand?'':toolsHtml('first'))+
       msgHtml('first')+(ai||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
@@ -367,7 +388,7 @@
   function fuEditorHtml(f,i,skel){
     var busy=!!Q.busy, cand=named()&&Q.target.cand;
     return editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
-      '<div class="sq-row">'+menuHtml('fu'+i)+(cand?'':'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>'+
+      '<div class="sq-row">'+menuHtml('fu'+i)+(cand?'':'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>'+
       (cand?'':toolsHtml(String(i)));
   }
   // "Rewrite with AI" and "Check for spam triggers" on an email already written (the old My wording tab's two buttons, R-286).
@@ -382,7 +403,7 @@
         '<div class="fs-11 c-text3">Checked as written just now — press the button again after you edit.</div></div>';
     }
     return '<div class="sq-row sq-tools">'+
-      '<button type="button" class="btn btn-sm btn-outline" data-sq="rewrite" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+(Q.busy==='rewrite'+slot?'Rewriting…':'Rewrite with AI')+'</button>'+
+      '<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="rewrite" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+(Q.busy==='rewrite'+slot?'Rewriting…':'Rewrite with AI')+'</button>'+
       ((Q.rwUndo||{}).slot===slot?'<button type="button" class="btn btn-sm btn-outline" data-sq="rwundo" data-slot="'+slot+'">Undo the rewrite</button>':'')+
       '<button type="button" class="btn btn-sm btn-outline" data-sq="spam" data-slot="'+slot+'" title="Looks for spam-trigger words, too many links, ALL-CAPS and other things that send mail to junk. Nothing is saved or sent.">Check for spam triggers</button>'+
     '</div>'+box;
@@ -579,10 +600,10 @@
     saveEditors();
     var first=slot==='first', f=first?null:Q.fus[Number(slot)];
     var subject=first?htmlToTokens(Q.first.subject):'', body=htmlToTokens(first?Q.first.body:f.body);
-    var list=first?Q.first.versions:f.versions, want=first?Math.min(2,2-list.length):1;
+    var list=first?Q.first.versions:f.versions, want=Q.vCount?Math.max(0,Q.vCount-1-list.length):0;
     if(!hasWords(body)){ say('vary'+slot, first?'Write your first email first.':'Write this follow-up first.'); return repaint(); }
     if(want<=0) return;
-    Q.busy='vary'+slot; say('vary'+slot,''); repaint();
+    Q.busy='vary'+slot; Q.varyAt=1; Q.varyOf=want; say('vary'+slot,''); repaint();
     var got=0, note='';
     function one(){
       return apiPost(draftUrl(),{mode:'variant', purpose:first?'first':'followup', subject:subject||'(follow-up)', body:body}).then(function(r){
@@ -590,8 +611,11 @@
         else note=(r&&r.note)||'The AI could not write a version just now.';
       });
     }
-    var chain=one(); if(want>1) chain=chain.then(function(){ if(!note) return one(); });
-    chain.then(function(){ Q.busy=''; Q.preview=null; say('vary'+slot, note&&!got?note:(note?'One version was written; '+note.charAt(0).toLowerCase()+note.slice(1):'')); repaint(); })
+    // One AI request per version, one after another (each is checked on its own; a failed one stops the run and says why).
+    var chain=one();
+    for(var k=1;k<want;k++) chain=chain.then(function(){ if(note) return; Q.varyAt=got+1; repaint(); return one(); });
+    chain.then(function(){ Q.busy=''; Q.preview=null;
+      say('vary'+slot, note&&!got?note:(note?got+' version'+(got===1?' was':'s were')+' written; '+note.charAt(0).toLowerCase()+note.slice(1):'')); repaint(); })
       .catch(function(e){ Q.busy=''; say('vary'+slot,(e&&e.message)||String(e)); repaint(); });
   }
   function test(){
@@ -744,6 +768,7 @@
   });
   document.addEventListener('change',function(ev){
     var t=ev.target; if(!t.closest||!t.closest('#sq-root')) return;
+    if(t.getAttribute('data-sq-vcount')){ saveEditors(); Q.vCount=Number(t.value)||null; Q.saved=false; paint(true); return; }
     var di=t.getAttribute('data-sq-day'); if(di!=null){ saveEditors(); var n=Number(di); Q.fus[n].day=Number(t.value);
       for(var j=n+1;j<Q.fus.length;j++) if(Number(Q.fus[j].day)<=Number(Q.fus[j-1].day)) Q.fus[j].day=Number(Q.fus[j-1].day)+1;
       paint(true); }

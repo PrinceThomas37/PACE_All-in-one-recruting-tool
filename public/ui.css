@@ -1190,3 +1190,19 @@ body.ui-kit .seg-toggle{display:inline-flex;gap:4px;flex-wrap:nowrap}
 .ai-usage-table th { text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-bottom: 5px; }
 .ai-usage-table .num { text-align: right; white-space: nowrap; }
 .ai-usage-table tbody tr + tr td { border-top: 1px solid var(--border); }
+
+/* D-0195: AI switched off for this person — every AI button is gone, one plain line says why. */
+body.ai-off [data-ai] { display: none !important; }
+.ai-off-note { display: block; margin: 8px 0 12px; padding: 12px 16px; font-weight: 600; }
+.ai-switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+/* R-343 step 4: imports running / finished, on the Leads tab. */
+.imp-banner:empty { display: none; }
+.imp-banner { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.imp-row { padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.imp-running { border-left: 3px solid var(--accent); }
+.imp-done { border-left: 3px solid var(--green); }
+.imp-failed { border-left: 3px solid var(--red); }
+.imp-bar { height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin-top: 6px; }
+.imp-fill { height: 100%; background: var(--accent); transition: width .4s ease; }
+.imp-row .btn { margin-left: 6px; }

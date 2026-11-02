@@ -587,7 +587,7 @@
               (STATE.ats._resumeStash?'<div class="fs-10_5 c-green" style="margin-top:3px">✓ '+esc(STATE.ats._resumeStash.name)+' ready to attach</div>':''))+
             ownerSel+
           '</div>'+
-          '<div style="margin-top:10px"><button class="btn btn-sm btn-outline" onclick="atsParseResume()">✨ Parse &amp; fill from resume</button>'+
+          '<div style="margin-top:10px"><button data-ai="1" class="btn btn-sm btn-outline" onclick="atsParseResume()">✨ Parse &amp; fill from resume</button>'+
             '<span class="fs-11 c-text3" style="margin-left:8px">Choose a resume file above, then parse to auto-fill the form. Review before saving.</span></div>'+
           '<div style="margin-top:12px">'+fld('Skills', '<textarea class="sel" style="min-height:60px;resize:vertical" placeholder="Comma-separated skills" oninput="atsFormSet(\'skills\',this.value)">'+esc(f.skills||'')+'</textarea>')+'</div>'+
         '</div>'+

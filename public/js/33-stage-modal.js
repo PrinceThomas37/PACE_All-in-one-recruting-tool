@@ -952,7 +952,7 @@
               '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
                 '<label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0">Attach file<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf" style="display:none" onchange="sbdmPickFile(this)"></label>'+
                 '<span id="sbdm-file-name" class="fs-12 c-text3"></span>'+
-                '<button class="btn btn-sm btn-outline" onclick="sbdmFormat()" title="Convert the attached resume to the company letterhead format">✨ Format resume</button>'+
+                '<button data-ai="1" class="btn btn-sm btn-outline" onclick="sbdmFormat()" title="Convert the attached resume to the company letterhead format">✨ Format resume</button>'+
               '</div>'+
               '<div id="sbdm-fmt-status" class="fs-11_5 c-green" style="margin-top:7px"></div>'+
             '</div>'+

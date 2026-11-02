@@ -40,6 +40,7 @@
 
 const { fetchWithTimeout } = require('../http-client');
 const callLog = require('./ai-call-log');   // D-0194: one row per AI call
+const aiAccess = require('./ai-access');     // D-0195: AI on/off per person
 const integrations = require('../config/integrations');
 const budget = require('./ai-budget');
 
@@ -294,7 +295,8 @@ async function isAvailable(supabase, orgId) {
 // instead of silently falling back, which of two different things is true:
 // nothing is set up at all, or today's allowance is spent. Estimated the same
 // way complete() estimates, from the feature's own ceilings.
-async function availability(supabase, { feature, orgId } = {}) {
+async function availability(supabase, { feature, orgId, userId } = {}) {
+  if (!(await aiAccess.allowed(supabase, userId))) return { available: false, reason: 'user_off' };   // D-0195
   if (!(await isAvailable(supabase, orgId))) return { available: false, reason: 'not_configured' };
   try {
     const limits = budget.featureLimits(feature);
@@ -444,7 +446,11 @@ async function complete(supabase, opts = {}) {
   // Every call is recorded (D-0194, services/ai-call-log.js): what for, which model, how long, how many tries, whether it
   // worked. Best-effort — the record never changes the answer.
   const t0 = Date.now();
-  const log = (row) => callLog.record(supabase, Object.assign({ orgId: opts.orgId, userId: opts.userId, feature: opts.feature || 'other', ms: Date.now() - t0 }, row));
+  const forUser = opts.userId || aiAccess.currentUserId();
+  // D-0195: AI switched off for this person by their admin → the same answer as "no AI today" (null: the rules write it). No
+  // AI request is made, so nothing is recorded.
+  if (!(await aiAccess.allowed(supabase, forUser))) return null;
+  const log = (row) => callLog.record(supabase, Object.assign({ orgId: opts.orgId, userId: forUser, feature: opts.feature || 'other', ms: Date.now() - t0 }, row));
   const chain = await resolveChain(supabase, opts.orgId);
   if (!chain.length) { await log({ outcome: 'no_provider', tries: 0 }); return null; }
   const failures = [];

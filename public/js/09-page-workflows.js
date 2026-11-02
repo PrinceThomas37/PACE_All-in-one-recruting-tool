@@ -319,7 +319,7 @@ function wfWhenLine(step, i, day){
 //   saved     ⇔  it does not. Nothing extra is stored on the step.
 // Names PACE can fill — must equal services/sequence-draft.js ALLOWED_VARS
 // (a test compares the two).
-var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','sendercompany','sender_company','mycompany','yourcompany','jobs','job_list','joblist','openings','positions','job_resp','company_service','city','pay'];
+var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','sendercompany','sender_company','mycompany','yourcompany','jobs','job_list','joblist','openings','positions','job_resp','company_service','city','pay','work_arrangement'];
 window.WF_VARS=WF_VARS;
 var WF_CHIPS=[['{{fn}}','First name'],['{{ln}}','Last name'],['{{pos}}','Role'],['{{company}}','Company'],['{{loc}}','Location'],['{{sender}}','Your name']];
 var WF_TEMPLATE_CHOICES=[['initial','Outreach 1 — your first email'],['fu1','Follow-up 1'],['fu2','Follow-up 2']];
@@ -393,8 +393,8 @@ function wfEmailStepEditor(s,i){
     return '<button type="button" class="seq-chip" onmousedown="event.preventDefault()" onclick="wfInsertVar('+i+',\''+ch[0]+'\')" title="Becomes '+ch[1].toLowerCase()+' of each person">'+ch[1]+'</button>';}).join('')+'</div>';
   var ai='<div class="seq-ai">'+
     '<input class="seq-in" id="wf-ai-'+i+'" placeholder="Tell the AI what this email should do — e.g. a friendly first email offering two pre-screened estimators" value="'+htmlEsc(ui.prompt)+'" oninput="wfAiPrompt('+i+',this.value)" onkeydown="if(event.key===\'Enter\'){wfDraftAi('+i+',true);}">'+
-    '<button class="btn btn-primary btn-sm" onclick="wfDraftAi('+i+',true)"'+(ui.busy?' disabled':'')+'>'+(ui.busy?'Writing…':'Write with AI')+'</button>'+
-    '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',\'rewrite\')"'+(ui.busy?' disabled':'')+' title="Rewrite the email in the box, keeping every {{variable}}">Rewrite with AI</button>'+
+    '<button data-ai="1" class="btn btn-primary btn-sm" onclick="wfDraftAi('+i+',true)"'+(ui.busy?' disabled':'')+'>'+(ui.busy?'Writing…':'Write with AI')+'</button>'+
+    '<button data-ai="1" class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',\'rewrite\')"'+(ui.busy?' disabled':'')+' title="Rewrite the email in the box, keeping every {{variable}}">Rewrite with AI</button>'+
     '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',\'variant\')"'+(ui.busy?' disabled':'')+' title="Another version of this email, keeping every {{variable}}">Write a variant</button>'+
     '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',false)"'+(ui.busy?' disabled':'')+' title="A ready-made email to change">Start from an example</button>'+
     (ui.undo?'<button class="btn btn-outline btn-sm" onclick="wfUndoDraft('+i+')">Undo</button>':'')+
@@ -1117,6 +1117,7 @@ function renderAdminUserDetail(userId){
         '</div>'+
       '</div>'+
 
+      (window.aiAccessCard?aiAccessCard(userId):'')+
       '<div class="card" style="padding:18px;margin-bottom:16px">'+
         '<div class="fs-12 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Sign-in password</div>'+
         '<div class="fs-12 c-text3 mb3">Set or reset the password this person signs in with. Use the eye to check what you typed. Once saved it cannot be shown again, so tell the person their password before you leave this page.</div>'+
