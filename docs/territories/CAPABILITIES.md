@@ -824,3 +824,7 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 
 - **Direct / office on an added email or phone (R-342, 30 Oct 2026, branch — not live; needs migration 069):** every extra email and number on a candidate or a lead contact can be marked Direct or Office; the mark stays with the number if it is made the main one.
 - **Write to a new company, company first (R-320, 30 Oct 2026):** Email → Compose → "Find at a company": type the company (or paste its website), see its people (by place and title, free), find the emails you want (1 credit each), tick, paste the job posting once, and PACE writes one email per person; edit, then send one or all, optionally into a sequence (which saves the lead).
+
+- **AI on/off per person (D-0195, 2 Nov 2026):** Admin → a person → "AI" switch. Off = every AI button gone for them and PACE makes no AI request for them (server-enforced in `services/ai-access.js`); default on.
+- **How many versions of each email (D-0196):** My Setup → "How many versions of each email?" (1 … the admin's ceiling, 20); AI writes exactly the missing number.
+- **AI usage table (D-0194):** Admin → Integrations → AI — time, tries, success, text in/out, model per kind of AI request; 120 days.

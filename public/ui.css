@@ -1190,3 +1190,8 @@ body.ui-kit .seg-toggle{display:inline-flex;gap:4px;flex-wrap:nowrap}
 .ai-usage-table th { text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-bottom: 5px; }
 .ai-usage-table .num { text-align: right; white-space: nowrap; }
 .ai-usage-table tbody tr + tr td { border-top: 1px solid var(--border); }
+
+/* D-0195: AI switched off for this person — every AI button is gone, one plain line says why. */
+body.ai-off [data-ai] { display: none !important; }
+.ai-off-note { display: block; margin: 8px 0 12px; padding: 12px 16px; font-weight: 600; }
+.ai-switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }

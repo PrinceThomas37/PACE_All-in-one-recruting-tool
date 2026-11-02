@@ -76,7 +76,7 @@ window.openAssignToManager=function(managerId){
       '<div id="assign-text-panel" style="display:none;margin-bottom:12px">'+
         '<label class="fs-12 c-text2" style="font-weight:600;display:block;margin-bottom:6px">Describe your priorities</label>'+
         '<textarea id="assign-priority-text" class="fs-13" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:80px;resize:vertical;font-family:inherit" placeholder="e.g. Focus on old leads first, prioritise healthcare and legal, send mostly to EST timezone, exclude duplicates..."></textarea>'+
-        '<button onclick="generateAssignRatio()" class="fs-12" style="margin-top:8px;background:var(--purple);color:#fff;border:0;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer" id="gen-ratio-btn">\u2728 Generate ratio with AI</button>'+
+        '<button data-ai="1" onclick="generateAssignRatio()" class="fs-12" style="margin-top:8px;background:var(--purple);color:#fff;border:0;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer" id="gen-ratio-btn">\u2728 Generate ratio with AI</button>'+
       '</div>'+
       '<div id="assign-ratio-preview" style="display:none"></div>'+
     '</div>'+

@@ -986,7 +986,7 @@
             '<label class="fd-label" for="fd-rv-s-'+esc(m.id)+'">Subject</label><input id="fd-rv-s-'+esc(m.id)+'" class="inp fd-wide" value="'+esc(m.subject)+'">'+
             '<label class="fd-label" for="fd-rv-b-'+esc(m.id)+'">Message</label><textarea id="fd-rv-b-'+esc(m.id)+'" class="txta w100 fd-rv-body">'+esc(m.body)+'</textarea>'+
             '<div class="fd-rv-tools">'+
-              (m.fu?'':'<button type="button" class="btn btn-sm btn-outline" '+(rv.busy||m.rwBusy?'disabled ':'')+'onclick="fdRvRewrite(\''+esc(m.id)+'\')">'+(m.rwBusy?'Working…':'✨ Rewrite with AI')+'</button>')+
+              (m.fu?'':'<button data-ai="1" type="button" class="btn btn-sm btn-outline" '+(rv.busy||m.rwBusy?'disabled ':'')+'onclick="fdRvRewrite(\''+esc(m.id)+'\')">'+(m.rwBusy?'Working…':'✨ Rewrite with AI')+'</button>')+
               (m.prev?'<button type="button" class="btn btn-sm btn-outline" '+(rv.busy||m.rwBusy?'disabled ':'')+'onclick="fdRvUndo(\''+esc(m.id)+'\')">Undo rewrite</button>':'')+
               (m.rwNote?'<span class="fd-hint" role="status">'+esc(m.rwNote)+'</span>':'')+
             '</div>'+

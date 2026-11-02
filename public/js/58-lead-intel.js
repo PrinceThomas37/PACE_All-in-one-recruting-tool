@@ -92,7 +92,7 @@
       else if(s.state==='up_to_date'){ label='✓ Up to date'; dis=true; }
       else if(s.state==='new'&&sum){ label='✨ Update summary ('+s.new_count+' new)'; }
       else { label='✨ Generate AI summary'; }
-      btn='<div class="lxi-btnrow"><button class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="event.stopPropagation();leadIntelSummarise(\''+id+'\',false)">'+label+'</button>'+
+      btn='<div class="lxi-btnrow"><button data-ai="1" class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="event.stopPropagation();leadIntelSummarise(\''+id+'\',false)">'+label+'</button>'+
         (s.state==='up_to_date'&&!st.busy?'<button type="button" class="lxi-link" onclick="event.stopPropagation();leadIntelSummarise(\''+id+'\',true)">Rewrite anyway</button>':'')+
         '<span>'+(s.state==='up_to_date'?'Nothing new — costs nothing.':'Uses 1 of your '+(ai.per_user_limit||0)+' today · '+(ai.left_today||0)+' left')+'</span></div>';
     }

@@ -220,6 +220,7 @@ const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./ser
 // Ollama). Returns null when none is usable, and every caller has a rules
 // fallback behind that null.
 const aiProvider = require('./services/ai-provider');
+const aiAccess = require('./services/ai-access');   // D-0195: AI on/off per person
 // D-0034: who may SEE a record, on top of D-0020's who may ACT on it. Pure —
 // see the file header before touching any scoping that uses it.
 const ownership = require('./services/ownership');
@@ -305,7 +306,8 @@ function auth(req, res, next) {
   // So that their OWN opens of what they sent are not counted as the recipient's
   // (services/open-tracking.js). Not awaited; throttled; never throws.
   openTracking.noteSenderIp(claims.id, req.ip);
-  next();
+  // D-0195: the rest of this request runs as this person, so the AI door (services/ai-provider.js) can honour their switch.
+  aiAccess.runAs(claims.id, next);
 }
 
 // Authorization helpers (hasRole, canTouchJob, requireRole) live in

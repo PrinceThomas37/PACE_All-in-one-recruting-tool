@@ -262,20 +262,20 @@
       return '<div class="sq-ver"><div class="sq-ver-h"><span>Version '+(i+2)+'</span><button type="button" class="btn btn-sm btn-outline" data-sq="rmv" data-slot="'+slot+'" data-i="'+i+'">Remove</button></div>'+
         '<div class="sq-ver-t">'+(skel?'':esc((first?'Subject: '+fill(v.subject||htmlToTokens(Q.first.subject))+'\n\n':'')+fill(v.body)))+'</div></div>';
     }).join('');
-    if(room>0) h+='<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
+    if(room>0) h+='<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
       (Q.busy==='vary'+slot?('Writing '+(Q.varyAt||1)+' of '+(Q.varyOf||room)+'…'):'Write '+room+' version'+(room===1?'':'s')+' with AI')+'</button></div>';
     var hint=!Q.vCount?'Choose how many versions you want (top of the page) to let AI write them.'
       :(list.length+1>Q.vCount?'You have '+(list.length+1)+' versions but chose '+Q.vCount+' — remove '+(list.length+1-Q.vCount)+' before saving.'
       :Q.vCount===1?'You chose 1 version: only your own email goes out.'
       :(list.length+1)+' of '+Q.vCount+' versions'+(room?'':' — all written')+'. PACE picks one at random for each lead.');
-    h+='<p class="sq-hint">'+hint+'</p>'+msgHtml('vary'+slot);
+    h+='<p class="sq-hint" data-ai="1">'+hint+'</p>'+msgHtml('vary'+slot);
     return h;
   }
   // D-0196 (owner, 2 Nov 2026): "let the user choose the number, maybe 1,2,3,4 anything" — up to the admin's ceiling.
   function versionCountCard(){
     var o='<option value=""'+(Q.vCount?'':' selected')+' disabled>Choose…</option>';
     for(var n=1;n<=(Q.vMax||20);n++) o+='<option value="'+n+'"'+(n===Q.vCount?' selected':'')+'>'+n+(n===1?' (only my own email)':' (my email + '+(n-1)+' AI version'+(n===2?'':'s')+')')+'</option>';
-    return '<div class="card sq-card"><h2 class="sq-h2">How many versions of each email?</h2>'+
+    return '<div class="card sq-card" data-ai="1"><h2 class="sq-h2">How many versions of each email?</h2>'+
       '<p class="sq-sub">Your own email is version 1. AI writes the rest from it — same facts, other words — and PACE picks one at random for each lead, so your leads do not all get the same email. Your company allows up to '+(Q.vMax||20)+'.</p>'+
       '<select class="sq-sel" data-sq-vcount="1" aria-label="How many versions of each email">'+o+'</select></div>';
   }
@@ -283,7 +283,7 @@
     return '<div id="'+id+'" class="sq-ed'+(one?' is-one':'')+'" contenteditable="true" role="textbox"'+(one?'':' aria-multiline="true"')+' data-ph="'+esc(ph)+'">'+(skel?'':html)+'</div>';
   }
   function modeCards(){
-    function c(m,t,l){ return '<button type="button" class="sq-choice" role="radio" aria-checked="'+(Q.mode===m)+'" data-sq="mode" data-mode="'+m+'"><b>'+t+'</b><span>'+l+'</span></button>'; }
+    function c(m,t,l){ return '<button type="button"'+(m==='ai'?' data-ai="1"':'')+' class="sq-choice" role="radio" aria-checked="'+(Q.mode===m)+'" data-sq="mode" data-mode="'+m+'"><b>'+t+'</b><span>'+l+'</span></button>'; }
     return '<div class="card sq-card"><h2 class="sq-h2">How should your first email be written?</h2>'+
       '<div class="sq-choices" role="radiogroup" aria-label="How your first email is written">'+
       (Q.target&&Q.target.cand
@@ -342,17 +342,18 @@
     var h=named()?nameCard(skel)+(cand?modeCards():''):modeCards();
     if(ai&&!named()) h+=teachCard(skel);
     h+=perIdHtml();
+    h+=(window.aiOffNote?aiOffNote():'');   // D-0195: AI off for this person — one plain line
     if(!ai&&!cand&&Q.mbTab==='person') h+=versionCountCard();
     h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
       (ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
         :'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>'):'')+
       '<label class="sq-lbl" for="sq-subj">Subject</label>'+editor('sq-subj',Q.first.subject,'A short subject line',true,skel)+
       '<label class="sq-lbl" for="sq-body">Message</label>'+editor('sq-body',Q.first.body,'Write it the way you would write to one person: why you are writing, what you can offer, and one question.',false,skel)+
-      '<div class="sq-row">'+menuHtml('first')+(cand?'':(ai?'<button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
-        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>'))+'</div>'+
+      '<div class="sq-row">'+menuHtml('first')+(cand?'':(ai?'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
+        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>'))+'</div>'+
       (ai||cand?'':'<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
         '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
-        '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
+        '<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
       (cand?'':toolsHtml('first'))+
       msgHtml('first')+(ai||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
@@ -385,7 +386,7 @@
   function fuEditorHtml(f,i,skel){
     var busy=!!Q.busy, cand=named()&&Q.target.cand;
     return editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
-      '<div class="sq-row">'+menuHtml('fu'+i)+(cand?'':'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>'+
+      '<div class="sq-row">'+menuHtml('fu'+i)+(cand?'':'<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>'+
       (cand?'':toolsHtml(String(i)));
   }
   // "Rewrite with AI" and "Check for spam triggers" on an email already written (the old My wording tab's two buttons, R-286).
@@ -400,7 +401,7 @@
         '<div class="fs-11 c-text3">Checked as written just now — press the button again after you edit.</div></div>';
     }
     return '<div class="sq-row sq-tools">'+
-      '<button type="button" class="btn btn-sm btn-outline" data-sq="rewrite" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+(Q.busy==='rewrite'+slot?'Rewriting…':'Rewrite with AI')+'</button>'+
+      '<button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="rewrite" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+(Q.busy==='rewrite'+slot?'Rewriting…':'Rewrite with AI')+'</button>'+
       ((Q.rwUndo||{}).slot===slot?'<button type="button" class="btn btn-sm btn-outline" data-sq="rwundo" data-slot="'+slot+'">Undo the rewrite</button>':'')+
       '<button type="button" class="btn btn-sm btn-outline" data-sq="spam" data-slot="'+slot+'" title="Looks for spam-trigger words, too many links, ALL-CAPS and other things that send mail to junk. Nothing is saved or sent.">Check for spam triggers</button>'+
     '</div>'+box;

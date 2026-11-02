@@ -337,7 +337,7 @@
       else if(st.state==='new'&&sum){ label='✨ Update summary ('+st.new_count+' new email'+(st.new_count===1?'':'s')+')'; }
       else { label='✨ Generate AI summary'; }
       btn='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-        '<button class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="clientsSummarise(false)">'+label+'</button>'+
+        '<button data-ai="1" class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="clientsSummarise(false)">'+label+'</button>'+
         (st.state==='up_to_date'&&!busy?'<button type="button" onclick="clientsSummarise(true)" style="border:0;background:none;padding:0;font:inherit;font-size:12px;color:var(--accent);cursor:pointer">Rewrite anyway</button>':'')+
         '<span class="fs-11_5 c-ink3">'+(st.state==='up_to_date'?'Nothing new since the last summary — costs nothing.':'Uses 1 of your '+(ai.per_user_limit||0)+' today · '+(ai.left_today||0)+' left')+'</span>'+
       '</div>';

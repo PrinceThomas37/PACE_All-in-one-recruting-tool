@@ -304,3 +304,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 - R-347: "Sending has stalled" on the own send card and the RA Lead's live card when `send-progress` says `stalled`.
 
 - **2 Nov 2026 (R-351):** interview/From picker now sends the mailbox it shows (`10b-from-picker.js` value() always returns the shown id); `from-picker-smoke` pins it. See harbour.md / archive Session 59.
+
+- **2 Nov 2026:** AI buttons carry `data-ai="1"` (hidden by `body.ai-off`, `public/js/10c-ai-access.js`); My Setup has the versions-count card (D-0196).

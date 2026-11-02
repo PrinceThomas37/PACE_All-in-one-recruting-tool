@@ -508,3 +508,5 @@ Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's passwo
 - Bounce marking is scoped to the mailbox's company (`services/bounce-mark.js`). Guards: `org-isolation-r067-smoke`, `operator-routes-smoke`.
 
 - 2026-10-20 (Session 52, R-299): new `GET /users-emails` in routes/auth.js. Visibility is EXACTLY the per-person route's (`guardUser` = any user of the caller's own org): the bulk reads `users` through `withOrg` (non-deleted only) and then `user_emails` for those ids, so another company's people and mailboxes, and removed users, never appear. Pinned in `users-emails-bulk-smoke` (two-company fake). The per-person route is unchanged in who may call it; both now share `describeMailboxes()`.
+
+- **2 Nov 2026 (D-0195):** `auth` runs each request inside `aiAccess.runAs(userId)`; `complete()`/`availability()` refuse (null / user_off) for a person whose AI is off. Mark any NEW AI button `data-ai="1"` so `body.ai-off` hides it.
