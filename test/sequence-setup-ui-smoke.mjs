@@ -55,7 +55,8 @@ await pg.waitForSelector('#sq-body');
 await pg.click('#sq-body'); await pg.keyboard.type('Hi ');
 await pg.click('[data-sq="menu"][data-menu="first"]');
 const items=await pg.$$eval('[data-menu="first"] ~ .sq-menu .sq-it', e=>e.map(x=>x.textContent));
-ok('menu: 8 details incl. industry, top skills, project area (29 Oct), pay', items.length===8 && items.join('|').includes('Their industry') && items.join('|').includes('Top skills') && items.join('|').includes('Project area') && items.join('|').includes('Pay, if known'), JSON.stringify(items));
+if(OUT){ await pg.evaluate(()=>document.querySelector('[data-menu="first"] ~ .sq-menu').scrollIntoView({block:'center'})); await pg.screenshot({path:OUT+'/s3-detail-menu.png'}); }
+ok('menu: 9 details incl. industry, top skills, project area (29 Oct), pay, work arrangement (D-0197)', items.length===9 && items.join('|').includes('Their industry') && items.join('|').includes('Top skills') && items.join('|').includes('Project area') && items.join('|').includes('Pay, if known') && items.join('|').includes('Work arrangement'), JSON.stringify(items));
 await pg.click('[data-menu="first"] ~ .sq-menu [data-k="fn"]'); await pg.keyboard.type(',');
 await pg.keyboard.press('Enter'); await pg.keyboard.press('Enter');
 await pg.keyboard.type('I saw ');

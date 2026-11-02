@@ -828,3 +828,5 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **AI on/off per person (D-0195, 2 Nov 2026):** Admin → a person → "AI" switch. Off = every AI button gone for them and PACE makes no AI request for them (server-enforced in `services/ai-access.js`); default on.
 - **How many versions of each email (D-0196):** My Setup → "How many versions of each email?" (1 … the admin's ceiling, 20); AI writes exactly the missing number.
 - **AI usage table (D-0194):** Admin → Integrations → AI — time, tries, success, text in/out, model per kind of AI request; 120 days.
+
+- **Work arrangement detail (D-0197, 2 Nov 2026):** My Setup → "Add a detail" → "Work arrangement (on-site / remote / hybrid), if known" — "fully on-site (Dallas, TX)", "100% remote", "hybrid (3 days in office)" from the posting by rules (`services/work-arrangement.js`); not said → its sentence is left out.

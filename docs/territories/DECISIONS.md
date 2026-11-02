@@ -2335,3 +2335,7 @@ Owner (answers, 2 Nov): "Keep the AI write option as it can be used to create th
 ### D-0196 — Each person chooses their number of versions; the admin sets the ceiling (2 Nov 2026)
 
 Owner: "do not put the 10 number as default, let the user choose the number, maybe 1,2,3,4 anything keep the admin limit on the higher end not lower end." Admin ceiling `sequence_versions_max` starts at **20** (admin can lower it); each person picks 1…ceiling for their own emails; before they pick, they **keep what they have** (own email + the 0–2 versions already saved). Replaces D-0195's "10 in total". Same message: "Yes, put it live" for R-351 (the email ID fix) and the AI call record (migration 071 applied live 2 Nov).
+
+### D-0197 — Work arrangement detail: a lead whose posting does not say loses that sentence (2 Nov 2026)
+
+Owner: "A. Leave the sentence out" — the new "Work arrangement" detail (full phrase: "fully on-site (Dallas, TX)", "100% remote", "hybrid (3 days in office)") behaves like "Pay, if known": when the posting does not say, the sentence holding it is dropped and the email goes on time. Read by keyword rules (no AI). Also: the Compose generator stays visible with AI off and writes by rules ("make it work without AI if AI is not enabled").

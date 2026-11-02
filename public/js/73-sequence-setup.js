@@ -27,7 +27,9 @@
     // 29 Oct (owner: "project area is in my template, the AI takes it from the JD, but it is not in the drop-down"): the
     // server always fills it (email-vars.js — the company's line of work from the job, else its industry).
     {k:'company_service', label:'project area', menu:'Project area (from the job)'},
-    {k:'pay', label:'pay', menu:'Pay, if known', optional:true}
+    {k:'pay', label:'pay', menu:'Pay, if known', optional:true},
+    // D-0197 (owner, 2 Nov 2026): on-site / remote / hybrid from the posting, a full phrase; not said → its sentence is left out.
+    {k:'work_arrangement', label:'work arrangement', menu:'Work arrangement (on-site / remote / hybrid), if known', optional:true}
   ];
   // Words for details an older sequence may already use, so they show as words too.
   var MORE={ ln:'last name', desig:'their title', loc:'location', jobs:'all the jobs', skills_line:'skills phrase', salary_line:'salary',
