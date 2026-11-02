@@ -302,3 +302,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 
 - R-348 (30 Oct): sign-in no longer waits for GET /jobs. `22-api.js loadLeadsInBackground` loads it behind the open app (`STATE.jobsLoading`), with a `#leads-loading-note` on <body> (outside the render engine; class `.leads-loading-note` in ui.css, opaque float) — "Loading your leads…", retries 3/6/10/20/30 s, then "could not load" + Try again. The 3-min poll skips the list while it is loading; sign-out removes the note.
 - R-347: "Sending has stalled" on the own send card and the RA Lead's live card when `send-progress` says `stalled`.
+
+- **2 Nov 2026 (R-351):** interview/From picker now sends the mailbox it shows (`10b-from-picker.js` value() always returns the shown id); `from-picker-smoke` pins it. See harbour.md / archive Session 59.

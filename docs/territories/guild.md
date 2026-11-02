@@ -854,3 +854,5 @@ Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.j
 
 ## 30 Oct 2026 (Session 56)
 - R-342 / D-0189 direct vs office: `contact_labels` jsonb object on `candidates` and `contacts` (migration 069 — WRITTEN, NOT APPLIED; apply before merge with the owner's go). Keyed by the normalised value (`e:<lower email>`, `p:<last 10 digits>`), so Make main needs nothing. `services/contact-points.js`: `LABELS` (direct, office), `labelKey`, `cleanLabels(input,row)` (only the person's own values, only the two labels), `labelOf`; `normaliseForWrite` writes labels when sent, or prunes them when the numbers change — ONLY if `prior` was read WITH the column (a blind caller cannot wipe them). Selected in `CANDIDATE_SELECT`, `JOB_SELECT` contacts, PUT /contacts existing read; `addLeadContact` stores them on create.
+
+- **2 Nov 2026 (R-351):** interview/From picker now sends the mailbox it shows (`10b-from-picker.js` value() always returns the shown id); `from-picker-smoke` pins it. See harbour.md / archive Session 59.
