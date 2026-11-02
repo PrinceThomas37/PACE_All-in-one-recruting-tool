@@ -2,7 +2,31 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-10-30 (Session 56). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-345** (next `R-346`) · next migration **070** (069 applied live 30 Oct).
+**Updated**: 2026-11-02 (Session 58). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-350** (next build `R-343`) · next migration **071** (069 and 070 both applied live — re-checked against the database on 2 Nov).
+
+## START HERE (2 Nov, Session 58) — the plan for this week is `docs/PLAN_NEXT_WEEK_2026-11-02.md`; nothing was built yet
+
+**Where PACE stands, checked rather than assumed (2 Nov):** HEAD `320b35c` = **#383 MERGED** (R-346 missed first emails repaired ·
+R-347 each person's send queue on its own + a "Sending has stalled" alert · R-348 sign-in no longer waits for the leads list).
+The live app answers: `/health` 200 in 0.14 s and the app page 200 in 0.16 s (server awake, not a cold start). The **database matches
+the code**: `contact_labels` present on `candidates` and `contacts` (migration 069) and `research_list`, `posting_chars`, `posting_words`,
+`posting_all_chars` present on `jobs` (migration 070) — so the newest screens are not running ahead of their columns.
+
+**The two-version baseline, taken this session with nothing changed** (327 suites; run in six chunks because one command exceeds the
+5-minute tool limit; logs in `~/logs/n22-*.log`, `~/logs/n26-*.log`): **Node 22 — 333/335, and Node 26.11.1 — 333/335, identical**
+(the union is larger than 327 because `run-all.mjs` matches arguments as substrings). The same **two** suites fail on both versions and
+fail for a reason in the test, not the app: `sourcing-honesty-smoke` (23 checks pass, then `#content` is null) and
+`overlay-opacity-smoke` (10/14, the four record-drawer checks find no panes). Both drive the app with no backend behind it, and their
+background calls get an answer the app reads as "signed out", so the shell is gone by the time they measure; the sibling
+`page-renders-smoke` passes because it aborts every off-origin call first. Written up as **R-350** (harness fix, never a weakened check).
+**Everything else passes on both Node versions.**
+
+**Not started, confirmed in the code:** R-343 (`services/sequence-versions.js` still `const EXTRA = [2, 3]` — the admin-set limit is step 1)
+and R-349 (the browser still holds the whole lead list).
+
+**The owner's standing rule from this session:** every code change is run on **Node 22 AND Node 26**, read the count, never pipe the run
+(CLAUDE.md already says this because the sandbox is Node 22 and Render is Node 26; it is now explicit rather than assumed). Nothing is merged
+without their explicit permission. No helper agent is started without their yes (D-0060).
 
 ## START HERE (30 Oct, Session 56, end) — the owner resumes the week of 2 Nov. READ `docs/PLAN_NEXT_WEEK_2026-11-02.md` FIRST.
 
