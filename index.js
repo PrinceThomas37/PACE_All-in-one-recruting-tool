@@ -4516,6 +4516,16 @@ engineRunner.register('storage_orphan_cleanup', {
   }
 });
 
+// ── THE AI CALL RECORD, KEPT 120 DAYS (D-0194, migration 071) ─────────────
+// Every AI call leaves one row (services/ai-call-log.js); rows older than the owner's 120 days are deleted here, every
+// company's at once (the retention is the same for all). A failed delete is logged and simply tried again next time.
+engineRunner.register('ai_calls_purge', {
+  everyMs: 12 * 60 * 60 * 1000,
+  quiet: true,
+  description: 'Delete AI call records older than 120 days',
+  run: async () => ({ deleted: await require('./services/ai-call-log').purge(supabase) })
+});
+
 // ── SCHEDULE SEND (R-273, D-0163) ─────────────────────────────────────────
 // Emails a person scheduled from the in-app mailbox go out through the SAME send path as its Send button
 // (services/mailbox-send.js), from the mailbox they chose, when their time comes — checked every pass of the engine. On the free

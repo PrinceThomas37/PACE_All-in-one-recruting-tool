@@ -2319,3 +2319,19 @@ Owner: "Company first" (R-320): company (+ location) → its people from the com
 ### D-0192 — PACE repairs its own missed outreach; sign-in does not wait for the lead list (30 Oct 2026)
 
 Owner: "initiate those emails again … what I am concerned is that I have to come back every day on this outreach issue". Yes to: an automatic check that writes the first emails of assigned leads that never got one (R-346); each person's send queue run on its own with a "Sending has stalled" warning and an automatic fresh run after an hour (R-347); sign-in opens the app without waiting for the lead list, and the list stops reading the job-description text (R-348 steps 1–2, migration 070 — owner's go for "one small database change"). Page-by-page lead loading (R-349) is for the week of 2 Nov. The ~$7/month always-on server: not now — decide after the stall warning has been watched.
+
+### D-0193 — Interview mail leaves from the mailbox the sender picks; no "main" mailbox (2 Nov 2026)
+
+Owner: "There is no main email ID for any user, all emails are equally important, i just want option to choose the emails from which the interview email should go to client and candidate without causing any error." No primary is set for anyone. The From picker sends exactly what it shows; until someone picks, the same mailbox is shown every time (oldest connected). R-351.
+
+### D-0194 — R-343 first half, with an import progress line and an AI timing record (2 Nov 2026)
+
+Owner: "Start the build." First half = up to 10 versions per step (admin-set), "Write versions with AI", the job posting read once per lead in the background (keyword rules for skills / on-site-remote, AI for industry / project area), a progress line on the Leads tab and an "import finished" notice for the importer and **their own team's RA Lead only** ("their own team"), and a record of every AI call (what for, model, seconds, tries, success, text in/out) shown in Admin with an estimated paid-model cost. New database table: owner "DO it" (go-ahead to apply live). Records kept **120 days** (owner changed 90 → 120). Owner: "Ask me anything that you need clarity on … Do not guess work on your own."
+
+### D-0195 — AI never writes individual outreach emails; AI is switched on per user (2 Nov 2026)
+
+Owner (answers, 2 Nov): "Keep the AI write option as it can be used to create the template, just the template, creating a sequence using AI does not mean all the email will go by AI. It will go by this new design." Confirmed: (a) every outreach email goes from the person's template + its AI versions — no per-email AI writing for anyone (recorded risk restated: AI first emails had ~2× replies in October); (b) "AI writes each one" stays only as a helper that drafts the template; (c) the admin turns AI on/off **per user** ("per user based on the payment received or not"); AI off = **every AI button** hidden with a plain line, existing templates and versions keep sending; **default ON for everyone** now, admin turns it off. Also: versions are **10 in total** (own + 9 AI); the on-site/remote detail is a **full phrase** ("fully on-site", "100% remote", "hybrid (3 days in office)"); the import gets a progress line + "import finished" notice for the importer and their own team's RA Lead. Supersedes D-0188's "admin switch to turn AI first emails back on".
+
+### D-0196 — Each person chooses their number of versions; the admin sets the ceiling (2 Nov 2026)
+
+Owner: "do not put the 10 number as default, let the user choose the number, maybe 1,2,3,4 anything keep the admin limit on the higher end not lower end." Admin ceiling `sequence_versions_max` starts at **20** (admin can lower it); each person picks 1…ceiling for their own emails; before they pick, they **keep what they have** (own email + the 0–2 versions already saved). Replaces D-0195's "10 in total". Same message: "Yes, put it live" for R-351 (the email ID fix) and the AI call record (migration 071 applied live 2 Nov).

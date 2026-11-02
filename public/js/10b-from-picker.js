@@ -12,7 +12,8 @@
 //   FromPick.slot(slotId)  html for the row; it fills itself once the list is in
 //                          (by DOM id — never a render(), so nothing typed elsewhere
 //                          in the window is touched)
-//   FromPick.value(slotId) the chosen mailbox id, or '' meaning "the default"
+//   FromPick.value(slotId) the mailbox id shown in the picker (the default included), or ''
+//                          when there is no picker (one mailbox, none, or not loaded)
 //
 // One mailbox is not a choice: it is shown as a plain "From x", and value() is ''.
 (function () {
@@ -51,8 +52,9 @@
     },
     value: function(slotId){
       var sel = document.getElementById(slotId + '-sel');
-      // The default is sent as "" so the server keeps applying its own default.
-      return sel && sel.value && sel.value !== S.default_id ? sel.value : '';
+      // What is shown is what sends (owner, 2 Nov): the selected mailbox's id goes even when it is the
+      // default, so the server never re-chooses behind the person's back. The server still checks it is theirs.
+      return sel && sel.value ? sel.value : '';
     },
     // A mailbox connected or removed elsewhere while the app was open.
     refresh: function(){ S.loaded = false; S.loading = false; }

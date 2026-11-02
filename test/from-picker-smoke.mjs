@@ -6,8 +6,8 @@
 // the SCREEN half, in a real browser:
 //   * the client email window, the interview block of the stage window and the
 //     generator's sender card each offer the caller's own mailboxes;
-//   * choosing one sends `mailbox_id`; leaving the default sends none (so the
-//     server keeps its own default);
+//   * choosing one sends `mailbox_id`; leaving the default sends the default's id
+//     too — what is shown is what sends (owner, 2 Nov 2026: "random email ID");
 //   * one mailbox is a plain "From x" (one option is not a choice), none says to
 //     connect one;
 //   * an interview move ticks "Candidate" by default, so the confirmation goes
@@ -90,7 +90,9 @@ try{
   await ev(()=>clientsOpenEmail('co1')); await page.waitForSelector('#client-em-from-sel',{timeout:5000}).catch(()=>{});
   await ev(()=>clientsSendEmail()); await page.waitForTimeout(300);
   sent = last('POST',/^\/companies\/co1\/email$/);
-  step('Client email: leaving the default sends NO mailbox id (the server keeps its own default)', !!sent && sent.body.mailbox_id===undefined, JSON.stringify(sent&&sent.body));
+  // Owner, 2 Nov 2026: interview mail went "from a random email ID". Sending nothing for the shown default let the server
+  // choose again (with no primary, in the database's own order) — so what is SHOWN is now what is SENT.
+  step('Client email: leaving the default sends THAT mailbox\'s id (what is shown is what sends)', !!sent && sent.body.mailbox_id==='mb1', JSON.stringify(sent&&sent.body));
 
   // one mailbox, none
   await resetFrom({ mailboxes:[TWO.mailboxes[0]], default_id:'mb1' });
@@ -118,6 +120,15 @@ try{
   await ev(()=>stgApply()); await page.waitForTimeout(500);
   const inv = last('POST',/^\/submissions\/s1\/interview-invite$/);
   step('Interview (PHONE): the candidate is emailed, from the chosen mailbox', !!inv && inv.body.recipients.includes('candidate') && inv.body.mailbox_id==='mb2', JSON.stringify(inv&&inv.body));
+  // The same window, the default left alone: the shown mailbox's id still goes (owner, 2 Nov 2026).
+  await ev(()=>{ STATE.bd.submissions=[{ id:'s1', stage:'Submitted to Client', job_order_id:'j1', candidate:{ id:'c1', full_name:'Sarah Chen', email:'sarah@x.test' } }]; openStageModal('s1','Interview Scheduled',null); });
+  await page.waitForSelector('#stg-iv-from-sel',{timeout:5000}).catch(()=>{});
+  const ivShown = await ev(()=>(document.getElementById('stg-iv-from-sel')||{}).value);
+  await page.fill('#stg-iv-at','2026-10-05T10:00'); await page.fill('#stg-note','Booked');
+  const before = calls.length;
+  await ev(()=>stgApply()); await page.waitForTimeout(500);
+  const inv2 = calls.slice(before).filter(c=>c.m==='POST' && /^\/submissions\/s1\/interview-invite$/.test(c.p)).pop();
+  step('Interview: leaving the shown mailbox sends ITS id, never "let the server choose"', ivShown==='mb1' && !!inv2 && inv2.body.mailbox_id==='mb1', JSON.stringify({ shown:ivShown, body:inv2&&inv2.body }));
 
   // ═══ 3. the generator ═══════════════════════════════════════════════════
   await ev(()=>{ STATE.outreachGen=null; STATE.composeSide='clients'; STATE.emailTab='compose'; STATE.page='email'; render(); });

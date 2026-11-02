@@ -39,6 +39,7 @@
 // ============================================================================
 
 const { fetchWithTimeout } = require('../http-client');
+const callLog = require('./ai-call-log');   // D-0194: one row per AI call
 const integrations = require('../config/integrations');
 const budget = require('./ai-budget');
 
@@ -440,8 +441,12 @@ function modelFor(entry, tier) {
 // skipped and the next one tried, because a daily free-tier ceiling is the
 // expected failure here, not the exceptional one.
 async function complete(supabase, opts = {}) {
+  // Every call is recorded (D-0194, services/ai-call-log.js): what for, which model, how long, how many tries, whether it
+  // worked. Best-effort — the record never changes the answer.
+  const t0 = Date.now();
+  const log = (row) => callLog.record(supabase, Object.assign({ orgId: opts.orgId, userId: opts.userId, feature: opts.feature || 'other', ms: Date.now() - t0 }, row));
   const chain = await resolveChain(supabase, opts.orgId);
-  if (!chain.length) return null;
+  if (!chain.length) { await log({ outcome: 'no_provider', tries: 0 }); return null; }
   const failures = [];
 
   // 1. What may this feature send, and how long an answer may it ask for?
@@ -462,6 +467,7 @@ async function complete(supabase, opts = {}) {
     // Not an error, and not a provider problem: today's allowance is spent, so
     // the feature writes with its rules until tomorrow.
     console.warn(`[ai] ${opts.feature || 'other'} skipped — ${verdict.reason} (used ${verdict.used} of ${verdict.cap})`);
+    await log({ outcome: 'over_budget', tries: 0, error: verdict.reason });
     return null;
   }
 
@@ -503,6 +509,7 @@ async function complete(supabase, opts = {}) {
         // that omits usage would be free forever.
         const actual = (parsed.usage.input_tokens + parsed.usage.output_tokens) || estimated;
         await budget.recordSpend(supabase, opts.orgId, opts.feature, actual);
+        await log({ outcome: 'ok', provider: entry.id, model, tries: failures.length + 1, usage: parsed.usage });
         return { ...parsed, provider: entry.id, model, tier: limits.tier, budget_remaining: verdict.remaining_tokens };
       } catch (err) {
         // Never fatal: the loop moves on, and an empty loop means rules output.
@@ -515,6 +522,8 @@ async function complete(supabase, opts = {}) {
     }
   }
   if (failures.length) await recordFailure(supabase, opts.feature, failures, opts.orgId);
+  const lastFail = failures[failures.length - 1] || {};
+  await log({ outcome: failures.length ? 'failed' : 'no_provider', tries: failures.length, provider: lastFail.provider, model: lastFail.model, error: lastFail.error });
   return null;
 }
 

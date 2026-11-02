@@ -136,7 +136,7 @@ async function recruiterSendingMailbox(recruiterId) {
   if (!recruiterId) return null;
   const { data: mailboxes } = await supabase.from('user_emails')
     .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
-    .eq('user_id', recruiterId).order('is_primary', { ascending: false });
+    .eq('user_id', recruiterId).order('is_primary', { ascending: false }).order('created_at', { ascending: true }).order('email_address', { ascending: true });   // a fixed order: with no primary, the database's own order changed between calls (owner, 2 Nov: interview mail "from a random email ID")
   if (!mailboxes?.length) return null;
   const ids = mailboxes.map(m => m.id);
   const [{ data: msTokens }, { data: gmailTokens }, smtpIds] = await Promise.all([
@@ -254,7 +254,7 @@ async function connectedMailboxById(id) {
 async function ownSendingMailboxes(req) {
   const { data: rows } = await supabase.from('user_emails')
     .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
-    .eq('user_id', req.user.id).order('is_primary', { ascending: false });
+    .eq('user_id', req.user.id).order('is_primary', { ascending: false }).order('created_at', { ascending: true }).order('email_address', { ascending: true });
   const org = req.orgId || null;
   const mine = (rows || []).filter(m => m.is_active !== false && (!org || !m.org_id || m.org_id === org));
   if (!mine.length) return [];

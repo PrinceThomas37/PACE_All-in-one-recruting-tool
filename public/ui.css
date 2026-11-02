@@ -1182,3 +1182,11 @@ body.ui-kit .seg-toggle{display:inline-flex;gap:4px;flex-wrap:nowrap}
 /* R-348: "Loading your leads…" while the lead list fills in behind the open app (22-api.js leadsNote). A float: opaque. */
 .leads-loading-note{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:900;display:flex;align-items:center;gap:10px;
   padding:8px 14px;border-radius:10px;background:var(--card-solid);border:1px solid var(--border2);box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:calc(100vw - 32px)}
+
+/* D-0194: Admin → AI usage table. Wide on a phone: it scrolls in its own box, never the page. */
+.ai-usage-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ai-usage-table { width: 100%; border-collapse: collapse; min-width: 640px; }
+.ai-usage-table th, .ai-usage-table td { padding: 3px 8px 3px 0; text-align: left; vertical-align: top; }
+.ai-usage-table th { text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-bottom: 5px; }
+.ai-usage-table .num { text-align: right; white-space: nowrap; }
+.ai-usage-table tbody tr + tr td { border-top: 1px solid var(--border); }

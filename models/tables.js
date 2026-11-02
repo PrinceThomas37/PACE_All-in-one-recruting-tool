@@ -19,6 +19,8 @@
 // intent — scoped to a request/org, or explicitly cross-org.
 const TENANT_TABLES = new Set([
   'activity_log',
+  // Added by migration 071 (D-0194) — one row per AI call, kept 120 days.
+  'ai_calls',
   'assignment_requests',
   'candidate_documents',
   'candidate_notes',

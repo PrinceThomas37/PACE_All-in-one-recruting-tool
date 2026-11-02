@@ -10,6 +10,7 @@ const express = require('express');
 const integrations = require('../config/integrations');
 const aiBudget = require('../services/ai-budget');
 const aiProvider = require('../services/ai-provider');
+const settingsConfig = require('../config/settings');   // D-0194: the admin's AI prices
 const { verifyEmailAddress } = require('../email-verify');
 const httpClient = require('../http-client');
 const cdata = require('../services/contact-data');
@@ -238,6 +239,34 @@ module.exports = (ctx) => {
           spent_today: spent.by_feature[id] || 0,
         })),
       });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // The AI call record (D-0194): per kind of request — calls, success rate, average seconds and tries, text in/out, the models
+  // that answered, and an estimated cost at the prices the admin typed in (never a price PACE made up). ?days=1..120.
+  router.get('/admin/ai-calls', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      const callLog = require('../services/ai-call-log');
+      const days = Math.min(callLog.RETENTION_DAYS, Math.max(1, parseInt(req.query.days, 10) || 30));
+      const since = new Date(Date.now() - days * 86400000).toISOString();
+      const rows = [];
+      for (let from = 0; ; from += 1000) {                     // paged: a busy month is more than one page
+        let q = supabase.from('ai_calls').select('feature,outcome,provider,model,tries,ms,input_tokens,output_tokens')
+          .gte('created_at', since).order('created_at', { ascending: false }).range(from, from + 999);
+        if (req.orgId) q = q.eq('org_id', req.orgId);
+        const { data, error } = await q;
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < 1000 || rows.length >= 50000) break;
+      }
+      const prices = {
+        in: Number(await settingsConfig.getSetting(supabase, 'ai_price_in_per_million', req.orgId || undefined)) || 0,
+        out: Number(await settingsConfig.getSetting(supabase, 'ai_price_out_per_million', req.orgId || undefined)) || 0,
+      };
+      const labels = {};
+      Object.entries(aiBudget.FEATURES).forEach(([id, f]) => { labels[id] = f.label; });
+      res.json(Object.assign({ days, prices, labels, truncated: rows.length >= 50000 }, callLog.summarize(rows, prices)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

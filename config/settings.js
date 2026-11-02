@@ -348,6 +348,22 @@ const SETTINGS_SCHEMA = [
     description: 'The most emails "Send selected" or "Retry" will take in a single click. Anything beyond it is left for the next click.',
     default: 500, min: 1, max: 5000,
   },
+  // D-0194 / D-0195 (owner, 2 Nov 2026): R-343's versions, and the prices behind the AI usage table's cost estimate.
+  {
+    key: 'sequence_versions_max', label: 'Most versions a person may have of each outreach email', unit: 'versions (their own included)', group: 'AI',
+    description: 'The highest number anyone may choose. Each person picks how many versions they want for their own emails (1, 2, 3 … up to this). PACE picks one at random for each lead, so leads do not all get the same words. Their own wording is version 1; the rest are written by AI from it.',
+    default: 20, min: 1, max: 20,
+  },
+  {
+    key: 'ai_price_in_per_million', label: 'Paid AI price: text sent', unit: 'US$ per million tokens', group: 'AI',
+    description: 'For the AI usage table only: what a paid AI model charges for the text PACE sends it. Copy it from the price page of the model you are considering. 0 = not set (the table then shows no cost).',
+    default: 0, min: 0, max: 1000,
+  },
+  {
+    key: 'ai_price_out_per_million', label: 'Paid AI price: text written', unit: 'US$ per million tokens', group: 'AI',
+    description: 'For the AI usage table only: what a paid AI model charges for the text it writes back. 0 = not set.',
+    default: 0, min: 0, max: 1000,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));
