@@ -316,7 +316,7 @@ function renderJobs(){
   ]);
 
   return UI.page({
-    strip: stageSummary,
+    strip: (window.importBannerSlot?importBannerSlot():'')+stageSummary,   // R-343 step 4: imports running / finished
     toolbar: UI.toolbar({
       search:{ value:f.search||'', placeholder:'Search leads, companies, contacts…',
                oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },

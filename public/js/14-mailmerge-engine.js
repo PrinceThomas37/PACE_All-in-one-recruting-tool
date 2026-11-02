@@ -698,7 +698,10 @@ window.doImportProcess=function(toProcess,dupEmailMap){
 
     // Single bulk API call
     // D-0110: an import by anyone lands UNASSIGNED; it becomes someone's when it is assigned (Leads → Assign) or the first email is written.
-    apiPost('/jobs/bulk',{jobs:jobPayloads}).then(function(res){
+    var bulkCall=apiPost('/jobs/bulk',{jobs:jobPayloads});
+    // R-343 step 4: the Leads tab's progress line picks the running import up straight away (the server lists it).
+    if(window.importProgressCheck) setTimeout(importProgressCheck,800);
+    bulkCall.then(function(res){
       var summary=res.imported+' job'+(res.imported!==1?'s':'')+' imported, '+res.contacts+' contacts created.';
       // The server already counts addresses it flagged invalid; the result used
       // to say nothing about them, so a batch that could not be emailed looked

@@ -830,3 +830,5 @@ The card now shows a tile only when someone is waiting on you: a client or candi
 - **AI usage table (D-0194):** Admin → Integrations → AI — time, tries, success, text in/out, model per kind of AI request; 120 days.
 
 - **Work arrangement detail (D-0197, 2 Nov 2026):** My Setup → "Add a detail" → "Work arrangement (on-site / remote / hybrid), if known" — "fully on-site (Dallas, TX)", "100% remote", "hybrid (3 days in office)" from the posting by rules (`services/work-arrangement.js`); not said → its sentence is left out.
+
+- **Import progress + "import finished" (R-343 step 4, 2 Nov 2026):** Leads tab line "Riya's import: 42 of 100 leads saved" with a bar, then "finished: 100 leads, 130 contacts…" and a notice; for the importer, their own team's RA Lead and admins; kept a day (`services/import-runs.js`, `GET /imports/recent`).
