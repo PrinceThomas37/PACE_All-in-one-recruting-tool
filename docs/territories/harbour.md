@@ -387,3 +387,5 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 
 ## 29 Oct 2026 (Session 55)
 - Bounce kind (blocked/invalid) `services/bounce-kind.js`; refused send marks the contact. 5 MB attachments: `services/graph-attach.js`, Gmail `sendMime` upload path. Send runs are passes (`services/send-passes.js`, `runSendPasses`): new mail queued mid-run → fresh pass in the agreed order; cut-off runs resume 60 s after boot. Reply-all no longer copies To into Cc. Gmail headers-only `multipart/mixed` = has files.
+
+- **2 Nov 2026 (R-351):** the default sending mailbox is primary → oldest connected → address (was primary only; ties came back in database order, so interview mail switched mailboxes). The From picker always sends the id it shows; never again "send nothing and let the server choose".
