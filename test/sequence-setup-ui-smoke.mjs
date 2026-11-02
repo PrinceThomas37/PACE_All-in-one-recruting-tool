@@ -24,7 +24,7 @@ let saved=null, draftCalls=[], noPay=false, aiTests=[], aiOff=false;
 async function api(route){
   const req=route.request(), u=new URL(req.url()), m=req.method(), body=req.postData()?JSON.parse(req.postData()):null;
   const j=(o,st=200)=>route.fulfill({status:st,contentType:'application/json',body:JSON.stringify(o)});
-  if(u.pathname==='/my-setup/sequence'&&m==='GET'){ const v=Object.assign({},vars); if(noPay) v.pay=''; return j({mode:null,teach:teachMod.normalize(null),teach_options:teachMod.options(),first:{subject:'',body:'',versions:[]},followups:[],followup_max:5,sample:{vars:v,example:false,name:'Dana Lee',company:'Acme Health',email:'dana@acme.example'}}); }
+  if(u.pathname==='/my-setup/sequence'&&m==='GET'){ const v=Object.assign({},vars); if(noPay) v.pay=''; return j({mode:null,teach:teachMod.normalize(null),teach_options:teachMod.options(),first:{subject:'',body:'',versions:[]},followups:[],followup_max:5,versions_max:20,versions_count:null,sample:{vars:v,example:false,name:'Dana Lee',company:'Acme Health',email:'dana@acme.example'}}); }
   if(u.pathname==='/my-setup/sequence'&&m==='PUT'){ saved=body; return j({ok:true}); }
   if(u.pathname==='/my-setup/sequence/draft'){ draftCalls.push(body);
     if(body.mode==='variant') return j({source:'ai',subject:'About the {{pos}} role',body:'Hello {{fn}},\n\nA different way to say it about {{company}}.\n\nThanks,'});
@@ -73,10 +73,18 @@ await pg.click('#sq-body'); await pg.keyboard.press('End');
 await pg.evaluate(()=>{ window.render(); window.render(); });
 await pg.keyboard.type(' Thanks');
 ok('typing survives app repaints', (await pg.textContent('#sq-body')).includes('Want resumes? Thanks') || (await pg.textContent('#sq-body')).includes('Thanks'));
-// versions
+// versions — D-0196: the AI button waits for the person's own number, then writes exactly that many
+ok('no number chosen yet: no AI-versions button, the page asks for a number', !(await pg.$('[data-sq="vary"][data-slot="first"]')) && (await pg.textContent('#sq-root')).includes('Choose how many versions you want'));
+const vOpts = await pg.$$eval('[data-sq-vcount] option:not([disabled])', (os)=>os.map((o)=>o.value));
+ok('the choice runs 1 … the admin\'s ceiling', vOpts[0]==='1' && vOpts[vOpts.length-1]===String(vOpts.length), JSON.stringify(vOpts));
+await pg.selectOption('[data-sq-vcount]','3');
+await pg.waitForSelector('[data-sq="vary"][data-slot="first"]');
+ok('3 chosen → "Write 2 versions with AI"', (await pg.textContent('[data-sq="vary"][data-slot="first"]')).includes('Write 2 versions'));
 await pg.click('[data-sq="vary"][data-slot="first"]');
-await pg.waitForSelector('.sq-ver');
+await pg.waitForFunction(()=>document.querySelectorAll('.sq-ver').length===2);
 ok('two versions written, filled in', (await pg.$$('.sq-ver')).length===2 && (await pg.textContent('.sq-ver')).includes('Hello Dana'));
+if(OUT){ await pg.evaluate(()=>document.querySelector('[data-sq-vcount]').closest('.card').scrollIntoView({block:'start'})); await pg.screenshot({path:OUT+'/s1b-versions.png'}); }
+ok('all written: the button goes, the count is said', !(await pg.$('[data-sq="vary"][data-slot="first"]')) && (await pg.textContent('#sq-root')).includes('3 of 3 versions'));
 // follow-up
 ok('one follow-up box to start', (await pg.$$('[data-sq-day]')).length===1);
 await pg.click('[data-sq="fudraft"][data-i="0"]');
@@ -97,6 +105,7 @@ ok('test built by the server path', m1.includes('Dana') && /Version \d of 3/.tes
 if(OUT) await pg.screenshot({path:OUT+'/s3-test.png',fullPage:true});
 await pg.click('[data-sq="save"]'); await pg.waitForFunction(()=>/Your sequence is on/.test(document.querySelector('#sq-root').textContent));
 ok('saved: mode, tokens, versions, follow-ups', saved && saved.mode==='template' && saved.first.body.includes('{{fn}}') && saved.first.body.includes('{{pay}}') && saved.first.subject==='Your {{pos}}' && saved.first.versions.length===2 && saved.followups.length===1 && saved.followups[0].day===3, JSON.stringify(saved).slice(0,400));
+ok('saved: the chosen number of versions (D-0196)', saved && saved.versions_count===3, String(saved && saved.versions_count));
 // AI writes each one: taught by picks and one-liners (R-259)
 const p2=await open();
 await p2.click('[data-mode="ai"]'); await p2.waitForSelector('#sq-purpose');

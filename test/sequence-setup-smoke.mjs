@@ -41,7 +41,16 @@ step('rand near 0 → the person\'s own (version 1)', versions.pick(S, 'a', 'o1'
 step('rand in the middle → version 2 with its own subject', versions.pick(S, 'a', 'o1', own, 0.5).id === 'own_v2' && versions.pick(S, 'a', 'o1', own, 0.5).subject === 'V2 subject');
 step('a version without a subject keeps the person\'s subject', versions.pick(S, 'a', 'o1', own, 0.99).id === 'own_v3' && versions.pick(S, 'a', 'o1', own, 0.99).subject === 'Own subject');
 step('no versions → always the person\'s own', versions.pick({}, 'a', 'o1', own, 0.9).id === 'own_v1');
-step('saving fewer versions clears the rest', versions.rowsFor('a', 'o1', [{ subject: 's', body: 'b' }]).filter((r) => r.value === '').length === 2);
+step('saving fewer versions clears the rest', versions.rowsFor('a', 'o1', [{ subject: 's', body: 'b' }]).filter((r) => r.value === '').length === (versions.EXTRA.length - 1) * 2);
+// D-0196 (owner, 2 Nov 2026): each person chooses how many; the admin's ceiling is the top.
+step('versions run v2 … v20 (20 in all, the person\'s own included)', versions.EXTRA[0] === 2 && versions.EXTRA[versions.EXTRA.length - 1] === 20 && versions.MAX_TOTAL === 20);
+const S20 = {}; for (let v = 2; v <= 20; v++) S20[versions.key('a', 'o1', v, 'body')] = 'V' + v;
+step('no number chosen → every saved version is used ("keep what they have")', versions.extraVersions(S20, 'a', 'o1').length === 19);
+step('a chosen number of 4 → own + 3 versions, the rest never sent', versions.extraVersions(Object.assign({ u_a_versions_count: '4' }, S20), 'a', 'o1').length === 3 && versions.pick(Object.assign({ u_a_versions_count: '4' }, S20), 'a', 'o1', own, 0.99).id === 'own_v4');
+step('a chosen number of 1 → only the person\'s own email', versions.pick(Object.assign({ u_a_versions_count: '1' }, S20), 'a', 'o1', own, 0.99).id === 'own_v1');
+step('the count is clamped to the ceiling and never below 1', versions.clampCount(30, 20) === 20 && versions.clampCount(5, 3) === 3 && versions.clampCount(0, 20) === null && versions.clampCount('x', 20) === null);
+step('saving keeps no more than the room given', versions.rowsFor('a', 'o1', [{ body: '1' }, { body: '2' }, { body: '3' }], 2).filter((r) => r.value !== '').length === 2);
+step('the loader asks for the count key too', versions.neededKeys(['a'], ['o1']).includes('u_a_versions_count'));
 
 const job = (id, owner) => ({ id, position: 'Welder', location: 'Austin, TX', company: { name: 'Acme ' + id }, assigned_to_bd: owner, contacts: [{ id: id + 'c', email: `p@${id}.example.com`, first_name: 'Pat' }], research: {} });
 const settings = Object.assign({ 'u_bdA_tmpl_o1_subject': 'Your {{pos}} opening', 'u_bdA_tmpl_o1_body': 'Hi {{fn}}, I have welders for {{company}} who can start this week.' },

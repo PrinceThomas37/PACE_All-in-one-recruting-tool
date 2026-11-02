@@ -163,14 +163,30 @@ module.exports = (ctx) => {
     try { const v = Number(await settingsConfig.getSetting(supabase, 'followup_max', req.orgId || undefined)); return Number.isInteger(v) && v >= 0 ? Math.min(v, followupSteps.MAX) : followupSteps.MAX; }
     catch (_) { return followupSteps.MAX; }
   }
+  // D-0196: the admin's ceiling on versions (Admin settings → AI), 1..20.
+  async function versionsMax(req) {
+    try { const v = Number(await settingsConfig.getSetting(supabase, 'sequence_versions_max', req.orgId || undefined)); return Number.isInteger(v) && v >= 1 ? Math.min(v, versions.MAX_TOTAL) : versions.MAX_TOTAL; }
+    catch (_) { return versions.MAX_TOTAL; }
+  }
+  // Every key the screen needs, read in pages of 60 (with 20 versions per email the list is ~250 keys — one IN list that long is
+  // a very long request).
+  async function readSeqSettings(uid) {
+    const keys = seqKeys(uid), m = {};
+    for (let i = 0; i < keys.length; i += 60) {
+      const { data, error } = await supabase.from('app_settings').select('key,value').in('key', keys.slice(i, i + 60));
+      if (error) throw error;
+      (data || []).forEach((r) => { m[r.key] = r.value; });
+    }
+    return m;
+  }
   router.get('/my-setup/sequence', auth, async (req, res) => {
     try {
       if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
       const uid = req.user.id;
-      const { data } = await supabase.from('app_settings').select('key,value').in('key', seqKeys(uid));
-      const m = {}; (data || []).forEach((r) => { m[r.key] = r.value; });
+      const m = await readSeqSettings(uid);
       const own = (sl, part) => String(m[`u_${uid}_tmpl_${sl}_${part}`] || '');
       const max = await followupMax(req);
+      const vMax = await versionsMax(req);
       const count = Math.min(followupSteps.countFor(m, uid), max);
       const mode = aiFirst.normalize(m[aiFirst.personKey(uid)]) === 'on' ? 'ai' : (sequenceStarter.hasOwnSequence(m, uid) ? 'template' : null);
       res.json({
@@ -184,6 +200,10 @@ module.exports = (ctx) => {
           versions: versions.extraVersions(m, uid, t).map((v) => ({ subject: v.subject, body: v.body })),
         })),
         followup_max: max,
+        // D-0196: the person's own number of versions (their email included; null = not chosen, every saved version is used)
+        // and the admin's ceiling.
+        versions_count: versions.chosenCount(m, uid) == null ? null : Math.min(versions.chosenCount(m, uid), vMax),
+        versions_max: vMax,
         // "AI writes each one": the person's answers (R-259) and the choices the screen offers — the server's lists, not the page's.
         teach: aiTeach.normalize(m[aiTeach.key(uid)]),
         teach_options: aiTeach.options(),
@@ -217,6 +237,19 @@ module.exports = (ctx) => {
         if (i > 0 && d <= Number(fus[i - 1].day)) return res.status(400).json({ error: `Follow-up ${i + 1} must go out after follow-up ${i}.` });
         if (clean(fus[i].body, 6000).trim().length < 5) return res.status(400).json({ error: `Follow-up ${i + 1} has no text yet.` });
       }
+      // D-0196: how many versions this person wants (their own email included), never above the admin's ceiling. Absent = keep
+      // what they have (the count is not touched); versions beyond the chosen number are not saved.
+      const vMax = await versionsMax(req);
+      let vCount = null;
+      if (b.versions_count != null && b.versions_count !== '') {
+        const n = Number(b.versions_count);
+        if (!Number.isInteger(n) || n < 1) return res.status(400).json({ error: 'Choose how many versions you want: 1 or more.' });
+        if (n > vMax) return res.status(400).json({ error: `Your company allows up to ${vMax} versions of each email.` });
+        vCount = n;
+      }
+      const room = (vCount == null ? vMax : vCount) - 1;
+      const over = [first].concat(fus).find((x) => Array.isArray(x && x.versions) && x.versions.filter((v) => v && String(v.body || '').trim()).length > room);
+      if (over) return res.status(400).json({ error: room ? `Keep at most ${room} version${room === 1 ? '' : 's'} besides your own email — remove the extra ones.` : 'You chose 1 version (your own email only) — remove the AI versions first.' });
       // Every detail in the text must be one PACE can fill — a check, not a hope (unknown {{names}} would ship raw).
       const texts = [fSubj, fBody].concat(...(first.versions || []).map((v) => [v.subject, v.body]), ...fus.map((f) => [f.subject, f.body].concat(...(f.versions || []).map((v) => [v.subject, v.body]))));
       const unknown = [...new Set([].concat(...texts.map((t) => unresolvedVars(String(t || '')).filter((k) => !sequenceDraft.ALLOWED_VARS.has(k)))))];
@@ -235,14 +268,15 @@ module.exports = (ctx) => {
         // The person's own words (and versions) are what goes out: PACE's stock rotation, if it was on, is turned off.
         { key: `u_${uid}_random_template_mode`, value: 'false' },
         { key: aiTeach.key(uid), value: mode === 'ai' ? JSON.stringify(teach) : '' },
-      ].concat(versions.rowsFor(uid, 'o1', mode === 'template' ? first.versions : []));
+      ].concat(vCount == null ? [] : [{ key: versions.countKey(uid), value: String(vCount) }],
+        versions.rowsFor(uid, 'o1', mode === 'template' ? first.versions : [], room));
       followupSteps.STEPS.forEach((t, i) => {
         const f = fus[i];
         if (!f) { rows.push(...versions.rowsFor(uid, t, [])); return; }        // a follow-up taken away keeps its wording, loses its versions
         rows.push({ key: `u_${uid}_${t}_day`, value: String(Number(f.day)) },
           { key: `u_${uid}_tmpl_${t}_subject`, value: clean(f.subject, 300).trim() || ('Re: ' + fSubj) },
           { key: `u_${uid}_tmpl_${t}_body`, value: clean(f.body, 6000).trim() },
-          ...versions.rowsFor(uid, t, f.versions));
+          ...versions.rowsFor(uid, t, f.versions, room));
       });
       const { error } = await supabase.from('app_settings').upsert(rows.map((r) => Object.assign(r, { updated_at: now })), { onConflict: 'key' });
       if (error) throw error;
@@ -272,7 +306,7 @@ module.exports = (ctx) => {
       const vars = buildEmailVars({ job: lead.job, contact: lead.contact, senderDisplayName: DEFER_SENDER });
       // The engine's own choice: version 1 or one of the versions, at random (services/sequence-versions.js).
       const settings = {};
-      (Array.isArray(b.versions) ? b.versions : []).slice(0, 2).forEach((v, i) => {
+      (Array.isArray(b.versions) ? b.versions : []).slice(0, versions.EXTRA.length).forEach((v, i) => {
         settings[versions.key(uid, 'o1', i + 2, 'subject')] = String((v && v.subject) || '');
         settings[versions.key(uid, 'o1', i + 2, 'body')] = String((v && v.body) || '');
       });
