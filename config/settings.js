@@ -350,9 +350,9 @@ const SETTINGS_SCHEMA = [
   },
   // D-0194 / D-0195 (owner, 2 Nov 2026): R-343's versions, and the prices behind the AI usage table's cost estimate.
   {
-    key: 'sequence_versions_total', label: 'Versions of each outreach email', unit: 'versions (your own included)', group: 'AI',
-    description: 'How many versions each email of a sequence may have, the person\'s own wording included. PACE picks one at random for each lead, so leads do not all get the same words. The rest are written by AI from the person\'s own email.',
-    default: 10, min: 1, max: 20,
+    key: 'sequence_versions_max', label: 'Most versions a person may have of each outreach email', unit: 'versions (their own included)', group: 'AI',
+    description: 'The highest number anyone may choose. Each person picks how many versions they want for their own emails (1, 2, 3 … up to this). PACE picks one at random for each lead, so leads do not all get the same words. Their own wording is version 1; the rest are written by AI from it.',
+    default: 20, min: 1, max: 20,
   },
   {
     key: 'ai_price_in_per_million', label: 'Paid AI price: text sent', unit: 'US$ per million tokens', group: 'AI',
