@@ -90,7 +90,9 @@ function fakeSupabase() {
         queries++;
         if (pending && pending.op === 'insert') {
           if (insertShouldFail) return { data: null, error: { message: 'boom' } };
-          inserted.push(pending.row); return { data: { id: 'sc-1' }, error: null };
+          // Only the staging table is "an application" — other writes (e.g. the AI call record, D-0194) are not counted here.
+          if (table === 'sourcing_candidates') inserted.push(pending.row);
+          return { data: { id: 'sc-1' }, error: null };
         }
         if (table === 'job_orders') return { data: JOBS[f.apply_token] || null, error: null };
         if (table === 'organizations') return { data: { name: 'Fute Global' }, error: null };
