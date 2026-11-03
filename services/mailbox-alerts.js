@@ -39,10 +39,14 @@ function pauseNote(bounces, sent) {
   return { bounces: b, sent: n, pct: Math.round((b / n) * 1000) / 10 };
 }
 function pausedSentence(note) {
+  // A pause or block by an ADMIN (Deliverability → one mailbox) is not PACE protecting a reputation — say who and when instead of blaming bounces.
+  if (note && (note.kind === 'manual' || note.kind === 'blocked')) {
+    return require('./mailbox-control').noteSentence(note.kind === 'blocked' ? 'blocked' : 'paused', note);
+  }
   const why = note && note.sent > 0
     ? `${note.bounces} of the ${note.sent} emails it sent that day bounced (${note.pct}%), which is over the limit.`
     : 'Too many of its emails bounced, which is over the limit.';
-  return `PACE paused this mailbox by itself to protect its reputation. ${why} Nothing sends from it until someone resumes it.`;
+  return `PACE paused this mailbox by itself to protect its reputation. ${why} Its outreach is held until someone resumes it; emails written one by one and replies still go.`;
 }
 
 // Keep / forget what a pause was for. app_settings, like the bounce counts beside it — no schema change. Best-effort: the pause itself

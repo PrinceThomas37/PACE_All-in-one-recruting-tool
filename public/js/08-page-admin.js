@@ -748,7 +748,7 @@ function loadDeliverability(){
   });
 }
 window.openDeliverability=function(){ STATE.page='deliverability'; STATE.deliv=undefined; render(); loadDeliverability(); };
-window.setDelivDays=function(days){ STATE.delivDays=days; STATE.deliv=undefined; render(); loadDeliverability(); };
+window.setDelivDays=function(days){ STATE.delivDays=days; STATE.deliv=undefined; render(); loadDeliverability(); if(window.mbcReload)mbcReload(); };
 window.resumeMailbox=function(id){ apiPost('/admin/mailbox/'+id+'/resume',{}).then(function(){ showToast('Mailbox resumed','success'); loadDeliverability(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
 
 // ── Warm-up pool ──
@@ -810,57 +810,8 @@ function renderDeliverability(){
     var on=days===n;
     return '<button onclick="setDelivDays('+n+')" class="fs-12" style="padding:5px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:600;cursor:pointer">'+n+'d</button>';
   }).join('')+'</div>';
-  var mbRows=(d&&d.mailboxes||[]).map(function(m){
-    var conn=m.connection||{};
-    // Sign-in health first — a "healthy" send-rate badge is misleading if the
-    // mailbox can't actually sign in to send.
-    var connBadge=conn.status==='expired'?'<span title="'+htmlEsc(conn.error||'The mailbox sign-in refresh is failing — reconnect it under Manager Users → Email IDs.')+'" class="fs-11 c-red" style="padding:2px 8px;background:var(--red-l);border-radius:6px;font-weight:700">&#9888; Sign-in expired — reconnect</span>':(conn.status==='ok'?'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:6px;font-weight:600">&#10003; Signed in</span>':(conn.status==='none'?'<span class="fs-11 c-text3" style="padding:2px 8px;background:var(--bg3);border-radius:6px;font-weight:600">Not connected</span>':''));
-    // Send-rate / warm-up status is moot while a mailbox can't sign in — show only
-    // the actionable reconnect badge in that case.
-    var status=conn.status==='expired'?'':(m.auto_paused?'<span class="fs-11" style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700">Auto-paused</span> <button onclick="resumeMailbox(\''+m.id+'\')" style="font-size:11px;color:var(--green);background:transparent;border:0;cursor:pointer">Resume</button>':(m.warmup?'<span class="fs-11 c-amber" style="padding:2px 8px;background:var(--amber-l);border-radius:6px;font-weight:600">Warm-up · cap '+m.warmup.today_cap+'/day</span>':'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:6px;font-weight:600">Healthy</span>'));
-    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="fs-13" style="font-weight:500">'+htmlEsc(m.name||m.email)+'</div><div class="fs-11 c-text3">'+htmlEsc(m.email)+' · '+m.daily_limit+'/day cap</div></div>'+connBadge+status+'</div>';
-  }).join('');
-  // ── Warm-up pool ──
-  var isAdmin=userHasRole(u,'admin');
+  // The two long lists (mailbox health, warm-up pool) are one search-first panel now: public/js/75-mailbox-control.js.
   if(STATE.warmup===undefined&&!STATE._warmupLoading)loadWarmup();
-  var w=STATE.warmup;
-  var wtick=STATE.warmupTick;
-  var warmMuted='font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600';
-  var warmRows=(w&&w.mailboxes||[]).map(function(m){
-    var badge, actions='';
-    var btn=function(action,label,color){ return '<button onclick="warmupAction(\''+m.id+'\',\''+action+'\')" style="font-size:11px;color:'+color+';background:transparent;border:1px solid var(--border2);padding:3px 9px;border-radius:6px;cursor:pointer;margin-left:5px">'+label+'</button>'; };
-    if(m.warmup_status==='warming'){
-      badge='<span class="c-amber" style="'+warmMuted+';background:var(--amber-l)">Warming · day '+(m.day_label||'')+'</span>';
-      if(isAdmin)actions=btn('pause','Pause','var(--amber)')+btn('stop','Graduate','var(--green)');
-    } else if(m.warmup_status==='paused'){
-      badge='<span class="c-text2" style="'+warmMuted+';background:var(--bg3)">Paused</span>';
-      if(isAdmin)actions=btn('resume','Resume','var(--green)')+btn('stop','Graduate','var(--text2)');
-    } else if(m.warmup_status==='warmed'){
-      badge='<span class="c-green" style="'+warmMuted+';background:var(--green-l)">✓ Warmed — ready for outreach</span>';
-      if(isAdmin)actions='<button onclick="openWarmupStart(\''+m.id+'\')" style="font-size:11px;color:var(--accent);background:transparent;border:1px solid var(--border2);padding:3px 9px;border-radius:6px;cursor:pointer;margin-left:5px">Warm again</button>';
-    } else {
-      badge=m.opt_in?'<span class="c-accent" style="'+warmMuted+';background:var(--accent-l)">Pool receiver</span>':'<span class="c-text3" style="'+warmMuted+';background:var(--bg3)">Not warming</span>';
-      if(isAdmin)actions=m.connected
-        ?'<button onclick="openWarmupStart(\''+m.id+'\')" style="font-size:11px;color:#fff;background:var(--accent);border:0;padding:4px 11px;border-radius:6px;cursor:pointer;margin-left:5px">Start warm-up</button>'
-        :'<span style="font-size:11px;color:var(--amber)" title="Connect this mailbox under the user\'s Email IDs first">⚠ not connected</span>';
-    }
-    var meta=[];
-    if(m.warmup_status==='warming')meta.push(m.sent_today+'/'+(m.target_today||0)+' today');
-    if(m.health&&m.health.inbox_placement_pct!=null)meta.push('inbox '+m.health.inbox_placement_pct+'%');
-    if(m.health&&m.health.rescued)meta.push(m.health.rescued+' rescued');
-    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap">'+
-      '<div style="flex:1;min-width:0"><div class="fs-13" style="font-weight:500">'+htmlEsc(m.display_name||m.email)+'</div>'+
-        '<div class="fs-11 c-text3">'+htmlEsc(m.email)+(m.owner?' · '+htmlEsc(m.owner):'')+(meta.length?' · '+meta.join(' · '):'')+'</div></div>'+
-      badge+actions+
-    '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes.</div>';
-  var warmExtra=(isAdmin&&STATE.isOperator!==false?'<button onclick="runWarmupTick()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">'+(wtick==='running'?'Running…':'▶ Run warm-up now')+'</button>':'')+
-    (wtick&&wtick!=='running'?'<span class="fs-11 c-text3" style="margin-left:8px">'+(wtick.off?'engine off — apply migration 009':'sent '+(wtick.sent||0)+' · replies '+(wtick.replied||0)+' · rescued '+(wtick.rescued||0)+' · pool '+(wtick.pool||0))+'</span>':'');
-  var readyColors={none:'var(--red)',minimal:'var(--amber)',ok:'var(--accent)',good:'var(--green)'};
-  var rd=w&&w.readiness;
-  var readyBanner=rd?'<div class="fs-11_5" style="padding:9px 14px;border-bottom:1px solid var(--border);background:'+readyColors[rd.level]+'14;color:'+(readyColors[rd.level]||'var(--text2)')+';font-weight:600">'+
-    (w.pool_count||0)+' mailbox'+((w.pool_count||0)===1?'':'es')+' · '+(w.pool_domains||0)+' domain'+((w.pool_domains||0)===1?'':'s')+' in pool — '+htmlEsc(rd.note)+'</div>':'';
-  var warmSub='<div class="fs-11_5 c-text3" style="padding:10px 14px;border-bottom:1px solid var(--border)">Warm-up sends real email between your connected mailboxes and holds short conversations to build reputation, then graduates them to outreach. Every mailbox that participates — the ones you warm <b>and</b> their partners — must be added and connected here.</div>'+readyBanner;
 
   // ── Domain authentication & blacklists ──
   if(STATE.domainHealth===undefined&&!STATE._dhLoading)loadDomainHealth(false);
@@ -900,8 +851,7 @@ function renderDeliverability(){
       dayFilter+
     '</div></div>'+
     statsRow+
-    card('Mailbox health (outreach cap & auto-pause)', (mbRows||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes for this scope.</div>'))+
-    card('Warm-up pool'+(w&&w.pool_count?' · '+w.pool_count+' active':''), warmSub+warmRows, warmExtra)+
+    mailboxControlCard()+
     card('Domain authentication & blacklists', dhSub+dhRows, dhExtra)+
   '</div>';
 }
