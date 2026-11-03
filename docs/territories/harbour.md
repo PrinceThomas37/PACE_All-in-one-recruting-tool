@@ -395,3 +395,5 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 - **3 Nov 2026 (R-340):** `routes/outreach-generator.js` creates its lead with `assigned_by` = the sender (nobody else handed it over). No send-path change.
 
 - 3 Nov 2026 (R-358): the old Manager Users delete route refuses a mailbox with mail on record (409 + Deactivate); count shared via services/mailbox-delete.js with the Deliverability panel.
+
+- 3 Nov 2026 (R-359): Block now also stops emails written one by one (inbox send/reply/forward refuse 409; services/mailbox-alerts.js blockedNotes); Pause stays outreach-only.

@@ -7234,3 +7234,7 @@ Owner asked to solve it. DELETE /users/:id/emails/:eid (routes/auth.js) now coun
 
 ### 3 Nov 2026 — R-349 Stages C + D built (branch r349-c1)
 Server side: GET /jobs/by-ids (whole leads by id, scoped, capped 100), GET /jobs/facets + migration 074 leads_facets (owner / industry drop-down numbers; memory answer until applied), proven on a real Postgres. Browser: public/js/76-leads-store.js (page, counts, facets, ids, by-ids, bookmarks, refresh after any write through apiPost/Put/Patch/Delete, `STATE.jobs` is an accessor: the whole list loads once, on demand), 06-page-leads.js renderJobs has a server path (`lv`) beside the old one, 22-api.js loadAppData → leadsStartup (first page; falls back to the whole list), poll refreshes the page, 07 Email: only the Compose tab reads the leads, signOut clears everything. Side-by-side browser test vs the old tab (27 checks) and a guard that lists which screens wake the whole list (only Assign). Not merged yet. Mutants checked: broken write hook caught.
+
+
+### 3 Nov 2026 — R-359 Block stops one-by-one sends
+Owner: yes. routes/mailbox.js sendRoute refuses a BLOCKED mailbox (new, reply, forward) with 409 + sentence (services/mailbox-control.js blockedSendSentence); an unreadable lock refuses with 503; GET /mailbox/accounts carries blocked / blocked_note; 47-page-mailbox.js says so before sending. A Pause is unchanged (outreach only). mailbox-control-smoke pins the new block meaning; mailbox-smoke has 7 new checks (mutant caught).

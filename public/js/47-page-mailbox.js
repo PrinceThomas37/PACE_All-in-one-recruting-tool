@@ -1123,6 +1123,8 @@
   }
   window.mbUndoButton=undoButton;
 
+  // R-359: a BLOCKED mailbox sends nothing, not even one email written by hand — said before the send, the server says it again.
+  function mbBlockedSentence(acct){ var a=(M().accounts||[]).filter(function(x){return x.id===acct;})[0]; return a&&a.blocked?(a.blocked_note||'This mailbox is blocked by an admin. Nothing can be sent from it.'):''; }
   window.mbSendComposer=function(){
     mbChipFlush();
     var m=M(); var c=m.composer; if(!c||!c.msgId||c.sending)return;
@@ -1132,6 +1134,7 @@
       var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value;
     });
     if(c.mode!=='forward' && mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
+    var _bl=mbBlockedSentence(c.acct); if(_bl){ showToast(_bl,'error'); return; }
     if(c.mode==='forward' && !String(c.to||'').trim()){ showToast('Who are you forwarding this to?','warning'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){
@@ -1684,6 +1687,7 @@
     });
     if(!String(c.to||'').trim()){ showToast('Who is this going to?','warning'); return; }
     if(mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
+    var _bl2=mbBlockedSentence(c.acct||m.activeId); if(_bl2){ showToast(_bl2,'error'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){ showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return; }
     var sendBody={

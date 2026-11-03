@@ -30,6 +30,8 @@ const { mailboxConnections } = require('../mailbox-health');
 const { createMailboxSender, readAttachments, parseAddressField } = require('../services/mailbox-send');
 const recipientSuggest = require('../services/recipient-suggest');
 const { getSetting } = require('../config/settings');
+const alerts = require('../services/mailbox-alerts');          // R-359: is this mailbox locked?
+const mailboxControl = require('../services/mailbox-control');
 
 // The nav badge asks for an unread count on every render. That is one provider
 // call per mailbox per render, which is both slow and rude to the API — so the
@@ -172,8 +174,10 @@ module.exports = (ctx) => {
       const list = rows || [];
       const ids = list.map(m => m.id);
       const conns = await mailboxConnections(supabase, ids);
+      const locks = await alerts.blockedNotes(supabase, ids).catch(() => ({}));
       res.json(list.map(m => ({
         ...m,
+        blocked: !!locks[m.id], blocked_note: locks[m.id] ? mailboxControl.blockedSendSentence(locks[m.id]) : null,   // the composer says so before anyone writes (R-359)
         connection: conns[m.id] || { connected: false, status: 'none' },
         // Only a mailbox that is both switched on and holding a live token can
         // be opened; the UI uses this to decide between "open" and "reconnect".
@@ -644,6 +648,12 @@ module.exports = (ctx) => {
       if (error) return res.status(error.status).json(error.body);
       const refused = sender.check(kind, req.body);
       if (refused) return res.status(refused.status).json(refused.body);
+      // R-359 (owner 3 Nov 2026): a BLOCKED mailbox sends nothing — not outreach, not an email written one by one. (A Pause stops outreach only.)
+      // If the lock cannot be read the send is refused too: an admin's lock is never quietly skipped.
+      try {
+        const locks = await alerts.blockedNotes(supabase, [mailbox.id]);
+        if (locks[mailbox.id]) return res.status(409).json({ error: mailboxControl.blockedSendSentence(locks[mailbox.id]), code: 'mailbox_blocked' });
+      } catch (_) { return res.status(503).json({ error: 'Could not check whether this mailbox is locked. Try again in a moment.', code: 'lock_check_failed' }); }
       try {
         const r = await sender.send(mailbox, req.user.id, kind, req.params.id || null, req.body);
         recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
