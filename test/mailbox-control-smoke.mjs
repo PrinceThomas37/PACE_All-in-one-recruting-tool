@@ -65,7 +65,7 @@ const walk = (d) => { for (const e of fs.readdirSync(path.join(root, d), { withF
   else if (e.name.endsWith('.js') && /auto_paused_at/.test(fs.readFileSync(path.join(root, rel), 'utf8'))) readers.push(rel); } };
 walk('');
 const ALLOWED = ['index.js', 'routes/recruiting/outreach.js', 'routes/candidate-outreach.js',              // the outreach engines: lead sends, sequences, candidate outreach
-  'routes/deliverability.js', 'routes/mailbox-alerts.js', 'routes/mailbox-control.js',                    // the screens that SHOW or SET it
+  'routes/deliverability.js', 'routes/mailbox-alerts.js', 'routes/mailbox-control.js', 'routes/system-health.js',   // the screens that SHOW or SET it (system-health only READS it, for the admin's banner: R-367)
   'services/mailbox-control.js', 'services/mailbox-alerts.js'];
 const stray = readers.filter((f) => !ALLOWED.includes(f));
 ok('only the outreach engines and the screens read auto_paused_at — never the inbox, a one-off send or a reply', stray.length === 0 && readers.length >= 6, 'stray: ' + stray.join(', ') + ' | readers: ' + readers.join(', '));
