@@ -1274,3 +1274,5 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 - R-348 (30 Oct): GET /jobs reads `JOB_LIST_SELECT` (explicit columns + `research:research_list` + posting_* numbers, migration 070) with `JOB_SELECT` as fallback; `services/lead-list.js` reads ≤ 2 pages at once and re-reads a page cut off by the statement timeout (3 tries). A new jobs column the list needs → add to `JOB_LIST_COLUMNS` (test/lead-list-light-smoke fails otherwise).
 
 - **2 Nov 2026 (R-343 step 4):** `/jobs/bulk` inserts leads in batches of 50 and records an import run (memory while running, `activity_log` import_finished after). `GET /imports/recent` scopes by reporting chain / admin.
+
+- **3 Nov 2026 (R-349 Stage 1):** `GET /jobs/page` in `routes/jobs.js` (registered ABOVE `/jobs/:id`) over `services/lead-query.js`; scope first, filters after; page size = person's 10/20/50, else admin `leads_page_size_default`, else 20. Browser not wired yet. Proofs: `test/lead-query-smoke.mjs`, `test/jobs-page-route-smoke.mjs`.

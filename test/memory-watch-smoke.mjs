@@ -71,6 +71,18 @@ er.register('slow_job', { everyMs: 60000, run: async () => { seen = er.running()
 await er.runJob('slow_job');
 ok('the engine runner reports the job while it runs, and not after', JSON.stringify(seen) === '["slow_job"]' && er.running().length === 0, JSON.stringify(seen));
 
+// R-353b: Node's MaxListenersExceededWarning names no route; a response that ends with many 'finish' listeners is named once.
+{
+  const ll = [];
+  const w2 = createMemoryWatch({ log: (l) => ll.push(l), rss: () => 100 * MB, now: () => 0 });
+  const busy = () => { const rq = fakeReq('GET', '/pile/up', null), rs = fakeRes(); w2.middleware(rq, rs, () => {}); for (let i = 0; i < 9; i++) rs.on('finish', () => {}); rs.emit('finish'); };
+  busy(); busy();
+  ok('a response ending with 8+ finish listeners names its route', ll.filter(l => /^\[Listeners\] GET \/pile\/up ended with 10 /.test(l)).length === 1, ll.join(' | '));
+  ok('…the same route is named once, not on every request', ll.length === 1, String(ll.length));
+  const rq = fakeReq('GET', '/calm', null), rs = fakeRes(); w2.middleware(rq, rs, () => {}); rs.emit('finish');
+  ok('a normal response (2 listeners) is not named', !ll.some(l => /calm/.test(l)));
+}
+
 const failed = results.filter(x => !x).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

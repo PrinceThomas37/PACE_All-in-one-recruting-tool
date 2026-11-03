@@ -47,6 +47,11 @@ const SETTINGS_SCHEMA = [
     default: 0, min: 0, max: 100000,
   },
   {
+    key: 'leads_page_size_default', label: 'Leads shown per page (until a person picks their own)', unit: 'leads', group: 'Leads',
+    description: 'How many leads the Leads tab shows on one page for a person who has not chosen 10, 20 or 50 themselves. R-349 / D-0123.',
+    default: 20, min: 10, max: 50,
+  },
+  {
     key: 'company_cooldown_days', label: 'Company re-add cooldown', unit: 'days', group: 'Leads',
     description: 'How long after a company is added before an RA can add it again.',
     default: 21, min: 0, max: 365,

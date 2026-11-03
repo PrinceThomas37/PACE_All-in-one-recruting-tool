@@ -21,6 +21,7 @@ const EVERY_MS = 2000;       // how often memory is looked at
 const QUIET_MS = 10000;      // at most one snapshot per this long, so a slow climb is not a flood
 const SLOW_MS = 3000;        // R-302: a request that takes this long or longer is named when it ends (owner 21 Oct: "Okay do that too")
 const MB = 1024 * 1024;
+const LISTENER_WARN = 8;     // R-353b: a response with this many 'finish' listeners is named once (Node warns at 11 without saying where)
 
 // A path with anything that could be a secret or an id masked: public token pages (/i/:token, /apply/:token) carry the secret
 // in the path itself, and ids are noise for this purpose.
@@ -32,6 +33,7 @@ function maskPath(url) {
 
 function createMemoryWatch({ log = console.warn, rss = () => process.memoryUsage().rss, heap = () => process.memoryUsage().heapUsed,
   now = () => Date.now(), jobs = () => [], warnMb = WARN_MB, growMb = GROW_MB, quietMs = QUIET_MS, slowMs = SLOW_MS } = {}) {
+  const listenerSeen = new Set();   // paths already named, so a busy route is one line, not a flood
   const inFlight = new Map();   // id -> { method, path, at, startRss, req }
   let seq = 0, lastSnapshot = 0;
 
@@ -44,6 +46,16 @@ function createMemoryWatch({ log = console.warn, rss = () => process.memoryUsage
     const end = () => {
       if (done) return; done = true;
       inFlight.delete(id);
+      // Node's MaxListenersExceededWarning names no route. Counting at the end shows which request piled listeners onto its
+      // response. Log only; behaviour is unchanged.
+      try {
+        const n = res.listenerCount ? res.listenerCount('finish') : 0;
+        const key = entry.method + ' ' + entry.path;
+        if (n >= LISTENER_WARN && !listenerSeen.has(key) && listenerSeen.size < 50) {
+          listenerSeen.add(key);
+          log(`[Listeners] ${key} ended with ${n} 'finish' listeners on its response (Node warns at 11)`);
+        }
+      } catch (_) { /* a diagnostic must never break a request */ }
       const grew = (rss() - entry.startRss) / MB;
       const took = now() - entry.at;
       if (took >= slowMs) {
