@@ -1276,3 +1276,5 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 - **2 Nov 2026 (R-343 step 4):** `/jobs/bulk` inserts leads in batches of 50 and records an import run (memory while running, `activity_log` import_finished after). `GET /imports/recent` scopes by reporting chain / admin.
 
 - **3 Nov 2026 (R-349 Stage 1):** `GET /jobs/page` in `routes/jobs.js` (registered ABOVE `/jobs/:id`) over `services/lead-query.js`; scope first, filters after; page size = person's 10/20/50, else admin `leads_page_size_default`, else 20. Browser not wired yet. Proofs: `test/lead-query-smoke.mjs`, `test/jobs-page-route-smoke.mjs`.
+
+- **3 Nov 2026 (R-357):** `routes/mailbox-control.js` (mounted after `routes/deliverability.js`): `GET /admin/mailboxes/summary|search|:id/detail`, `POST /admin/mailboxes/:id/action` — admin only, `db.forRequest(req)` on every read/write (another company's mailbox is a 404). A mailbox's mail is matched by `emails.from_email` (escaped ILIKE), opens by `email_tracking.mailbox_email`.

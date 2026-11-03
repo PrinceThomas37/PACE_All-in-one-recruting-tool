@@ -210,7 +210,7 @@ step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
   step('no sample, no invented numbers', ma.pauseNote(0, 0) === null && /Too many of its emails bounced/.test(ma.pausedSentence(null)) && !/\d/.test(ma.pausedSentence(null)));
   let pa = ma.alertFor({ mailbox: { ...mb, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: okConn, held: 7, pauseNote: note });
   step('a signed-in but PAUSED mailbox is an alert, saying which, when, and why',
-    pa && pa.state === 'auto_paused' && pa.email === 'a@x.com' && pa.paused_at === '2026-10-27T14:55:36Z' && /2 of the 29/.test(pa.sentence) && /Nothing sends from it/.test(pa.sentence) && pa.held === 7, JSON.stringify(pa));
+    pa && pa.state === 'auto_paused' && pa.email === 'a@x.com' && pa.paused_at === '2026-10-27T14:55:36Z' && /2 of the 29/.test(pa.sentence) && /Its outreach is held/.test(pa.sentence) && /one by one/.test(pa.sentence) && !/Nothing sends/.test(pa.sentence) && pa.held === 7, JSON.stringify(pa));
   step('a paused mailbox that is also switched off raises nothing', ma.alertFor({ mailbox: { ...mb, is_active: false, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: okConn }) === null);
   step('a dead sign-in still comes first when both are true', ma.alertFor({ mailbox: { ...mb, auto_paused_at: '2026-10-27T14:55:36Z' }, conn: Object.assign({ platform: 'microsoft' }, certain) }).state === 'failed');
   step('a paused mailbox sorts right after a dead sign-in', ma.sortAlerts([{ state: 'not_connected', email: 'c' }, { state: 'auto_paused', email: 'b' }, { state: 'failed', email: 'a' }]).map(x => x.email).join('') === 'abc');

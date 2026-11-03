@@ -4127,6 +4127,7 @@ app.use(require('./routes/contacts')(routeCtx));
 app.use(require('./routes/settings')(routeCtx));
 app.use(require('./routes/integrations')(routeCtx));
 app.use(require('./routes/deliverability')(routeCtx));
+app.use(require('./routes/mailbox-control')({ ...routeCtx, logActivity }));   // Deliverability → one mailbox: search, detail, pause/start/block/deactivate/delete (admin)
 app.use(require('./routes/mailbox-alerts')(routeCtx));
 app.use(require('./routes/ai')(routeCtx));
 app.use(require('./routes/ai-style')(routeCtx));   // D-0082: how the AI writes for each person
