@@ -117,7 +117,7 @@ module.exports = (ctx) => {
       }
       const who = req.user.id === toId ? 'themselves' : (to.name || 'a team member');
       for (const id of done) {
-        try { await logActivity(id, null, req.user.id, 'assigned', leadClaim.assignmentSentence({ by: req.user.name || 'a manager', to: who }), null, { assigned_to_bd: toId }); } catch (_) { /* the log is a record, never the point */ }
+        try { await logActivity(id, null, req.user.id, 'assigned', leadClaim.assignmentSentence({ by: req.user.name || 'a manager', to: who }), null, { assigned_by: req.user.id, assigned_to_bd: toId }); } catch (_) { /* the log is a record, never the point */ }
       }
       const emailOf = {}; mb.accounts.forEach(a => { emailOf[a.id] = a.email_address; });
       res.json({

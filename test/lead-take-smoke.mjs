@@ -91,6 +91,7 @@ r = await call('/leads/take', 'post', {}, { count: 5 });
 const mine = tables.jobs.filter(j => j.assigned_to_bd === 'bd1');
 step('taking 5 hands me 5 leads, Assigned, stamped with the time and owned by me', r.out.taken === 5 && mine.length === 5 && mine.every(j => j.stage === 'Assigned' && j.assigned_at && j.assigned_to === 'bd1'), JSON.stringify(r.out).slice(0, 140));
 step('…each in one of MY connected mailboxes — never the dead one, never another person\'s', mine.every(j => ['m1', 'm2'].includes(j.sending_email_id)));
+step('R-340: every lead a BD takes from the pool records the BD as the one who assigned it', mine.length > 0 && mine.every(j => j.assigned_by === 'bd1'));
 step('…and never a flagged duplicate, and never someone else\'s lead', !mine.some(j => j.id === 'dup1' || j.id === 'mine1') && tables.jobs.find(j => j.id === 'mine1').assigned_to_bd === 'bd2');
 step('…oldest first: the freshest are left for later', mine.every(j => j.freshness !== 'New'), mine.map(j => j.freshness).join());
 step('…the answer says how many I may still take today, and the ids to write emails for', r.out.remaining_today === 20 && r.out.job_ids.length === 5);

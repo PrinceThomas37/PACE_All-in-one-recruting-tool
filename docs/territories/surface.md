@@ -310,3 +310,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 - **2 Nov 2026:** Leads strip carries `#imp-banner` (`public/js/74-import-progress.js`), drawn from STATE.imports, patched by id (never render() on a timer). Rows use `.card` — a plain box drew cream on cream.
 
 - **3 Nov 2026 (R-357):** Deliverability's two long lists (mailbox health, warm-up pool) are one panel: `public/js/75-mailbox-control.js` (`mailboxControlCard()`), `.mbc-*` in `ui.css`. Search first (debounced 250 ms, stale answers dropped), counts as filters (a count replaces the typed text), card per mailbox. The buttons are drawn FROM `detail.actions` (the server's list) — never hard-coded. Browser proof: `test/mailbox-control-ui-smoke.mjs`.
+
+- **3 Nov 2026 (R-340):** the history panel (`public/js/54-record-history.js`) no longer prints a note twice when the kind has no fixed word (pool take, first-email claim). It MIRRORS `services/record-history.js describe()` — a server-only wording change shows nothing on screen.

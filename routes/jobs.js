@@ -25,6 +25,7 @@ const leadDistribution = require('../services/lead-distribution');
 // D-0034: who may SEE/edit a lead, on top of the role ladder above it. Read
 // services/ownership.js's header before changing any of the scoping below.
 const own = require('../services/ownership');
+const leadClaim = require('../services/lead-claim');
 const leadPosting = require('../services/lead-posting');
 const leadCheck = require('../services/lead-check');
 const reminderLead = require('../services/reminder-lead');   // a reminder about someone PACE does not know → your lead (R-309, D-0178)
@@ -606,6 +607,7 @@ router.put('/jobs/:id', auth, async (req, res) => {
       || raCanEdit;
     if (!canEdit) return res.status(403).json({ error: 'Forbidden' });
     if (isRA && !raCanEdit) return res.status(403).json({ error: `Edit window has expired (${editWindowHours} hours)` });
+    let ownerChanged = false;
     let { position, location, source, job_url, stage, notes, assigned_to, assigned_to_bd, sending_email_id, salary_range, job_created_date, industry: jobIndustry, research } = req.body;
     // The same check as on create: only the fields this edit actually sent are looked at, and what is moved is added to the notes
     // that are on the lead (or that this edit is writing).
@@ -647,6 +649,8 @@ router.put('/jobs/:id', auth, async (req, res) => {
       }
       updates.assigned_to_bd = assigned_to_bd || null;
       updates.assigned_at = assigned_to_bd ? new Date() : null;
+      // R-340: who handed it over — only when the owner REALLY changes (the edit form re-sends the same owner on every save).
+      if ((assigned_to_bd || null) !== (existing.assigned_to_bd || null)) { updates.assigned_by = assigned_to_bd ? req.user.id : null; ownerChanged = true; }
       if (assigned_to_bd && stage === undefined) updates.stage = 'Assigned';
     }
     if (sending_email_id !== undefined && hasRole(req, 'admin', 'ra_lead')) {
@@ -673,6 +677,12 @@ router.put('/jobs/:id', auth, async (req, res) => {
       }
     } else {
       await logActivity(data.id, null, req.user.id, 'job_updated', 'Job updated', null, null);
+    }
+    if (ownerChanged && data.assigned_to_bd) {
+      // The lead history says who handed the lead to whom (owner, 3 Nov: "it should come in lead history").
+      let toName = 'a team member';
+      try { const { data: u } = await supabase.from('users').select('name').eq('id', data.assigned_to_bd).maybeSingle(); if (u && u.name) toName = u.name; } catch (_) { /* the name is for the sentence only */ }
+      await logActivity(data.id, null, req.user.id, 'assigned', leadClaim.assignmentSentence({ by: req.user.name || 'an admin', to: toName, how: 'edit' }), null, { assigned_to_bd: data.assigned_to_bd, assigned_by: req.user.id });
     }
     if (research !== undefined) persistLearnedSkills(jobIndustry || data.industry || existing.industry, research);
     res.json(tidy.moved.length ? Object.assign({}, data, { moved: tidy.moved, moved_sentence: leadFields.movedSentence(tidy.moved) }) : data);
