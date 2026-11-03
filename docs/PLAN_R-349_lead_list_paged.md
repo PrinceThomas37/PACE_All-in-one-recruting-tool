@@ -57,8 +57,13 @@ Only when no screen reads `STATE.jobs` (a grep guard that fails if a new reader 
 - The server's in-memory copy is itself a memory cost on the free server (R-324). Paging the browser does not shrink that copy;
   a later step (query the database per page) is the lasting answer and is NOT part of this plan.
 
-## Questions for the owner (plain words, ask once, before Stage 1 is built)
+## Owner's answers (3 Nov) — decided, do not re-ask
+
+1. "Select all" with a filter on = **all matching leads across every page**, with the number shown before anything is done.
+2. A new company starts at **20 leads per page** (admin-changeable setting, D-0123).
+
+## (Answered) questions that were asked
 
 1. On the Leads tab, if you tick "select all" with a filter on, should it mean **all matching leads (e.g. 140), across every page**,
-   or **only the ones on this page**? (I recommend all matching, with the number shown before anything is done.)
-2. How many leads per page should a new company start with? (I'd start at 50; each company's admin can change it.)
+   or **only the ones on this page**? (Answered: all matching.)
+2. How many leads per page should a new company start with? (Answered: 20.)
