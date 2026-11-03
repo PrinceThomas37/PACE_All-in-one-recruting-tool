@@ -398,3 +398,5 @@ The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was 
 - **3 Nov 2026 (R-340/R-363):** migration `072_assigned_by.sql` — `jobs.assigned_by` (uuid → users, ON DELETE SET NULL), partial index `(org_id, assigned_by) WHERE assigned_by IS NOT NULL`, backfill ONLY from `activity_log` `first_email_claim` rows where the logger is the current owner. NULL = not recorded. NOT applied to the live database yet (owner's go before merge).
 
 - 3 Nov 2026 (R-349 D): migration 074_lead_list_facets.sql (leads_facets) written, NOT applied (needs owner's go); the route answers from memory until then.
+
+- 3 Nov 2026: migration 074 (leads_facets) APPLIED live (owner's go; trial first).

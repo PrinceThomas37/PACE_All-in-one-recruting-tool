@@ -39,6 +39,8 @@ function renderDashboard(){
   if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
   // A dead mailbox sign-in (R-037): per-user, never for a "view as" preview.
   if(!isViewingOther&&STATE.mailboxAlerts===undefined&&window.loadMailboxAlerts)loadMailboxAlerts();
+  // The admin's system-health banner (R-367): what is broken and the buttons to fix it. Once per visit, admin only.
+  if(!isViewingOther&&STATE.systemHealth===undefined&&window.loadSystemHealth)loadSystemHealth();
   // Client conversations + the manager's facts-only team roll-up (D-0040/D-0043).
   if(!isViewingOther&&STATE.clientDigest===undefined&&window.loadClientDigest)loadClientDigest();
   // The morning briefing is ORG-WIDE, not per-user — unlike next-actions it
@@ -316,6 +318,7 @@ function renderRecruiterDashboard(u){
 
     renderMorningBriefingCard()+
 
+    (window.renderSystemHealth?renderSystemHealth():'')+
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
     (window.renderClientDigest?renderClientDigest():'')+
@@ -488,6 +491,7 @@ function renderManagerDashboard(u){
       '<div class="banner-sub">'+htmlEsc(roleLabel(u.role))+' · '+htmlEsc(new Date().toLocaleDateString('en-US',{weekday:'short',day:'numeric',month:'short'}))+'</div></div>'+
     // The morning briefing (D-0021) stays: the drawing (D-0160) did not take it away, and building the layout must not either.
     (typeof renderMorningBriefingCard==='function'?renderMorningBriefingCard():'')+
+    (window.renderSystemHealth?renderSystemHealth():'')+
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
     '<div class="td-tiles" data-today-tiles>'+tiles+'</div>'+
@@ -594,6 +598,7 @@ function renderIndividualDashboard(u){
 
     renderMorningBriefingCard()+
 
+    (window.renderSystemHealth?renderSystemHealth():'')+
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
     (window.renderClientDigest?renderClientDigest():'')+
