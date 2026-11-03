@@ -7478,3 +7478,7 @@ D-0176: admin's part in clients is control, not opening jobs — D-0174 stands f
 
 ### 3 Nov 2026 (Session 60) — closing synthesis
 Shipped and live (all on a clean Node 22 + Node 26.11.1 full pass, 348–352 suites): R-340 (#392); R-349 A–D lead list on the server + candidate card + R-358 + R-359 (#393); R-367 health banner + R-306 hidden rows (#394); migrations 072, 073, 074 applied with the owner's go. Owner decisions recorded as D-0201…D-0204 (mailbox rules; admin sets every number; customers bring their own keys; no test file for R-306). The next chat starts from `docs/CONTEXT_WINDOW.md`. Proof was tests only — nothing was seen on real data. Lessons: parallel runs break timing-sensitive suites; kill test children, not by script name; mutants for every guard; SheetJS needs `cellStyles` to report hidden rows.
+
+
+### 3 Nov 2026 (Session 61) — owner shared four "pre-launch checklist" snippets; assessed against PACE
+Already in PACE: Sentry error reporting (R-090, live), login/sign-up/apply/pixel rate limits (`middleware/rate-limit.js`), `/health`, no keys in browser code (grep found none), server-side AI keys, paging done by the database (R-349), outbound timeouts (`http-client.js`), Render one-click rollback to an earlier deploy. Not applicable: React/Next.js advice (PACE has no React, no build step), Redis/load balancing/CDN (free tier, one instance). Gaps logged as R-371 (security headers + CORS `*`), R-372 (signed-in API limits), R-373 (DB-checking health + request ids), R-374 (key rotation + privacy page). Nothing built; owner to choose.
