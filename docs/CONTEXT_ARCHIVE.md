@@ -7194,3 +7194,6 @@ Owner asked how to use the Ponytail plugin. Read it: a 3.5 KB agent rulebook + h
 
 ## Session 59 (3 Nov 2026) — R-352 follow-ups stopped since 30 Oct
 Owner: "why are the follow ups paused". Live: last fu1/fu2 29 Oct; 2 Nov run "FU1: 0 … skipped_no_initial: 982" (Render log 13:01 UTC). runFollowupEngine's `.in('contact_id', dueContactIds)` (~1,000 UUIDs) failed and its error was unread → empty map → all skipped; same pattern in liveOutreachPairs (the duplicate guard) and variantByPair; follow_ups active read was capped at 1,000 rows and carried 12 MB of jd_raw. Fix: services/batched-read.js (100 ids/request, pages of 1,000, throws), research_list for the job, a failed run gives the day back. test/followup-lookup-smoke 9/9 (fake DB refuses >150 ids like the real one). Backlog: 1,505 fu1 + 705 fu2; combined mailbox limit 4,250/day → all would queue in ONE evening; release pace is the owner's call.
+
+## Session 59 close (3 Nov 2026)
+Shipped: R-351, D-0194 (AI record), R-343 first half, R-352 follow-up fix + backlog drop (D-0199), R-343 second half (D-0195/D-0200: no AI at send time; "AI drafts it for me"; reply report). Found: follow-up versions WERE sent (earlier claim corrected); replies fell from the week of 19 Oct regardless of AI vs template (R-353 note). Balance to-do written at the top of CONTEXT_WINDOW.md.

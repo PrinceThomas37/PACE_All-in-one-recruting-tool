@@ -217,11 +217,7 @@ const SETTINGS_SCHEMA = [
     description: 'How many different people at ONE company may get a first email on the same day. The rest wait and go the next day — nothing is dropped. Follow-ups are not counted.',
     default: 2, min: 0, max: 20,
   },
-  {
-    key: 'engine_ai_first_email', label: 'AI writes first emails', unit: '1 = on, 0 = off', group: 'Email engine',
-    description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",
-    default: 1, min: 0, max: 1,
-  },
+  // engine_ai_first_email removed 3 Nov 2026 (D-0195): nothing is AI-written at send time, so the switch would change nothing.
   // R-148 (D-0082, option A): a BD can take leads from the pool for themselves, up to this many a day.
   {
     key: 'self_assign_daily_cap', label: 'Leads a BD may take for themselves per day', unit: 'leads (0 = switched off)', group: 'Leads',

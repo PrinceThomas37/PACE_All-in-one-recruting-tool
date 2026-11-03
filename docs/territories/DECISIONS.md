@@ -2347,3 +2347,7 @@ Owner uploaded the Ponytail plugin (a rulebook for the coding AI, not a product 
 ### D-0199 — The follow-up backlog is dropped; follow-ups only for outreach from 3 Nov on (3 Nov 2026)
 
 Owner: "I don't want those follow ups to load up the send queue as there are going to be new outreaches everyday … I cannot reduce the outreach number. So remove the follow ups from the queue other than the outreach that went out from today." Done 3 Nov ~00:35 UTC: 2,379 active follow-up chains whose first email was sent before 3 Nov (IST) set to `skipped`; their ids saved in app_settings `r352_followups_stopped_2026_11_03` (undo = set those back to `active`). 138 chains whose first email has not gone yet stay active. Also: the follow-up run tries at most 3 times a day, then stops and tells the admin (owner asked whether "retry every 5 minutes" was right; a silent all-night loop was not).
+
+### D-0200 — "Rewrite with AI" on a pending email stays (3 Nov 2026)
+
+Owner: "A. Stay". With D-0195 nothing is AI-written at send time; the Rewrite-with-AI button (a person pressing it for one queued email) remains, and is hidden for a person whose AI is off. Also: "do step B and C" — R-343 second half: My Setup's AI choice becomes a template helper; a before/after first-email reply-rate report.

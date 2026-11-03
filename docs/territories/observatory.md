@@ -755,3 +755,5 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 - **2 Nov 2026 (D-0194):** every `complete()` call writes one `ai_calls` row via `services/ai-call-log.js` (best-effort, never throws). New callers may pass `userId`. Admin → AI usage reads `/admin/ai-calls`. Never quote a model price — the admin types it.
 
 - **2 Nov 2026 (D-0197):** `{{work_arrangement}}` in email-vars (sentence drops when empty, like pay). Rules are strict on purpose — checked on 60 live postings: 22 on-site, 3 hybrid, 35 said nothing. Add new real-posting traps to `test/work-arrangement-smoke.mjs`.
+
+- **3 Nov 2026 (R-343 step C):** `services/first-email-replies.js` (pure) + `GET /insights/first-email-replies` + Outreach Insights card. Before/after needs app_settings `templates_switched_on` (set the day the switch goes live).

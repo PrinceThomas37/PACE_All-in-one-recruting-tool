@@ -262,6 +262,28 @@ router.get('/insights/outreach', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// R-343 step C (owner, 3 Nov 2026): first-email reply rate by week, AI-written vs template, and before/after the switch to
+// templates + versions (app_settings templates_switched_on, written the day it went live). ?days=1..180 (default 90).
+// Whose: an admin sees the company; anyone else their own and their reporting chain's (D-0034). services/first-email-replies.js counts.
+const firstEmailReplies = require('../services/first-email-replies');
+router.get('/insights/first-email-replies', auth, async (req, res) => {
+  try {
+    const days = Math.min(180, Math.max(1, parseInt(req.query.days, 10) || 90));
+    const since = new Date(Date.now() - days * 864e5).toISOString();
+    const who = hasRole(req, 'admin') ? null : [req.user.id].concat(await reportingChainIds(req.user.id, req.orgId));
+    const rows = await fetchAll(() => {
+      let q = supabase.from('emails').select('id,sent_at,template_variant,contact:contacts(replied_at)')
+        .eq('status', 'sent').is('followup_type', null).gte('sent_at', since);
+      if (req.orgId) q = q.eq('org_id', req.orgId);
+      if (who) q = q.in('sent_by', who);
+      return q.order('id');
+    });
+    const { data: sw } = await supabase.from('app_settings').select('value').eq('key', 'templates_switched_on').maybeSingle();
+    res.json(Object.assign({ days, whose: who ? 'yours' : 'company' },
+      firstEmailReplies.report(rows.map((r) => ({ sent_at: r.sent_at, template_variant: r.template_variant, replied_at: r.contact && r.contact.replied_at })), sw && sw.value, req.query.tz)));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // R-316: the people behind one number — ?kind=emailed|opened|replied|interested|bounced, same filters as above.
 // Only ever the caller's own sends (loadOutreach reads sent_by = me), so it shows nobody the summary would not count.
 router.get('/insights/outreach/people', auth, async (req, res) => {

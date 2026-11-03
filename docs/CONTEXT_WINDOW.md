@@ -2,7 +2,23 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 2026-11-02 (Session 58). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-350** (next build `R-343`) · next migration **071** (069 and 070 both applied live — re-checked against the database on 2 Nov).
+**Updated**: 2026-11-03 (Session 59). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-350** (next build `R-343`) · next migration **071** (069 and 070 both applied live — re-checked against the database on 2 Nov).
+
+## START HERE (3 Nov, Session 59, end) — the owner continues in a NEW chat. Read this block first.
+
+**Live now (merged, deployed):** R-351 interview mail from the mailbox shown (#385) · D-0194 AI call record + Admin → AI usage (migration 071 applied) · R-343 first half (#386/#387): versions per person (admin ceiling 20), AI on/off per person, Work-arrangement detail, import progress + notice · **R-352 follow-ups fixed (#388, live 3 Nov 01:55 UTC)** — they had silently stopped 30 Oct–2 Nov; backlog of 2,379 chains DROPPED by the owner (D-0199, ids saved in app_settings `r352_followups_stopped_2026_11_03`) · **R-343 second half (#389)** — nothing AI-written at send time, "AI drafts it for me", first-email reply report (merged at the end of this session once the full suite passed; set app_settings `templates_switched_on` = the merge day).
+
+**BALANCE TO-DO (owner's list, in order):**
+1. **Watch the switch (owner is checking now).** Martin Smith and BD Lead 1 had "AI writes each one"; they now send their saved templates, with **0 versions** — every lead gets identical words at hundreds/week. Offer: walk them through "How many versions" (3–5) or write 3 versions per template for the owner to approve. BD Lead 1's template names "Fute Global LLC".
+2. **Investigate the reply drop (owner not yet asked yes/no — ask).** Replies fell 2.4 % → 0.35 % from the week of 19 Oct while first emails tripled (720 → 1,697/week); templates out-replied AI in Sep–early Oct, so the drop is NOT AI vs template. Read-only check: bounces, spam signs, per-email-ID volume before/after 19 Oct.
+3. **Check tonight's follow-up run (18:30 IST = 13:00 UTC, 3 Nov):** Render log "[FollowupEngine] FU1: … skipped_no_initial: …" — expect FU1 > 0 only for first emails sent from 3 Nov; admin engine card shows "Follow-ups could not run today" if it failed 3 times.
+4. **R-353:** report first-email replies before/after the switch ~17 Nov (Outreach Insights card).
+5. **R-349:** lead list page by page from the server (~20 screens count leads in the browser).
+6. **Small:** `MaxListenersExceededWarning` in the server log; re-check Media industry filter on the next Find Leads search; confirm R-350 closed (both suites passed in the 3 Nov full runs).
+7. **Owner's open questions (ask once):** R-326 lead card · R-345 notification-centre actions · R-340 record who assigned a lead · R-344 Google sign-in steps · paid Render ~$7/mo (also fixes sending gaps) · R-329 second contact-data vendor · R-306 old unreplied leads · whether the import "finished" notice should show on every page (today: Leads tab only) · whether the Compose generator should show for AI-off people (today: yes, rules-only).
+8. **Parked by owner:** R-328 security fixes with the paid-server move.
+
+**Lessons this session (keep):** every lookup over a list of ids goes through `services/batched-read.js` (a big `.in()` failed silently and stopped all follow-ups); a failed read must throw; edits during a full test run contaminate it (use a separate git worktree); check contrast on any new box (cream-on-cream happened).
 
 ## START HERE (2 Nov, Session 58) — the plan for this week is `docs/PLAN_NEXT_WEEK_2026-11-02.md`; nothing was built yet
 

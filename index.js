@@ -85,7 +85,6 @@ const mailboxAlertsRules = require('./services/mailbox-alerts');   // what a pau
 const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
-const aiFirstChoice = require('./services/ai-first-choice');
 const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
@@ -2032,8 +2031,8 @@ async function aiWriterContext(email, sendingEmail) {
   return { input, who, sendsAs, companyName: (sendsAs && sendsAs.company) || companyName, styleNote, teach };
 }
 
-// The one place a lead's first email is drafted by the AI and held to the house checker — the send loop (aiWriteFirstEmail) and the
-// "Rewrite with AI" button (POST /emails/:id/rewrite-ai) both go through it, so a button press is checked exactly like a send.
+// The one place a lead's first email is drafted by the AI and held to the house checker — the "Rewrite with AI" button
+// (POST /emails/:id/rewrite-ai). The send loop no longer calls it (D-0195): nothing is AI-written at send time.
 async function aiDraftFirstEmail(email, sendingEmail, sigTemplate) {
   const c = await aiWriterContext(email, sendingEmail);
   const input = c.input;
@@ -2050,62 +2049,6 @@ async function aiDraftFirstEmail(email, sendingEmail, sigTemplate) {
   return { res, c };
 }
 
-async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
-  try {
-    const { res } = await aiDraftFirstEmail(email, sendingEmail, sigTemplate);
-    if (!res.body) {
-      console.log(`[EngineAI] template kept for ${email.to_email}: ${res.skipped}${res.violations ? ' ' + res.violations.join(',') : ''}`);
-      return email;
-    }
-    // Store BEFORE sending: what goes out must be what the Sent tab, the
-    // follow-up's quoted chain and a retry all read back. Text that could not
-    // be stored is never sent.
-    const upd = { subject: res.subject, body: res.body, template_variant: 'ai' };
-    const { error } = await supabase.from('emails').update(upd).eq('id', email.id);
-    if (error) return email;
-    return { ...email, ...upd };
-  } catch (e) {
-    console.log(`[EngineAI] template kept for ${email.to_email}: ${e.message}`);
-    return email;
-  }
-}
-
-// ── AI WRITES A FOLLOW-UP (R-259, D-0151) ───────────────────────────────
-// For a person who taught the AI this follow-up on the sequence screen: written at send time from the first email that REALLY went
-// out (AI-written or not) and the posting, held to the house checker, and stored before it is sent. Anything else — not taught, no
-// first email on record, no AI today, a rejected draft — sends the person's own backup follow-up unchanged. Never throws or blocks.
-async function aiWriteFollowup(email, sendingEmail, sigTemplate) {
-  try {
-    const step = followupSteps.stepNumber(email.followup_type);
-    const c = await aiWriterContext(email, sendingEmail);
-    if (!aiTeach.followupFor(c.teach, step)) return email;
-    const { data: firstRows } = await supabase.from('emails').select('subject,body,followup_type,sent_at')
-      .eq('job_id', email.job_id).eq('contact_id', email.contact_id).eq('status', 'sent').order('sent_at', { ascending: true }).limit(10);
-    const firstRow = (firstRows || []).find((r) => engineDraft.isFirstEmail(r));
-    // What the lead actually read: the stored text with the sender's name put back, and no html.
-    const plain = (t) => String(t || '').split('{{senderemail}}').join(c.who.emailAddress || '').split('{{sender}}').join(c.who.displayName || '')
-      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
-    const res = await aiTeach.writeFollowup({
-      gen: outreachGen, teach: c.teach, step, input: c.input,
-      firstEmail: firstRow ? { subject: plain(firstRow.subject), body: plain(firstRow.body) } : null,
-      omitSignOff: !!String(sigTemplate || '').trim(),
-      complete: (system, prompt) => aiProvider.complete(supabase, {
-        system: system + aiStyle.styleBlock(c.styleNote), prompt, maxTokens: 500, orgId: email.org_id, feature: 'engine_followup',
-      }),
-    });
-    if (!res.body) {
-      console.log(`[EngineAI] backup follow-up kept for ${email.to_email}: ${res.skipped}${res.violations ? ' ' + res.violations.join(',') : ''}`);
-      return email;
-    }
-    const upd = { body: engineDraft.deferSender(res.body, c.input && c.input.sender), template_variant: 'ai' };
-    const { error } = await supabase.from('emails').update(upd).eq('id', email.id);
-    if (error) return email;
-    return { ...email, ...upd };
-  } catch (e) {
-    console.log(`[EngineAI] backup follow-up kept for ${email.to_email}: ${e.message}`);
-    return email;
-  }
-}
 
 function retryNote(upd) {
   if (upd.status !== 'pending' || !upd.next_attempt_at) return '';
@@ -2191,20 +2134,6 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     settingsConfig.getSetting(supabase, 'mailbox_warmup_start', runOrg),
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step', runOrg),
   ]);
-  // Checked once per run: the company switch, whether any AI provider is set up,
-  // and each person's own "same as the company / on for me / off" (D-0117).
-  // The same choice gates a follow-up the person TAUGHT the AI (R-259, aiWriteFollowup); an untaught follow-up is never AI-written.
-  let companyAiFirst = false, aiReady = false;
-  try {
-    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', runOrg)) === 1;
-    aiReady = await aiProvider.isAvailable(supabase, runOrg);
-  } catch (_) { companyAiFirst = false; aiReady = false; }
-  let aiChoiceMap = {};
-  try {
-    const choiceKeys = [aiFirstChoice.personKey(userId), wordingScope.scopeKey(userId), aiTeach.key(userId)]
-      .concat(mailboxIds.map(id => aiFirstChoice.mailboxKey(id)));
-    (await loadSettingsByKeys(choiceKeys)).forEach(r => { aiChoiceMap[r.key] = r.value; });
-  } catch (_) { aiChoiceMap = {}; }
   // D-0046: at most N first emails to one company per day. Counts what went
   // out earlier today (any sender) and is bumped below as this run sends.
   let companyCap = 0, companySentToday = {};
@@ -2408,20 +2337,9 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       const sigTemplate = resolveSignatureHtml(email._sigHtml || mailboxSignatures[userEmailId]);
       // A retry of an email the AI already wrote re-sends that text; it never
       // pays for a second draft.
-      if (aiFirstChoice.shouldWriteFirst({
-        companyOn: companyAiFirst, aiReady, settings: aiChoiceMap, userId, mailboxId: userEmailId,
-        each: wordingScope.isEach(aiChoiceMap, userId),
-        isFirst: engineDraft.isFirstEmail(email), alreadyAi: email.template_variant === 'ai',
-      })) {
-        email = await aiWriteFirstEmail(email, sendingEmail, sigTemplate);
-      } else if (aiReady && isFollowup && email.template_variant !== 'ai'
-        && aiTeach.followupFor(aiChoiceMap[aiTeach.key(userId)], followupSteps.stepNumber(email.followup_type)) && aiFirstChoice.allows({
-        companyOn: companyAiFirst,
-        choice: aiFirstChoice.resolveChoice(aiChoiceMap, { userId, mailboxId: userEmailId, each: wordingScope.isEach(aiChoiceMap, userId) }),
-      })) {
-        // R-259: a follow-up the sender taught the AI is written for this lead; untaught, it is their own follow-up as before.
-        email = await aiWriteFollowup(email, sendingEmail, sigTemplate);
-      }
+      // D-0195 (owner, 2 Nov 2026): AI never writes an individual outreach email at send time any more — every first email and
+      // follow-up goes out in the person's own words or one of their versions (picked when it was queued). The AI only helps write
+      // the template and its versions (My Setup). Recorded risk: AI first emails had ~2x the replies in October (R-343 report).
       // {{sendercompany}} (8 Oct): the company the SENDING email ID writes for. No company said for it = the email is held in "Didn't send"
       // with the reason, never sent with a hole in it; sent, the company is written into the stored text so history never shows the token.
       const gate = await senderCompany.prepareForSend(supabase, email, sendingEmail, userEmailId);
@@ -2817,7 +2735,9 @@ async function runFollowupEngine() {
       .eq('status', 'active').order('id', { ascending: true }));
     log.checked = (dueFu || []).length;
 
-    const { data: settingsRows } = await supabase.from('app_settings').select('key,value');
+    // Every setting, page by page — with up to 20 versions per email per person the table passes the 1,000 rows one request returns,
+    // and a version past row 1,000 would silently never be sent (R-352's lesson).
+    const settingsRows = await readAllPages(() => supabase.from('app_settings').select('key,value').order('key', { ascending: true }));
     const settings = {};
     (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
 

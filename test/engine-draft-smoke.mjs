@@ -96,48 +96,26 @@ await t('a repair that fixes the draft is taken', async () => {
 
 console.log('\nEngine draft — wiring');
 const idx = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
-await t('the send loop asks AI only for first emails not already AI-written, when the person\'s choice allows it (D-0117: the company switch is no longer the only switch — changed on purpose)', () => {
-  assert.match(idx, /aiFirstChoice\.shouldWriteFirst\(\{/);
-  assert.match(idx, /isFirst: engineDraft\.isFirstEmail\(email\), alreadyAi: email\.template_variant === 'ai'/);
-  assert.match(idx, /for \(let email of ordered\)/, 'loop variable must be reassignable');
+await t('D-0195 (owner, 2 Nov 2026): the send loop never asks the AI to write an email — first emails and follow-ups go out in the person\'s own words or their versions', () => {
+  const claim = idx.indexOf("from('emails').update({ status: 'sending' })");
+  const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
+  assert.ok(claim > 0 && send > claim, 'the claim and the delivery are both still there (so this check measures something)');
+  const between = idx.slice(claim, send);
+  assert.doesNotMatch(between, /aiDraftFirstEmail|aiWriteFirstEmail|aiWriteFollowup|writeFollowup|aiProvider\.complete/);
+  assert.doesNotMatch(idx, /async function aiWriteFirstEmail|async function aiWriteFollowup/, 'the retired send-time writers are gone, not left as dead code');
+  assert.match(idx, /for \(let email of ordered\)/);
 });
-await t('the draft is stored before it is sent, and unstored text is never sent', () => {
-  // R-319: the drafting moved into aiDraftFirstEmail (shared with the Rewrite-with-AI button), which sits just above aiWriteFirstEmail.
-  const fn = idx.slice(idx.indexOf('async function aiDraftFirstEmail'), idx.indexOf('function retryNote'));
-  assert.match(fn, /update\(upd\)\.eq\('id', email\.id\)[\s\S]*if \(error\) return email;/);
-  assert.match(fn, /input\.thin_posting \? 'engine_first_email_thin' : 'engine_first_email'/);
-});
-await t('R-319: the send loop and the Rewrite-with-AI button draft through the SAME function (one writer, one checker)', () => {
-  const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
-  assert.match(fn, /await aiDraftFirstEmail\(email, sendingEmail, sigTemplate\)/);
+await t('R-319: the Rewrite-with-AI button (a person pressing it) still drafts through the one writer and checker', () => {
   const route = readFileSync(new URL('../routes/email-rewrite.js', import.meta.url), 'utf8');
   assert.match(route, /await aiDraftFirstEmail\(email, sendingEmail, sigTemplate\)/);
   assert.match(idx, /aiDraftFirstEmail,\s+\/\/ the one AI first-email writer/);
+  const fn = idx.slice(idx.indexOf('async function aiDraftFirstEmail'), idx.indexOf('function retryNote'));
+  assert.match(fn, /input\.thin_posting \? 'engine_first_email_thin' : 'engine_first_email'/);
 });
 await t('R-041: title-only leads use the fast model, leads with a posting the quality one', () => {
   const src = readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8');
   assert.match(src, /engine_first_email_thin: \{[^}]*tier: 'fast'/);
   assert.match(src, /engine_first_email: \{[^}]*tier: 'quality'/);
-});
-await t('the draft happens after the claim and before delivery', () => {
-  const claim = idx.indexOf("from('emails').update({ status: 'sending' })");
-  const draft = idx.indexOf('email = await aiWriteFirstEmail(');
-  const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
-  assert.ok(claim > 0 && draft > claim && send > draft);
-});
-await t('R-259: a TAUGHT follow-up is written after the claim and before delivery, stored first, on its own budget line', () => {
-  const claim = idx.indexOf("from('emails').update({ status: 'sending' })");
-  const fu = idx.indexOf('email = await aiWriteFollowup(');
-  const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
-  assert.ok(claim > 0 && fu > claim && send > fu);
-  const gate = idx.slice(idx.lastIndexOf('} else if (aiReady && isFollowup', fu), fu);
-  assert.match(gate, /email\.template_variant !== 'ai'/, 'a retry never pays for a second draft');
-  assert.match(gate, /aiTeach\.followupFor\(aiChoiceMap\[aiTeach\.key\(userId\)\]/, 'only a follow-up the person taught');
-  assert.match(gate, /aiFirstChoice\.allows\(/, 'the same company switch and personal choice as the first email');
-  const fn = idx.slice(idx.indexOf('async function aiWriteFollowup'), idx.indexOf('function retryNote'));
-  assert.match(fn, /feature: 'engine_followup'/);
-  assert.match(fn, /update\(upd\)\.eq\('id', email\.id\)[\s\S]*if \(error\) return email;/);
-  assert.match(fn, /if \(!res\.body\) \{[\s\S]*return email;/, 'no draft = the backup follow-up, unchanged');
 });
 await t('R-259: the first email carries the person\'s answers as instructions', () => {
   const fn = idx.slice(idx.indexOf('async function aiDraftFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
@@ -148,10 +126,9 @@ await t('the sender\'s title (from the sending mailbox\'s "sends as") reaches th
   assert.equal(withTitle.sender.title, 'Vice President');
   assert.equal(D.engineInput({ job, contact, sender }).sender.title, '');
 });
-await t('budget feature and on/off setting exist, setting defaults ON', () => {
+await t('the Rewrite-with-AI budget line exists; the old "AI writes first emails" switch is gone (it would change nothing — D-0195)', () => {
   assert.ok(budget.FEATURES ? budget.FEATURES.engine_first_email : readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8').includes('engine_first_email:'));
-  const def = settings.SETTINGS_SCHEMA.find(s => s.key === 'engine_ai_first_email');
-  assert.ok(def); assert.equal(def.default, 1); assert.equal(def.max, 1);
+  assert.ok(!settings.SETTINGS_SCHEMA.find(s => s.key === 'engine_ai_first_email'), 'an admin switch that does nothing must not be offered');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
