@@ -9,10 +9,11 @@
 // ============================================================================
 'use strict';
 
+const { formatter } = require('./date-format');   // one formatter per kind, made once (R-298): a new one per row ate the free server's memory
 const pct = (n, d) => (d > 0 ? Math.round((n / d) * 10000) / 100 : null);
 // The viewer's own day (R-102: a day is the viewer's day), then the Monday of its week.
 function dayIn(iso, tz) {
-  try { if (tz) return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)); } catch (_) { /* unknown zone → UTC */ }
+  try { if (tz) return formatter('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)); } catch (_) { /* unknown zone → UTC */ }
   return String(iso).slice(0, 10);
 }
 function weekOf(iso, tz) {
