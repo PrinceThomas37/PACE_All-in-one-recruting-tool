@@ -53,7 +53,8 @@ const eng = src.slice(src.indexOf('async function runFollowupEngine'), src.index
 step('the engine no longer asks emails with a raw .in(contact_id/job_id) list', !/from\('emails'\)[\s\S]{0,120}\.in\('(contact_id|job_id)', (dueContactIds|fuJobIds)\)/.test(eng));
 step('…its three emails lookups go through readByIds', (eng.match(/readByIds\('emails'/g) || []).length === 3);
 step('…the waiting list is read page by page, without the posting text', /readAllPages\(\(\) => supabase\.from\('follow_ups'\)/.test(eng) && /research:research_list/.test(eng));
-step('a run that failed gives the day back (it retries at the next tick)', /if \(out && out\.error\) \{ await setLastFollowupRun\(/.test(src));
+step('a run that failed gives the day back (it retries at the next tick)…', /if \(tries < 3\) \{ await setLastFollowupRun\(/.test(src));
+step('…at most 3 tries a day, then the admin is told why', /followup_engine_alert/.test(src) && /followup_alert/.test(fs.readFileSync(new URL('../routes/cron.js', import.meta.url), 'utf8')) && /Follow-ups could not run today/.test(fs.readFileSync(new URL('../public/js/08-page-admin.js', import.meta.url), 'utf8')));
 
 const pass = results.filter(Boolean).length;
 console.log(`\nSUMMARY: ${pass}/${results.length}`);

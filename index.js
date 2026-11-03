@@ -3092,7 +3092,19 @@ engineRunner.register('followup', {
     const out = await runFollowupEngine();
     // R-352: a run that could not read what it needed is NOT today's run — give the day back so the next tick (5 min) tries again,
     // instead of a silent "done" with nothing queued (30 Oct – 2 Nov).
-    if (out && out.error) { await setLastFollowupRun(settings['last_followup_run'] || ''); console.error('[FollowupEngine] run failed, will retry:', out.error); }
+    // At most 3 tries a day (owner's question, 3 Nov: a retry every 5 min forever would be a quiet all-night loop): after the
+    // third failure the day stays claimed and the admin's Background engine card says why (GET /admin/engine/status).
+    if (out && out.error) {
+      const failKey = 'followup_fail_' + dateStr;
+      const { data: f } = await supabase.from('app_settings').select('value').eq('key', failKey).maybeSingle();
+      const tries = (Number(f && f.value) || 0) + 1;
+      await supabase.from('app_settings').upsert({ key: failKey, value: String(tries), updated_at: new Date() }, { onConflict: 'key' });
+      if (tries < 3) { await setLastFollowupRun(settings['last_followup_run'] || ''); console.error(`[FollowupEngine] run failed (try ${tries} of 3), will retry:`, out.error); }
+      else {
+        await supabase.from('app_settings').upsert({ key: 'followup_engine_alert', value: JSON.stringify({ date: dateStr, tries, error: String(out.error).slice(0, 300) }), updated_at: new Date() }, { onConflict: 'key' });
+        console.error('[FollowupEngine] failed 3 times today — stopped for today, admin alerted:', out.error);
+      }
+    }
     return out;
   }
 });
@@ -4613,7 +4625,7 @@ engineRunner.register('lead_finder', {
 //      cron-job.org, see .github/workflows/heartbeat.yml). This is the one that
 //      matters on Render's free tier, where the service sleeps on idle and every
 //      in-process timer stops with it.
-app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole, isOperator }));
+app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole, isOperator, supabase }));
 
 // Check every 2 minutes; each job still only runs on its own cadence.
 setInterval(() => {

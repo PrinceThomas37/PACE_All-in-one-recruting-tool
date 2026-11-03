@@ -2343,3 +2343,7 @@ Owner: "A. Leave the sentence out" — the new "Work arrangement" detail (full p
 ### D-0198 — Adopt five "Ponytail" coding rules into CLAUDE.md, not the plugin (2 Nov 2026)
 
 Owner uploaded the Ponytail plugin (a rulebook for the coding AI, not a product feature) and said "Yes add those" to the recommendation: copy only the parts not already in PACE's rules (choice ladder, no library for a few lines, `shortcut:` comments, end each reply with what was skipped) plus one line that PACE's growth rule wins on conflict. The plugin and its hooks are NOT installed (they duplicate existing rules and would add text to every message).
+
+### D-0199 — The follow-up backlog is dropped; follow-ups only for outreach from 3 Nov on (3 Nov 2026)
+
+Owner: "I don't want those follow ups to load up the send queue as there are going to be new outreaches everyday … I cannot reduce the outreach number. So remove the follow ups from the queue other than the outreach that went out from today." Done 3 Nov ~00:35 UTC: 2,379 active follow-up chains whose first email was sent before 3 Nov (IST) set to `skipped`; their ids saved in app_settings `r352_followups_stopped_2026_11_03` (undo = set those back to `active`). 138 chains whose first email has not gone yet stay active. Also: the follow-up run tries at most 3 times a day, then stops and tells the admin (owner asked whether "retry every 5 minutes" was right; a silent all-night loop was not).
