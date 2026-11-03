@@ -240,6 +240,48 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // ── THE CANDIDATE BESIDE THEIR EMAIL (R-362, owner 3 Nov 2026: "do the same for candidates … a resume preview, contact number, email ID, small information") ──
+  // The same small card as the lead's, for an address PACE knows as a CANDIDATE: who they are, how to reach them, their skills, a short
+  // resume preview and the jobs they are in. VISIBILITY is the rule the app already has for opening a candidate (GET /candidates/:id): candidates are a
+  // shared pool of THIS company — another company's candidate and a deleted one are simply not there, and nothing found answers exactly like an address nobody
+  // knows ({ found:false }), so the card cannot be used to ask "is this person a candidate somewhere". Narrowing it to "my candidates" would be a rule
+  // change for the whole candidate area, not for this card. Literal path: above any `/mailbox/:mid/…`.
+  router.get('/mailbox/candidate-card', auth, async (req, res) => {
+    try {
+      const email = String(req.query.email || '').trim().toLowerCase();
+      if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email address is required' });
+      const scoped = db.forRequest(req);
+      const { data: found, error } = await scoped.from('candidates')
+        .select('id,full_name,first_name,last_name,email,phone,alt_phone,current_title,headline,current_employer,current_location,city,state,skills,tags,experience_years,work_authorization,availability,applicant_status,source,owner_id,resume_text,resume_filename')
+        .eq('email', email).is('deleted_at', null).order('created_at', { ascending: false }).limit(3);
+      if (error) throw error;
+      if (!found || !found.length) return res.json({ found: false });
+      const c = found[0];
+      const [ownerRes, docsRes, subsRes] = await Promise.all([
+        c.owner_id ? Promise.resolve(scoped.from('users').select('id,name').eq('id', c.owner_id).maybeSingle()).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+        Promise.resolve(scoped.from('candidate_documents').select('id,filename,doc_type').eq('candidate_id', c.id).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(3)).catch(() => ({ data: [] })),
+        Promise.resolve(scoped.from('submissions').select('id,stage,job_order_id,job_order:job_orders(id,job_title)').eq('candidate_id', c.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(4)).catch(() => ({ data: [] })),
+      ]);
+      const preview = String(c.resume_text || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+      const skills = [...String(c.skills || '').split(','), ...(Array.isArray(c.tags) ? c.tags : [])].map((x) => String(x).trim()).filter(Boolean);
+      res.json({
+        found: true,
+        candidate: {
+          id: c.id, name: c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || email,
+          headline: c.current_title || c.headline || '', employer: c.current_employer || '',
+          location: c.current_location || [c.city, c.state].filter(Boolean).join(', '),
+          email: c.email || email, phone: c.phone || '', alt_phone: c.alt_phone || '',
+          skills: [...new Set(skills)].slice(0, 8), experience_years: c.experience_years == null ? null : Number(c.experience_years),
+          work_authorization: c.work_authorization || '', availability: c.availability || '', status: c.applicant_status || '', source: c.source || '',
+          owner: (ownerRes && ownerRes.data && ownerRes.data.name) || '',
+        },
+        resume: { preview, filename: c.resume_filename || '', files: ((docsRes && docsRes.data) || []).map((d) => ({ id: d.id, filename: d.filename || '', doc_type: d.doc_type || '' })) },
+        jobs: ((subsRes && subsRes.data) || []).map((x) => ({ id: x.job_order_id || (x.job_order && x.job_order.id) || null, title: (x.job_order && x.job_order.job_title) || 'Job', stage: x.stage || '' })),
+        more: Math.max(0, found.length - 1),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   router.get('/mailbox/unread-count', auth, async (req, res) => {
     try {
       const hit = unreadCache.get(req.user.id);
