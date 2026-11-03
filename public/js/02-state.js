@@ -34,7 +34,8 @@ function jobContacts(jid){
   return STATE.contacts.filter(function(c){return c.job_id===jid;})
     .sort(function(a,b){return (b.is_primary?1:0)-(a.is_primary?1:0);});
 }
-function jobById(id){ return STATE.jobs.find(function(j){return j.id===id;}); }
+// A lead by id: the leads this browser already holds first (without waking the whole-list load), then the whole list.
+function jobById(id){ var h=window.leadsStore&&leadsStore.byId(id); return h||STATE.jobs.find(function(j){return j.id===id;}); }
 function escAttr(v){ return String(v==null?"":v).replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 function escHtml(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function getIndustriesList(){

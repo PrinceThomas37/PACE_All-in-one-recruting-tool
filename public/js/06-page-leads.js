@@ -1,8 +1,12 @@
 // ── LEADS ──────────────────────────────────────
 function renderJobs(){
   var u=STATE.user;
-  var jobs=getMyJobs(u);
+  // R-349 C/D: the server's page of leads (76-leads-store.js) — the finding, counting and paging below happened on the server. null = the browser's own
+  // whole list, exactly as before (a Research Analyst, or a server that could not answer).
+  var lv=(window.leadsStore&&leadsStore.use(u))?leadsStore.view():null;
+  var jobs=lv?lv.rows.slice():getMyJobs(u);
   var f=STATE.jobsFilter;
+  if(!lv){
   if(f.search){
     var q=f.search.toLowerCase();
     jobs=jobs.filter(function(j){
@@ -46,6 +50,12 @@ function renderJobs(){
       return String(b.created_at||b.created_date||'').localeCompare(String(a.created_at||a.created_date||''));
     });
   }
+  }   // end of "the browser does the finding"
+  if(lv){   // the server did it; the "my leads / my team's" chips come from its numbers
+    var _tm=lv.team;
+    teamMgr=_tm?!!_tm.on:leadsIsTeamManager(u); whose=teamMgr?((_tm&&_tm.whose)||f.whose||'mine'):'all';
+    mineCount=_tm?_tm.mine:0; teamCount=_tm?_tm.team:0;
+  }
 
   var stages=["Unassigned","Assigned","Connected","Rejected","Future","Qualified"];
   var stageOpts=stages.map(function(st){return '<option value="'+st+'"'+(f.stage===st?" selected":"")+'>'+st+'</option>';}).join("");
@@ -65,7 +75,7 @@ function renderJobs(){
   var leadSel=STATE.leadSeqSel||{};
   // Selectable = every lead in the current filter (all pages). Sequencing skips the ones with no contact email and says so; changing the
   // stage and handing leads out do not need one.
-  var leadSelectable=jobs.slice();
+  var leadSelectable=lv?leadsStore.selectable().map(function(id){ return leadsStore.byId(id)||{id:id}; }):jobs.slice();   // server mode: every lead seen under these filters, or every match after "select all"
   STATE._leadSelectableIds=leadSelectable.map(function(j){return j.id;});
   // Only ticked leads that are in the CURRENT filter count — an action never reaches a lead the person can no longer see on screen.
   var leadSelIds=leadSelectable.filter(function(j){return leadSel[j.id];}).map(function(j){return j.id;});
@@ -75,11 +85,13 @@ function renderJobs(){
   var leadSelHidden=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length-leadSelCount;
   // Leads per page: the person's own choice, 10 / 20 / 50 (owner, 19 Oct, R-280; saved with their preferences, D-0022).
   var _per=[10,20,50].indexOf(STATE.leadsPageSize)>=0?STATE.leadsPageSize:20;
-  var _tp=Math.max(1,Math.ceil(jobs.length/_per));
-  var _pg=Math.min(STATE.leadsPage||0,_tp-1);
+  if(lv&&lv.perPageUsed)_per=lv.perPageUsed;
+  var _tp=lv?leadsStore.pageCount():Math.max(1,Math.ceil(jobs.length/_per));
+  var _pg=lv?lv.idx:Math.min(STATE.leadsPage||0,_tp-1);
+  var listTotal=lv?(leadsStore.total()==null?jobs.length:leadsStore.total()):jobs.length;
   // Rows for UI.table — arrays of cells, so the column list below is the only
   // place that decides what a lead row shows.
-  var rows=jobs.slice(_pg*_per,(_pg+1)*_per).map(function(j){
+  var rows=(lv?jobs:jobs.slice(_pg*_per,(_pg+1)*_per)).map(function(j){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
     var hasEmail=(cs.find(function(c){return c.is_primary;})||cs[0]||{}).email;
@@ -184,12 +196,14 @@ function renderJobs(){
   var assigneeActive=!!f.assignee;
   var anyActive=stageActive||indActive||dateActive||assigneeActive;
   // "Assigned to" — who owns the leads on screen, with how many each (admin / leads see several people's; a BD sees only their own so it stays out of their way).
-  var ownerCount={}, ownerName={}, nobody=0, everyLead=getMyJobs(u);
+  var ownerCount={}, ownerName={}, nobody=0, everyLead=lv?[]:getMyJobs(u);
   everyLead.forEach(function(j){ if(j.assigned_to_bd){ ownerCount[j.assigned_to_bd]=(ownerCount[j.assigned_to_bd]||0)+1; ownerName[j.assigned_to_bd]=j.assigned_bd_name||'Someone'; } else nobody++; });
+  if(lv&&lv.facets){ (lv.facets.owners||[]).forEach(function(o){ ownerCount[o.id]=o.count; var us=(STATE.users||[]).find(function(x){return x.id===o.id;}); ownerName[o.id]=(us&&us.name)||'Someone'; }); nobody=lv.facets.nobody||0; }
+  var everyTotal=lv?((lv.facets&&lv.facets.total)||0):everyLead.length;
   var ownerIds=Object.keys(ownerCount).sort(function(a,b){ return String(ownerName[a]).localeCompare(String(ownerName[b])); });
   var assigneeSel=(userHasAnyRole(u,'admin','ra_lead','bd_lead')&&(ownerIds.length>1||nobody>0))
     ? '<select class="sel sel-sm" aria-label="Show leads assigned to" onchange="STATE.jobsFilter.assignee=this.value;STATE.leadsPage=0;render()">'+
-        '<option value="">Everyone ('+everyLead.length+')</option>'+
+        '<option value="">Everyone ('+everyTotal+')</option>'+
         '<option value="none"'+(f.assignee==='none'?' selected':'')+'>Nobody — Unassigned ('+nobody+')</option>'+
         ownerIds.map(function(id){ return '<option value="'+escAttr(id)+'"'+(f.assignee===id?' selected':'')+'>'+escHtml(ownerName[id])+' ('+ownerCount[id]+')</option>'; }).join('')+
       '</select>' : '';
@@ -197,6 +211,7 @@ function renderJobs(){
   // category list — leads arrive with Apollo/LinkedIn names ("Construction", "Law Practice") that never matched it.
   var indCount={}, indName={};
   everyLead.forEach(function(j){ var v=leadIndustryOf(j); if(!v)return; var k=v.toLowerCase(); indCount[k]=(indCount[k]||0)+1; if(!indName[k])indName[k]=v; });
+  if(lv&&lv.facets)(lv.facets.industries||[]).forEach(function(i){ indCount[i.key]=i.count; indName[i.key]=i.label; });
   (f.industries||[]).forEach(function(v){ var k=String(v).trim().toLowerCase(); if(!indName[k]){ indName[k]=v; indCount[k]=0; } });
   var allIndustriesList=Object.keys(indName).sort(function(a,b){ return (indCount[b]-indCount[a])||indName[a].localeCompare(indName[b]); }).map(function(k){ return indName[k]; });
   function mkChkDrop(name,key,items,selected,active,counts){
@@ -247,13 +262,14 @@ function renderJobs(){
   // workaround for having nowhere to put the label. The strip has room, so the
   // name is back and the stage colour stays as the dot. Clicking a stage
   // filters to it; clicking Total clears the stage filter.
-  var allJobs=stripBase;
   var stageCounts={};
   var stageList=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
-  stageList.forEach(function(st){stageCounts[st]=allJobs.filter(function(j){return j.stage===st;}).length;});
+  var stripTotal;
+  if(lv){ stageList.forEach(function(st){stageCounts[st]=(lv.strip&&lv.strip[st])||0;}); stripTotal=lv.stripTotal; }   // the server's numbers, under every filter but the stage buttons
+  else{ var allJobs=stripBase; stageList.forEach(function(st){stageCounts[st]=allJobs.filter(function(j){return j.stage===st;}).length;}); stripTotal=allJobs.length; }
 
   var stripItems=[{
-    v:allJobs.length, label:'Total leads',
+    v:stripTotal, label:'Total leads',
     on:!(f.stages&&f.stages.length),
     onclick:"STATE.jobsFilter.stages=[];STATE.leadsPage=0;render()"
   },{ sep:true }];
@@ -351,7 +367,8 @@ function renderJobs(){
           : 'No leads yet.'
       })+
       '<div class="fs-12_5 c-ink3" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
-        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>'+jobs.length+' lead'+(jobs.length===1?'':'s')+'</span>'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>'+listTotal+' lead'+(listTotal===1?'':'s')+'</span>'+
+          (lv&&lv.status==='error'?'<span class="c-bad">'+escHtml(lv.error)+'</span><button class="btn btn-sm" onclick="leadsStore.retry()">Try again</button>':(lv&&(lv.status==='loading'||lv.status==='refreshing')?'<span class="c-text3">Updating…</span>':''))+
           '<label class="fs-12_5 c-ink3" style="display:flex;align-items:center;gap:6px">Show '+
             '<select class="sel sel-sm" id="leads-per-page" aria-label="Leads per page" onchange="setLeadsPageSize(this.value)">'+
               [10,20,50].map(function(n){ return '<option value="'+n+'"'+(n===_per?' selected':'')+'>'+n+'</option>'; }).join('')+
@@ -535,7 +552,7 @@ function leadExpandHtml(j){
 // each time it is built, so a panel put back after a refresh shows current data.
 window.leadRowToggle=function(id,ev){
   rowReveal(id, ev, function(){
-    var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
+    var j=jobById(id);
     return j?leadExpandHtml(j):null;
   }, 'lead-exp');
 };

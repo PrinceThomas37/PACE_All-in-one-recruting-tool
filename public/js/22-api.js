@@ -62,10 +62,12 @@ function apiGetJobsList(){
     return {data:res,keep:function(){_jobsTag=got?{tag:got,user:me,jobs:STATE.jobs}:null;}};
   });
 }
-function apiPost(p,b){return apiFetch('POST',p,b);}
-function apiPut(p,b){return apiFetch('PUT',p,b);}
-function apiPatch(p,b){return apiFetch('PATCH',p,b);}
-function apiDelete(p){return apiFetch('DELETE',p);}
+// A write to a lead (or to what decides who owns it) makes the page on screen stale: it is asked for again at once (76-leads-store.js).
+function _wrote(p){return function(r){if(window.leadsStore)leadsStore.afterWrite(p);return r;};}
+function apiPost(p,b){return apiFetch('POST',p,b).then(_wrote(p));}
+function apiPut(p,b){return apiFetch('PUT',p,b).then(_wrote(p));}
+function apiPatch(p,b){return apiFetch('PATCH',p,b).then(_wrote(p));}
+function apiDelete(p){return apiFetch('DELETE',p).then(_wrote(p));}
 
 // ── Restore session if present ─────────────────
 STATE.token=sessionStorage.getItem('fg_token')||null;
@@ -153,7 +155,7 @@ function loadAppData(opts){
   // R-348 (owner, 30 Oct: "it can load after the login"): the lead list is NOT waited for. The app opens as soon as the small
   // things arrive; the list fills in behind, with a note saying so (loadLeadsInBackground). It used to be one of these calls,
   // so the slowest, biggest answer held the whole sign-in — 2+ minutes on 30 Oct.
-  if(!opts.retried)loadLeadsInBackground();
+  if(!opts.retried)leadsStartup();
   var calls=[apiGet('/users'),apiGet('/companies'),apiGet('/reminders'),apiGet('/industries')];
   var u=STATE.user;
   var isBD=(u&&(u.role==='bd'||u.role==='bd_lead'||u.role==='admin'||u.role==='ra_lead'));
@@ -265,6 +267,18 @@ function loadAppData(opts){
 // are on their way — an empty list must never read as "you have no leads". A busy server is asked again, further apart each
 // time; if it still cannot, the note says so and offers Try again. The note is its own element on <body>, outside the render
 // engine, so a repaint never removes it.
+// R-349 C/D: the app asks for the FIRST PAGE of leads and their numbers (76-leads-store.js) instead of every lead. If the server cannot answer that, or
+// the person's list is the browser's own (a Research Analyst), the whole list loads exactly as before.
+function leadsStartup(){
+  var who=STATE.token;
+  if(!window.leadsStore)return loadLeadsInBackground();
+  STATE.jobsLoading=true;leadsNote('Loading your leads…');
+  return leadsStore.start().then(function(on){
+    if(STATE.token!==who)return;
+    if(on){STATE.jobsLoading=false;leadsNote(null);render();return;}
+    return loadLeadsInBackground();
+  });
+}
 var LEADS_RETRY_S=[3,6,10,20,30];
 function leadsNote(text,canRetry){
   if(typeof document==='undefined')return;
@@ -273,11 +287,11 @@ function leadsNote(text,canRetry){
   if(!el){el=document.createElement('div');el.id='leads-loading-note';el.className='leads-loading-note fs-12 c-text2';el.setAttribute('role','status');document.body.appendChild(el);}
   el.innerHTML=htmlEsc(text)+(canRetry?' <button class="btn btn-sm" onclick="loadLeadsInBackground()">Try again</button>':'');
 }
-function loadLeadsInBackground(tries){
-  tries=tries||0;
+function loadLeadsInBackground(tries,opts){
+  tries=tries||0; opts=opts||{};
   var who=STATE.token;
   STATE.jobsLoading=true;
-  if(!tries){STATE.jobs=[];STATE.contacts=[];_jobsTag=null;}
+  if(!tries&&!opts.keepWhileLoading){STATE.jobs=[];STATE.contacts=[];_jobsTag=null;}
   leadsNote(tries?'Still loading your leads — the server is busy…':'Loading your leads…');
   return apiGetJobsList().then(function(jl){
     if(STATE.token!==who)return;   // signed out (or someone else signed in) meanwhile
@@ -289,7 +303,7 @@ function loadLeadsInBackground(tries){
     if(tries<LEADS_RETRY_S.length){
       return new Promise(function(res){setTimeout(res,LEADS_RETRY_S[tries]*1000);}).then(function(){
         if(STATE.token!==who)return;
-        return loadLeadsInBackground(tries+1);
+        return loadLeadsInBackground(tries+1,opts);
       });
     }
     STATE.jobsLoading=false;
@@ -305,6 +319,7 @@ function applyJobsList(jl){
   STATE.jobs=raw.map(normaliseJob).map(function(j){if(p[j.id])j.stage=p[j.id];return j;});
   STATE.contacts=flattenContacts(raw);
   jl.keep();
+  if(window.leadsStore)leadsStore.markFull();   // this IS the whole list: screens that read it need no second load
   scheduleRender();
   return true;
 }
@@ -321,7 +336,11 @@ function backgroundPollTick(){
     if(document.hidden)return; // no point refreshing a tab nobody is looking at
     var pg=STATE.page;
     // Always refresh jobs (stage changes, new leads, assignments) — unless the first load is still on its way (R-348).
-    if(!STATE.jobsLoading)apiGetJobsList().then(applyJobsList).catch(function(){});
+    if(!STATE.jobsLoading){
+      var _srv=window.leadsStore&&leadsStore.use(STATE.user);
+      if(_srv)leadsStore.invalidate();   // the page on screen and its numbers are asked for again; the whole list only if it was ever needed
+      if(!_srv||leadsStore.isFull())apiGetJobsList().then(applyJobsList).catch(function(){});
+    }
     // Always refresh users — STATE.users otherwise only loads once at login, so a
     // name/role change made by someone else (or in another tab) never showed up
     // anywhere that reads from it (avatars, assignee labels, pickers) until a
