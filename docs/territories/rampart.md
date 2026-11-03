@@ -510,3 +510,5 @@ Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's passwo
 - 2026-10-20 (Session 52, R-299): new `GET /users-emails` in routes/auth.js. Visibility is EXACTLY the per-person route's (`guardUser` = any user of the caller's own org): the bulk reads `users` through `withOrg` (non-deleted only) and then `user_emails` for those ids, so another company's people and mailboxes, and removed users, never appear. Pinned in `users-emails-bulk-smoke` (two-company fake). The per-person route is unchanged in who may call it; both now share `describeMailboxes()`.
 
 - **2 Nov 2026 (D-0195):** `auth` runs each request inside `aiAccess.runAs(userId)`; `complete()`/`availability()` refuse (null / user_off) for a person whose AI is off. Mark any NEW AI button `data-ai="1"` so `body.ai-off` hides it.
+
+- **3 Nov 2026 (R-357 review):** `routes/mailbox-control.js` is admin-only and company-scoped (`mailbox-control-routes-smoke` pins 403, cross-company 404, and that every action is audited). Known and unchanged: `POST /admin/mailbox/:id/resume` (index.js) still has no same-company check.

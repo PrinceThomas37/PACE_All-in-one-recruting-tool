@@ -1,4 +1,5 @@
 // DELIVERABILITY IS THE ADMIN'S, AND THE SPAM CHECK LIVES WHERE THE WORDING IS WRITTEN (owner, 8 Oct), in a real browser:
+//   * (3 Nov) mailboxes are ONE search-first panel — test/mailbox-control-ui-smoke.mjs drives it; here: it is present and the long lists are not
 //   * the Deliverability tab is in the menu for an admin only — not a BD Lead, an RA Lead or a BD — and the page refuses them
 //   * the page no longer carries "Reply rate by template" or the stand-alone spam checker, nor the Personal / My team toggle
 //   * the sequence builder (where the wording is written since D-0161; the old Email → Sequence → My wording tab is gone, R-286)
@@ -45,7 +46,8 @@ try{
   step('an admin has it in the menu', (await nav()).some(n=>/Deliverability/.test(n)));
   await ev(()=>{ STATE.page='deliverability'; STATE.deliv=undefined; render(); }); await page.waitForTimeout(500);
   const t=await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
-  step('the admin sees the counters, mailbox health, warm-up and domain checks', /1934/.test(t) && /Mailbox health/i.test(t) && /Warm-up pool/i.test(t) && /Domain authentication/i.test(t), t.slice(0,160));
+  step('the admin sees the counters, the one Mailboxes search panel, and domain checks', /1934/.test(t) && /Mailboxes/i.test(t) && !!(await page.$('#mbc-q')) && /Domain authentication/i.test(t), t.slice(0,160));
+  step('…and NOT the two long lists any more (3 Nov: "do not show the full list") — a mailbox the server knows is not on the page until searched for', !/Mailbox health \(outreach cap/i.test(t) && !/Warm-up pool ·/i.test(t) && !/a@x/.test(t), t.slice(0,200));
   step('…but no "Reply rate by template", no stand-alone spam checker, no Personal / My team toggle', !/Reply rate by template/i.test(t) && !/Spam-content checker/i.test(t) && !/My team/.test(t) && !/Personal/.test(t));
   step('…and the "Bounced" tile is honest: it counts invalid addresses', /Invalid addresses/i.test(t) && !/\bBounced\b/.test(t));
   step('the page does not ask for the template numbers any more', !(await ev(()=>window.__calls)).some(c=>/analytics\/templates/.test(c[1])));
