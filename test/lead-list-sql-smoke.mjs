@@ -151,6 +151,30 @@ try {
 
   // ── search is literal ──
   pg.exec('t', `UPDATE jobs SET position = 'Nurse 50% rate_x' WHERE id = ${lit(jid(1))};`);
+  // ── the two drop-downs (migration 074): who owns how many, how many per industry — equal to the reference for every kind of viewer ──
+  pg.execFile('t', path.resolve(new URL('../migrations/074_lead_list_facets.sql', import.meta.url).pathname));
+  ok('migration 074 applies', true);
+  pg.execFile('t', path.resolve(new URL('../migrations/074_lead_list_facets.sql', import.meta.url).pathname));
+  ok('…and is safe to apply twice', true);
+  ok('only the server may ask for the drop-down numbers (service_role yes; anon, authenticated, public no)',
+    can('service_role', 'leads_facets(uuid,uuid,boolean,uuid[],boolean)') && !can('anon', 'leads_facets(uuid,uuid,boolean,uuid[],boolean)') && !can('authenticated', 'leads_facets(uuid,uuid,boolean,uuid[],boolean)'));
+  const facetsOf = (v) => { const s = scopeOf(v); return pg.rows('t', `SELECT kind, k, label, n::int n FROM leads_facets(${lit(ORG)}, ${lit(v.id)}, ${s.all}, ${uuidArr(s.ownerIds)}, ${!!s.seesPool})`); };
+  const facetRef = (v) => {
+    const scoped = own.scopeLeads(raw, scopeOf(v)); const oc = {}, ic = {}; let nobody = 0;
+    scoped.forEach((j) => { if (j.assigned_to_bd) oc[j.assigned_to_bd] = (oc[j.assigned_to_bd] || 0) + 1; else nobody++; const ind = lq.leadIndustryOf(lq.flat(j)); if (ind) ic[ind.toLowerCase()] = (ic[ind.toLowerCase()] || 0) + 1; });
+    return { oc, ic, nobody };
+  };
+  const facetBad = [];
+  for (const v of viewers) {
+    const got = facetsOf(v), want = facetRef(v);
+    const go = {}, gi = {}; let gn = 0;
+    got.forEach((r) => { if (r.kind === 'owner') { if (r.k) go[r.k] = r.n; else gn = r.n; } else gi[r.k] = r.n; });
+    if (JSON.stringify(go) !== JSON.stringify(want.oc) && JSON.stringify(Object.entries(go).sort()) !== JSON.stringify(Object.entries(want.oc).sort())) facetBad.push(v.id + ' owners');
+    if (gn !== want.nobody) facetBad.push(v.id + ' nobody ' + gn + '/' + want.nobody);
+    if (JSON.stringify(Object.entries(gi).sort()) !== JSON.stringify(Object.entries(want.ic).sort())) facetBad.push(v.id + ' industries');
+  }
+  ok('the drop-down numbers equal the reference for every kind of viewer (owners, "nobody", industries, other companies never counted)', facetBad.length === 0, facetBad.join('; '));
+  ok('a stranger (sees nothing) gets no numbers', facetsOf(viewers[4]).length === 0);
   const find = (s) => callPage(viewers[0], { search: s }).map((r) => r.id);
   ok('"%" in a search means a percent sign, not "anything"', find('50% rate').includes(jid(1)) && !find('50% rate').includes(jid(2)) && find('%').every((id) => /%/.test(pg.rows('t', `select search_text from jobs where id = ${lit(id)}`)[0].search_text)));
   ok('"_" means an underscore, not "any one letter"', find('rate_x').includes(jid(1)) && find('rate_').length >= 1 && !find('rat_').includes(jid(1)));

@@ -143,6 +143,37 @@ async function fetchIds(o) {
   return { ids, count: ids.length, capped: cut, cap: IDS_CAP, source };
 }
 
+/**
+ * The two drop-downs on the Leads tab: who owns how many of the leads the viewer can see, and how many carry each industry (R-312).
+ * Counted over every visible lead — never over the filtered set. { owners:[{id,count}], nobody, industries:[{key,label,count}], total, source }
+ * Until migration 074 is applied the same answer is counted from the in-memory list (`source: 'memory'`).
+ */
+async function fetchFacets(o) {
+  const r = await o.supabase.rpc('leads_facets', { p_org: o.org, p_viewer: o.viewerId, p_all: !!o.scope.all, p_owner_ids: o.scope.ownerIds || [], p_sees_pool: !!o.scope.seesPool });
+  if (r.error && !missingFunction(r.error)) throw new Error(r.error.message);
+  const owners = [], industries = [];
+  let nobody = 0, source = 'database';
+  if (r.error) {
+    source = 'memory';
+    const scoped = own.scopeLeads(await o.loadAllJobs(o.org), o.scope);
+    const oc = new Map(), ic = new Map();
+    for (const j of scoped) {
+      if (j.assigned_to_bd) oc.set(j.assigned_to_bd, (oc.get(j.assigned_to_bd) || 0) + 1); else nobody++;
+      const v = lq.leadIndustryOf(lq.flat(j));
+      if (v) { const k = v.toLowerCase(); const e = ic.get(k) || { key: k, label: v, count: 0 }; e.count++; ic.set(k, e); }
+    }
+    oc.forEach((count, id) => owners.push({ id, count })); ic.forEach((e) => industries.push(e));
+  } else {
+    for (const row of r.data || []) {
+      if (row.kind === 'owner') { if (row.k) owners.push({ id: row.k, count: Number(row.n) }); else nobody = Number(row.n); }
+      else if (row.kind === 'industry') industries.push({ key: row.k, label: row.label, count: Number(row.n) });
+    }
+  }
+  industries.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  const total = owners.reduce((a, b) => a + b.count, 0) + nobody;
+  return { owners, nobody, industries, total, source };
+}
+
 // shortcut: at most BY_IDS_MAX leads per request (a technical guard on one request's size, not a business limit); the browser asks again for more.
 const BY_IDS_MAX = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -156,4 +187,4 @@ async function fetchByIds(o) {
   return { rows: (data || []).filter((j) => own.canSeeLead(j, o.scope)) };
 }
 
-module.exports = { fetchByIds, BY_IDS_MAX, fetchIds, IDS_CAP, filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };
+module.exports = { fetchFacets, fetchByIds, BY_IDS_MAX, fetchIds, IDS_CAP, filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };

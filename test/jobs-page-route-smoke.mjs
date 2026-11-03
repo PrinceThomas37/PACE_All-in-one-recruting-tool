@@ -157,6 +157,16 @@ try {
   step("by-ids: a BD gets only the lead they own (1 of the 4 asked for), never the others'", loneAsk.body.rows.length === 1 && loneAsk.body.rows[0].id === uid(2), JSON.stringify(loneAsk.body.rows.map((r) => r.assigned_to_bd)));
   as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
 
+  // the two drop-downs: who owns how many / how many per industry (until migration 074 is applied they are counted from memory and say so)
+  const fa = await get('/jobs/facets');
+  step('facets: an admin gets every visible lead counted by owner (51 in all), industries counted, the other company never', fa.status === 200 && fa.body.total === 51 && fa.body.source === 'memory' && fa.body.owners.reduce((a, o) => a + o.count, 0) + fa.body.nobody === 51 && fa.body.industries.some((i) => i.key === 'healthcare' && i.count === 50), JSON.stringify(fa.body).slice(0, 220));
+  step('facets: nobody-owned leads are counted apart (the pool lead)', fa.body.nobody === 1);
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  const faLone = await get('/jobs/facets');
+  step("facets: a BD's numbers cover only the leads they may see (12 own, not the company's 51)", faLone.status === 200 && faLone.body.total < 51 && faLone.body.owners.every((o) => o.id === 'lone'), JSON.stringify(faLone.body).slice(0, 200));
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  step('facets: the literal path is not shadowed by /jobs/:id', !('position' in fa.body));
+
   // page size
   step('page size: the admin\'s default (10) when the person has not chosen', (await get('/jobs/page')).body.perPage === 10);
   step('…the person\'s own choice (20) beats it', (await get('/jobs/page?perPage=20')).body.perPage === 20);
