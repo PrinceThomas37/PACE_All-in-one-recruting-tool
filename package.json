@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "playwright-core": "^1.62.1",
-    "smtp-server": "^3.19.21"
+    "smtp-server": "^3.19.21",
+    "xlsx": "^0.18.5"
   }
 }

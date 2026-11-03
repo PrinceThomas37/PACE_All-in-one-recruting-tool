@@ -1388,3 +1388,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 3 Nov 2026 (R-349 C/D): tests leads-server-mode-ui-smoke (side by side with the old tab), leads-whole-list-wake-smoke (guard), mailbox-old-delete-smoke; lead-list-light-smoke skips search_text.
 
 - 3 Nov 2026 (R-367): system-health-smoke / -routes-smoke / -ui-smoke.
+
+- 3 Nov 2026 (R-306): import-hidden-rows-smoke (real .xlsx made with SheetJS, devDependency xlsx 0.18.5).

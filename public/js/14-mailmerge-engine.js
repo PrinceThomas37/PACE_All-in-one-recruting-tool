@@ -249,13 +249,13 @@ window.importXL=function(input){
   reader.onload=function(e){
     try{
       var data=new Uint8Array(e.target.result);
-      var wb=XLSX.read(data,{type:"array"});
+      var wb=XLSX.read(data,{type:"array",cellStyles:true});   // cellStyles: SheetJS only reports which rows are hidden when it is asked (R-306)
       var sheets=wb.SheetNames;
       STATE.importWB=wb;
       if(sheets.length===1){
         // Only one sheet — go straight to preview
         var ws=wb.Sheets[sheets[0]];
-        var rows=XLSX.utils.sheet_to_json(ws,{defval:""});
+        var rows=importChooseRows(ws);
         if(!rows.length){showToast("No data found in file","warning");return;}
         STATE.importPreview=rows;
         STATE.importSheet=sheets[0];
@@ -270,6 +270,19 @@ window.importXL=function(input){
   reader.readAsArrayBuffer(file);
 }
 
+// R-306: rows the person hid (or a filter hid) are not leads to import unless they say so. Default = the visible rows only; the preview says how many are hidden.
+function importChooseRows(ws){
+  var r=window.ImportVisible?ImportVisible.read(ws,XLSX):{all:XLSX.utils.sheet_to_json(ws,{defval:""}),visible:null,hidden:0};
+  STATE.importAllRows=r.all; STATE.importVisibleRows=r.visible; STATE.importHidden=r.hidden; STATE.importScope='visible';
+  return r.hidden?r.visible:r.all;
+}
+window.setImportScope=function(scope){
+  if(!STATE.importHidden)return;
+  STATE.importScope=scope==='all'?'all':'visible';
+  STATE.importPreview=STATE.importScope==='all'?STATE.importAllRows:STATE.importVisibleRows;
+  STATE.modal=renderImportModal(STATE.importPreview,STATE.importSheet);
+  render();
+};
 function renderSheetPickerModal(sheets){
   var items=sheets.map(function(s,i){
     return '<div onclick="selectSheet(\''+htmlEsc(s)+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--r2);cursor:pointer;margin-bottom:8px;transition:all .12s" onmouseenter="this.style.borderColor=\'var(--accent)\';this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.background=\'\'">'+
@@ -291,7 +304,7 @@ function renderSheetPickerModal(sheets){
 window.selectSheet=function(sheetName){
   if(!STATE.importWB)return;
   var ws=STATE.importWB.Sheets[sheetName];
-  var rows=XLSX.utils.sheet_to_json(ws,{defval:""});
+  var rows=importChooseRows(ws);
   if(!rows.length){showToast("No data found in sheet: "+sheetName,"warning");return;}
   STATE.importPreview=rows;
   STATE.importSheet=sheetName;
@@ -400,6 +413,13 @@ function renderImportModal(rows, sheetName){
         '<div><div class="fs-22 c-teal" style="font-weight:700">'+totalContacts+'</div><div class="c-text2 fs-11" style="margin-top:2px">CONTACTS</div></div>'+
         '<div><div class="fs-22 c-purple" style="font-weight:700">'+newCoCnt+'</div><div class="c-text2 fs-11" style="margin-top:2px">NEW COMPANIES</div></div>'+
       '</div>'+
+      // R-306: rows hidden or filtered out of the sheet are NOT imported unless the person chooses to (owner, 3 Nov 2026)
+      (STATE.importHidden?'<div id="import-hidden" class="fs-12_5" style="padding:10px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px">'+
+        '<div><strong>'+STATE.importHidden+' row'+(STATE.importHidden>1?'s are':' is')+' hidden</strong> in this sheet (hidden by hand or by a filter), so '+(STATE.importHidden>1?'they are':'it is')+' '+(STATE.importScope==='all'?'being imported too':'not being imported')+'.</div>'+
+        '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button type="button" class="btn btn-sm '+(STATE.importScope==='all'?'btn-outline':'btn-primary')+'" aria-pressed="'+(STATE.importScope!=='all')+'" onclick="setImportScope(\'visible\')">Import only the '+(STATE.importVisibleRows||[]).length+' visible rows</button>'+
+          '<button type="button" class="btn btn-sm '+(STATE.importScope==='all'?'btn-primary':'btn-outline')+'" aria-pressed="'+(STATE.importScope==='all')+'" onclick="setImportScope(\'all\')">Import all '+(STATE.importAllRows||[]).length+' rows</button>'+
+        '</div></div>':'')+
       (dupeCnt?'<div class="fs-12_5 c-amber" style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px">'+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist. They won\'t be added again, but anything they are missing (job link, website, salary, extra columns) will be filled in from this file. Nothing already on them is changed.</div>':'')+
       (skippedRows?'<div class="fs-12_5 c-text3" style="padding:8px 12px;background:var(--bg);border-radius:var(--r2);margin-bottom:10px">'+skippedRows+' row'+(skippedRows>1?'s':'')+' skipped (no company/name).</div>':'')+
       (addrCheck.withoutAddress?'<div class="fs-12_5" style="padding:10px 12px;background:var(--red-l,#fef2f2);border:1px solid var(--red,#dc2626);border-radius:var(--r2);margin-bottom:10px;color:var(--red,#dc2626)">'+htmlEsc(importAddressWarning(addrCheck))+'</div>':'')+
