@@ -186,6 +186,22 @@ router.get('/jobs/page', auth, async (req, res) => {
     res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// "Select all N matching" (owner 3 Nov: select-all means ALL matching leads, across every page). The browser no longer holds every lead, so it asks for the ids
+// of the leads that match the filter — the same rules as the page, only the ids, capped (a technical guard so one request cannot be unbounded; the answer says
+// whether the cap was hit, and a bulk action says how many it will touch before it does anything).
+router.get('/jobs/ids', auth, async (req, res) => {
+  try {
+    const org = orgIdFor(req);
+    const scope = await scopeFor(req);
+    const f = leadPageRoute.filtersFrom(req.query || {});
+    const manager = leadPageRoute.isTeamManager({ isAdmin: hasRole(req, 'admin'), roles: req.user.roles && req.user.roles.length ? req.user.roles : [req.user.role], scope });
+    const out = await leadPageRoute.fetchIds({
+      supabase, org, scope, manager, viewerId: req.user.id, filters: f, today: leadPageRoute.dayOr((req.query || {}).today), now: new Date(), loadAllJobs,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 router.get('/jobs/counts', auth, async (req, res) => {
   try {
     const org = orgIdFor(req);

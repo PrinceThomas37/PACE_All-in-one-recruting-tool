@@ -126,4 +126,21 @@ async function fetchCounts(o) {
   return { strip, stripTotal: Object.values(strip).reduce((a, b) => a + b, 0), team, source };
 }
 
-module.exports = { filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };
+// shortcut: one request returns at most IDS_CAP ids, so a bulk action over a huge filter cannot be unbounded; the answer says when it was cut and the screen then says
+// "the first N of many". Upgrade: a server-side "apply to this filter" action that never sends ids to the browser at all (step E).
+const IDS_CAP = 5000;
+
+/** The ids of every lead the filter matches (newest first), up to IDS_CAP, for "select all N matching". */
+async function fetchIds(o) {
+  const f = o.filters;
+  const r = await o.supabase.rpc('leads_page', { ...rpcArgs(o), p_stages: f.stages || [], p_after_created: null, p_after_id: null, p_limit: IDS_CAP + 1 });
+  if (r.error && !missingFunction(r.error)) throw new Error(r.error.message);
+  let list, source = 'database';
+  if (r.error) { source = 'memory'; const m = await idsFromMemory(o); list = m.ids.map((id) => ({ id })); } else list = r.data || [];
+  // who may see them was decided by the database (or, in memory, by own.scopeLeads) — an id list carries no row to check again
+  const cut = list.length > IDS_CAP;
+  const ids = list.slice(0, IDS_CAP).map((x) => x.id);
+  return { ids, count: ids.length, capped: cut, cap: IDS_CAP, source };
+}
+
+module.exports = { fetchIds, IDS_CAP, filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };

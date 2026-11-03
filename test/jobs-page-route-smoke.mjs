@@ -125,6 +125,22 @@ try {
   step('an admin\'s counts add up to the whole company (51)', c2.body.stripTotal === 51 && c2.body.team.on === false, JSON.stringify(c2.body));
   step('counts: the literal path is not shadowed either', c2.status === 200 && !('id' in c2.body));
 
+  // "select all N matching": only the ids, the same rules, capped
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  const idsAll = await get('/jobs/ids');
+  step('"select all matching": the ids of every lead in the filter (51 for an admin), newest first, the other company\'s never', idsAll.status === 200 && idsAll.body.ids.length === 51 && idsAll.body.count === 51 && idsAll.body.capped === false && !idsAll.body.ids.includes(FOREIGN) && JSON.stringify(idsAll.body.ids) === JSON.stringify(sorted), JSON.stringify(idsAll.body).slice(0, 120));
+  const idsConn = await get('/jobs/ids?stages=Connected');
+  step('…the filter applies: only the Connected ones', idsConn.body.ids.length === jobs.filter((j) => j.org_id === ORG && j.stage === 'Connected').length && idsConn.body.ids.every((id) => raw.find((j) => j.id === id).stage === 'Connected'));
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  asked.length = 0;
+  const idsLone = await get('/jobs/ids?p_all=true&owner_ids=rep1');
+  step('a plain BD gets only their own ids and cannot widen it from the query string', idsLone.body.ids.length > 0 && idsLone.body.ids.every((id) => [raw.find((j) => j.id === id).assigned_to_bd, raw.find((j) => j.id === id).created_by].includes('lone')) && asked[0].p_all === false);
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  const realRpc = fake.supabase.rpc; fake.supabase.rpc = async (name, a) => (name === 'leads_page' ? { data: Array.from({ length: a.p_limit }, (_, i) => ({ id: uid(100000 + i), created_at: '2026-11-01T00:00:00.000Z' })), error: null } : realRpc.call(fake.supabase, name, a));
+  const capped = await get('/jobs/ids');
+  step('a huge filter is CUT at the cap and says so (the screen then says "the first N of many")', capped.body.capped === true && capped.body.count === capped.body.cap && capped.body.cap === 5000, JSON.stringify([capped.body.capped, capped.body.count, capped.body.cap]));
+  fake.supabase.rpc = realRpc;
+
   // page size
   step('page size: the admin\'s default (10) when the person has not chosen', (await get('/jobs/page')).body.perPage === 10);
   step('…the person\'s own choice (20) beats it', (await get('/jobs/page?perPage=20')).body.perPage === 20);
@@ -138,6 +154,8 @@ try {
   delete fake.rpcs; fake.supabase.rpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.leads_page' } });
   const mem = await allPages('');
   step('until migration 073 is applied: the SAME 51 leads in the SAME order, from memory, and it says so', mem.ids && JSON.stringify(mem.ids) === JSON.stringify(sorted) && (await get('/jobs/page?perPage=10')).body.source === 'memory');
+  const memIds = await get('/jobs/ids');
+  step('…and the ids too (51, same order)', memIds.body.source === 'memory' && JSON.stringify(memIds.body.ids) === JSON.stringify(sorted));
   const memCounts = await get('/jobs/counts');
   step('…and the counts too (51)', memCounts.status === 200 && memCounts.body.source === 'memory' && memCounts.body.stripTotal === 51, JSON.stringify(memCounts.body));
   fake.supabase.rpc = async () => ({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } });
