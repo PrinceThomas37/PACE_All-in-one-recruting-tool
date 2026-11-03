@@ -105,4 +105,16 @@ async function applyClaims({ jobsTable, claims, withEmail, userId, now }) {
   return { claimed, lost };
 }
 
-module.exports = { isUnowned, planClaim, ownerFields, applyClaims, assignmentSentence, assignToManager, historyRows, writeHistory };
+/** The history line for an owner change made in the edit form: who handed the lead to whom. Best-effort: the change already happened. */
+async function logOwnerEdit({ db, req, logActivity, jobId, toUserId }) {
+  let toName = 'a team member';
+  try {
+    const { data: u } = await db.forRequest(req).from('users').select('name').eq('id', toUserId).maybeSingle();
+    if (u && u.name) toName = u.name;
+  } catch (_) { /* the name is for the sentence only */ }
+  try {
+    await logActivity(jobId, null, req.user.id, 'assigned', assignmentSentence({ by: req.user.name || 'an admin', to: toName, how: 'edit' }), null, { assigned_to_bd: toUserId, assigned_by: req.user.id });
+  } catch (_) { /* the history is a record, never the point */ }
+}
+
+module.exports = { logOwnerEdit, isUnowned, planClaim, ownerFields, applyClaims, assignmentSentence, assignToManager, historyRows, writeHistory };

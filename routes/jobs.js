@@ -679,10 +679,9 @@ router.put('/jobs/:id', auth, async (req, res) => {
       await logActivity(data.id, null, req.user.id, 'job_updated', 'Job updated', null, null);
     }
     if (ownerChanged && data.assigned_to_bd) {
-      // The lead history says who handed the lead to whom (owner, 3 Nov: "it should come in lead history").
-      let toName = 'a team member';
-      try { const { data: u } = await supabase.from('users').select('name').eq('id', data.assigned_to_bd).maybeSingle(); if (u && u.name) toName = u.name; } catch (_) { /* the name is for the sentence only */ }
-      await logActivity(data.id, null, req.user.id, 'assigned', leadClaim.assignmentSentence({ by: req.user.name || 'an admin', to: toName, how: 'edit' }), null, { assigned_to_bd: data.assigned_to_bd, assigned_by: req.user.id });
+      // The lead history says who handed the lead to whom (owner, 3 Nov: "it should come in lead history"). The name lookup and the line live in
+      // the service, scoped to the caller's company there.
+      await leadClaim.logOwnerEdit({ db: leadDb, req, logActivity, jobId: data.id, toUserId: data.assigned_to_bd });
     }
     if (research !== undefined) persistLearnedSkills(jobIndustry || data.industry || existing.industry, research);
     res.json(tidy.moved.length ? Object.assign({}, data, { moved: tidy.moved, moved_sentence: leadFields.movedSentence(tidy.moved) }) : data);

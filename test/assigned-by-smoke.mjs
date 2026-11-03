@@ -29,6 +29,11 @@ const mk = (id, extra = {}) => ({ id, org_id: 'o', stage: 'Unassigned', assigned
   const done = await lc.assignToManager({ jobsTable: () => db.supabase.from('jobs'), byBox: { mbx: ['a', 'b', 'c'] }, managerId: 'mgr1', byUserId: 'ra9', now: new Date('2026-11-03T10:00:00Z') });
   const row = (id) => db.tables.jobs.find((j) => j.id === id);
   ok('RA Lead → manager: the two free leads are assigned, each records the RA Lead as the giver', done.length === 2 && row('a').assigned_to_bd === 'mgr1' && row('a').assigned_by === 'ra9' && row('b').assigned_by === 'ra9' && row('a').stage === 'Assigned' && row('a').sending_email_id === 'mbx', JSON.stringify(done));
+  // the two rules the old text-scan test pinned, now proven by behaviour: one write per email ID (not per lead), and a lead is taken only while unassigned
+  let writes = 0; const db2 = T([mk('p'), mk('q'), mk('r'), mk('s')]);
+  const counting = () => { const t = db2.supabase.from('jobs'); const u = t.update.bind(t); t.update = (...a) => { writes++; return u(...a); }; return t; };
+  await lc.assignToManager({ jobsTable: counting, byBox: { m1: ['p', 'q', 'r'], m2: ['s'] }, managerId: 'mgr1', byUserId: 'ra9', now: new Date() });
+  ok('4 leads over 2 email IDs are written in 2 updates (one per email ID), not 4', writes === 2, String(writes));
   ok('…a lead somebody already owns is NOT taken and keeps ITS giver (a race never rewrites history)', row('c').assigned_to_bd === 'someone' && row('c').assigned_by === 'boss0');
   const hr = lc.historyRows(done.map((d) => d.job_id), { byUserId: 'ra9', toUserId: 'mgr1', sentence: lc.assignmentSentence({ by: 'Prince', to: 'Sam' }) });
   ok('the history rows say who gave to whom, and who the actor is', hr.length === 2 && hr.every((r) => r.action_type === 'assigned' && r.user_id === 'ra9' && r.description === 'Assigned to Sam by Prince' && r.new_value.assigned_to_bd === 'mgr1' && r.new_value.assigned_by === 'ra9'));
