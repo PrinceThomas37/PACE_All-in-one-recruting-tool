@@ -315,6 +315,7 @@ ${text.slice(0, 12000)}`;
           // D-0177: a manager opening a job for their team member's client puts it in THAT person's pipeline — the client's
           // owner is read from these two fields (services/ownership.js clientOwnerFrom), so it must not change hands.
           assigned_to_bd: jobOwnerId || req.user.id,
+          assigned_by: req.user.id,        // R-340: whoever opened the job handed it to its owner (themselves, or their team member)
           lead_code: leadCode
         }, orgStamp(req))).select().single();
       if (leadErr) throw leadErr;

@@ -757,3 +757,5 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 - **2 Nov 2026 (D-0197):** `{{work_arrangement}}` in email-vars (sentence drops when empty, like pay). Rules are strict on purpose — checked on 60 live postings: 22 on-site, 3 hybrid, 35 said nothing. Add new real-posting traps to `test/work-arrangement-smoke.mjs`.
 
 - **3 Nov 2026 (R-343 step C):** `services/first-email-replies.js` (pure) + `GET /insights/first-email-replies` + Outreach Insights card. Before/after needs app_settings `templates_switched_on` (set the day the switch goes live).
+
+- **3 Nov 2026 (R-340):** `routes/outreach-generator.js` (the generator's lead) records `assigned_by` = the sender. No prompt, budget or writer change.

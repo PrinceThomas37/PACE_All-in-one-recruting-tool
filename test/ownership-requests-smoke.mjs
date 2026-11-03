@@ -342,6 +342,7 @@ const ok = (n, c, d) => results.push({ n, c: !!c, d });
     ok('approve succeeds (200) and reports the move', r.status === 200 && r.body.request.status === 'approved' && r.body.moved && r.body.moved.lead, r.body);
     const job = JOBS.find(j => j.id === 'J_BD');
     ok('the lead really moved: assigned_to_bd is now BD2', job.assigned_to_bd === 'BD2', job);
+    ok('R-340: the lead records WHO handed it over — the approver (BDM), not the asker', job.assigned_by === 'BDM', job);
     ok('no connected mailbox in this fixture -> sending_email_id is null, not the old owner\'s', job.sending_email_id === null, job);
   }
 

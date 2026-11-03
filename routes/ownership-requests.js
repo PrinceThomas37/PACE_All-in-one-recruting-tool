@@ -233,7 +233,7 @@ module.exports = (ctx) => {
     const mailboxId = await pickMailboxFor(req, newOwnerId);
     const now = new Date();
     let q = db.forRequest(req).from('jobs')
-      .update({ assigned_to_bd: newOwnerId, assigned_at: now, sending_email_id: mailboxId, updated_at: now })
+      .update({ assigned_to_bd: newOwnerId, assigned_at: now, assigned_by: req.user.id, sending_email_id: mailboxId, updated_at: now })   // R-340: whoever approved the take-over handed it over
       .eq('id', jobId);
     q = oldOwnerId ? q.eq('assigned_to_bd', oldOwnerId) : q.is('assigned_to_bd', null);
     const { data, error } = await q.select('id');

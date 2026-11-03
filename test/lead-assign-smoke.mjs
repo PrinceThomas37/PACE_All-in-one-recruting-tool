@@ -139,7 +139,8 @@ const mine = tables.jobs.filter(j => j.assigned_to_bd === 'amy');
 step('the manager\'s own split is honoured: 7 from one email ID, 5 from the other', r.code === 200 && r.out.assigned === 12 && mine.filter(j => j.sending_email_id === 'a1').length === 7 && mine.filter(j => j.sending_email_id === 'a2').length === 5, JSON.stringify(r.out));
 step('each handed lead is Assigned, owned by the assignee, time-stamped', mine.length === 12 && mine.every(j => j.stage === 'Assigned' && j.assigned_to === 'amy' && j.assigned_at));
 step('a lead that ALREADY had an owner, a pool lead the manager cannot see, and a flagged duplicate were left alone and counted as skipped', tables.jobs.find(j => j.id === 'theirs').assigned_to_bd === 'zed' && !tables.jobs.find(j => j.id === 'pool').assigned_to_bd && !tables.jobs.find(j => j.id === 'dup').assigned_to_bd && r.out.skipped === 3, JSON.stringify([r.out.skipped, r.out.message]));
-step('every hand-over is written in the lead\'s own history, saying who gave it to whom', logs.filter(l => l[3] === 'assigned').length === 12 && /Bo Manager to Amy Rep/.test(logs.find(l => l[3] === 'assigned')[4]), logs[0] && logs[0][4]);
+step('every hand-over is written in the lead\'s own history, saying who gave it to whom', logs.filter(l => l[3] === 'assigned').length === 12 && /Assigned to Amy Rep by Bo Manager/.test(logs.find(l => l[3] === 'assigned')[4]) && logs.filter(l => l[3] === 'assigned').every(l => l[6] && l[6].assigned_by === 'boss'), logs[0] && logs[0][4]);   // R-340: the words changed on purpose ("Handed out by X to Y" → "Assigned to Y by X", the same one sentence every path now uses)
+step('R-340: every handed lead records WHO handed it (jobs.assigned_by = the manager), not just the owner', mine.length === 12 && mine.every(j => j.assigned_by === 'boss'));
 step('the answer says how many went from each email ID', r.out.by_mailbox.find(m => m.mailbox_id === 'a1').count === 7);
 
 // automatic spread, to myself, and a race

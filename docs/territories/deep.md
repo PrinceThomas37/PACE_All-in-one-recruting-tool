@@ -393,3 +393,5 @@ The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was 
 - 30 Oct: migration 069 APPLIED to the live DB (owner's go "Yes"), verified: `contact_labels` NOT NULL default '{}' on candidates and contacts.
 
 - Migration 070 (30 Oct, APPLIED live with the owner's go): `jobs.research_list` (research minus jd_raw), `posting_all_chars`, `posting_chars`, `posting_words` — GENERATED ALWAYS … STORED, so nothing writes them. Checked against `lead-posting.postingState` on 12 live rows: 0 mismatches. Why: the lead list pulled 12 MB of jd_raw per load (R-348).
+
+- **3 Nov 2026 (R-340/R-363):** migration `072_assigned_by.sql` — `jobs.assigned_by` (uuid → users, ON DELETE SET NULL), partial index `(org_id, assigned_by) WHERE assigned_by IS NOT NULL`, backfill ONLY from `activity_log` `first_email_claim` rows where the logger is the current owner. NULL = not recorded. NOT applied to the live database yet (owner's go before merge).

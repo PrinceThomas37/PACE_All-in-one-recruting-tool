@@ -111,13 +111,13 @@ module.exports = (ctx) => {
       const now = new Date();
       const done = [], lost = [], by = {};
       for (let i = 0; i < eligible.length; i++) {
-        const { data: got, error } = await withOrg(supabase.from('jobs').update(leadClaim.ownerFields(toId, queue[i], now))
+        const { data: got, error } = await withOrg(supabase.from('jobs').update(leadClaim.ownerFields(toId, queue[i], now, req.user.id))
           .eq('id', eligible[i].id).is('assigned_to_bd', null).select('id'), req);
         if (!error && got && got.length) { done.push(eligible[i].id); by[queue[i]] = (by[queue[i]] || 0) + 1; } else lost.push(eligible[i].id);
       }
       const who = req.user.id === toId ? 'themselves' : (to.name || 'a team member');
       for (const id of done) {
-        try { await logActivity(id, null, req.user.id, 'assigned', `Handed out by ${req.user.name || 'a manager'} to ${who}`, null, { assigned_to_bd: toId }); } catch (_) { /* the log is a record, never the point */ }
+        try { await logActivity(id, null, req.user.id, 'assigned', leadClaim.assignmentSentence({ by: req.user.name || 'a manager', to: who }), null, { assigned_by: req.user.id, assigned_to_bd: toId }); } catch (_) { /* the log is a record, never the point */ }
       }
       const emailOf = {}; mb.accounts.forEach(a => { emailOf[a.id] = a.email_address; });
       res.json({

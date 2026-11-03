@@ -608,6 +608,7 @@ module.exports = (ctx) => {
       created_by: req.user.id,
       assigned_to: req.user.id,
       assigned_to_bd: req.user.id,   // the sender owns it (D-0020)
+      assigned_by: req.user.id,      // R-340: nobody else handed it over
       assigned_at: assignedAt,
       created_date: assignedAt.toISOString().split('T')[0]
     }, org)).select('id').single();

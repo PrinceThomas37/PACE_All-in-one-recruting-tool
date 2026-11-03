@@ -841,7 +841,7 @@ const JOB_SELECT = `*, research, company:companies(id,name,website,industry,loca
 // R-348 (30 Oct): the list reads every lead column EXCEPT the posting text — `research_list` is research without `jd_raw`, and the
 // posting's size comes as numbers (migration 070, columns the database keeps itself). The full text loads with one lead (JOB_SELECT).
 // A new jobs column that the list needs must be added here (test/lead-list-light-smoke.mjs checks this list against JOB_SELECT's).
-const JOB_LIST_COLUMNS = 'id,company_id,position,location,source,job_url,stage,notes,created_by,assigned_to,created_date,created_at,updated_at,deleted_at,assigned_to_bd,assigned_at,is_duplicate,duplicate_of,salary_range,job_created_date,job_opened_date,timezone,freshness,bdm_assigned_name,industry,sending_email_id,lead_code,org_id,recycled_count,last_recycled_at,auto_replied_at';
+const JOB_LIST_COLUMNS = 'id,company_id,position,location,source,job_url,stage,notes,created_by,assigned_to,created_date,created_at,updated_at,deleted_at,assigned_to_bd,assigned_at,is_duplicate,duplicate_of,salary_range,job_created_date,job_opened_date,timezone,freshness,bdm_assigned_name,industry,sending_email_id,lead_code,org_id,recycled_count,last_recycled_at,auto_replied_at,assigned_by';
 const JOB_LIST_SELECT = JOB_LIST_COLUMNS + ',research:research_list,posting_all_chars,posting_chars,posting_words' + JOB_SELECT.slice(JOB_SELECT.indexOf(', company:'));
 const JOBS_CACHE_TTL_MS = 5 * 60 * 1000;
 const JOBS_PAGE = 500;   // rows per read while loading the list — 3 trips to the database for today's leads, each page cut before the next (a technical batch size, not a customer limit)
@@ -2608,13 +2608,14 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // hand the same lead to two people. A lead another assignment took a moment earlier is simply not in the answer.
     const byBox = {};
     selected.forEach((job, i) => { (byBox[assignmentQueue[i]] = byBox[assignmentQueue[i]] || []).push(job.id); });
-    for (const emailId of Object.keys(byBox)) {
-      for (let i = 0; i < byBox[emailId].length; i += 200) {
-        const { data: took } = await supabase.from('jobs')
-          .update({ assigned_to_bd: manager_id, sending_email_id: emailId, stage: 'Assigned', assigned_at: now, updated_at: now })
-          .in('id', byBox[emailId].slice(i, i + 200)).eq('stage', 'Unassigned').is('assigned_to_bd', null).select('id');
-        (took || []).forEach(j => assignedLeads.push({ job_id: j.id, user_email_id: emailId }));
-      }
+    // The write itself (and WHO did it — jobs.assigned_by, R-340) lives in services/lead-claim.js so it can be tested.
+    assignedLeads.push(...await leadClaim.assignToManager({ jobsTable: () => db.forRequest(req).from('jobs'), byBox, managerId: manager_id, byUserId: req.user.id, now }));
+    if (assignedLeads.length) {
+      // The lead history says who handed these over and to whom (owner, 3 Nov: "it should come in lead history").
+      let toName = 'a manager';
+      try { const { data: mgrRow } = await db.forRequest(req).from('users').select('id,name').eq('id', manager_id).maybeSingle(); if (mgrRow && mgrRow.name) toName = mgrRow.name; } catch (_) { /* the name is for the sentence only */ }
+      await leadClaim.writeHistory(() => db.forRequest(req).from('activity_log'),
+        leadClaim.historyRows(assignedLeads.map(l => l.job_id), { byUserId: req.user.id, toUserId: manager_id, sentence: leadClaim.assignmentSentence({ by: req.user.name || 'an RA Lead', to: toName }) }));
     }
     if (!assignedLeads.length) return res.status(409).json({ error: 'These leads were just assigned by someone else — refresh the pool and try again. Nothing was assigned.' });
     const takenIds = new Set(assignedLeads.map(l => l.job_id));
