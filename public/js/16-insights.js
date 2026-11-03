@@ -657,7 +657,7 @@ function renderOutreachInsights(toggle){
 // versions? Week by week, AI-written vs template, and the before/after totals once the switch date is recorded.
 function firstReplyCard(){
   var f=STATE.firstReplies;
-  if(!f){ STATE.firstReplies={loading:true}; apiGet('/insights/first-email-replies?days=90').then(function(r){ STATE.firstReplies=r||{}; if(STATE.page==='bdinsights') render(); })
+  if(!f){ STATE.firstReplies={loading:true}; apiGet('/insights/first-email-replies?days=90'+(insightsTzQ()||'').replace(/^\?/,'&')).then(function(r){ STATE.firstReplies=r||{}; if(STATE.page==='bdinsights') render(); })
     .catch(function(e){ STATE.firstReplies={err:(e&&e.message)||'Could not load'}; if(STATE.page==='bdinsights') render(); }); f=STATE.firstReplies; }
   var head='<div class="td-h">FIRST EMAILS: REPLY RATE, AI-WRITTEN vs YOUR TEMPLATE (last 90 days, '+(f.whose==='company'?'the whole company':'you and your team')+')</div>';
   if(f.loading) return '<div class="card oi-card">'+head+'<div class="fs-13 c-text3">Loading…</div></div>';

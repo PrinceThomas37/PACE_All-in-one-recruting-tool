@@ -10,8 +10,13 @@
 'use strict';
 
 const pct = (n, d) => (d > 0 ? Math.round((n / d) * 10000) / 100 : null);
-function weekOf(iso) {
-  const t = Date.parse(String(iso).slice(0, 10) + 'T00:00:00Z'), dow = (new Date(t).getUTCDay() + 6) % 7;
+// The viewer's own day (R-102: a day is the viewer's day), then the Monday of its week.
+function dayIn(iso, tz) {
+  try { if (tz) return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)); } catch (_) { /* unknown zone → UTC */ }
+  return String(iso).slice(0, 10);
+}
+function weekOf(iso, tz) {
+  const t = Date.parse(dayIn(iso, tz) + 'T00:00:00Z'), dow = (new Date(t).getUTCDay() + 6) % 7;
   return new Date(t - dow * 864e5).toISOString().slice(0, 10);
 }
 const blank = () => ({ sent: 0, replied: 0, ai_sent: 0, ai_replied: 0, tpl_sent: 0, tpl_replied: 0 });
@@ -20,11 +25,11 @@ function finish(x) {
 }
 
 /** rows: [{ sent_at, template_variant, replied_at }] → { weeks: [...], total, switched_on } */
-function report(rows, switchedOn) {
+function report(rows, switchedOn, tz) {
   const weeks = new Map(), total = blank();
   (rows || []).forEach((r) => {
     if (!r || !r.sent_at) return;
-    const wk = weekOf(r.sent_at);
+    const wk = weekOf(r.sent_at, tz);
     if (!weeks.has(wk)) weeks.set(wk, blank());
     const ai = r.template_variant === 'ai';
     const replied = !!(r.replied_at && Date.parse(r.replied_at) >= Date.parse(r.sent_at));

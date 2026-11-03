@@ -280,7 +280,7 @@ router.get('/insights/first-email-replies', auth, async (req, res) => {
     });
     const { data: sw } = await supabase.from('app_settings').select('value').eq('key', 'templates_switched_on').maybeSingle();
     res.json(Object.assign({ days, whose: who ? 'yours' : 'company' },
-      firstEmailReplies.report(rows.map((r) => ({ sent_at: r.sent_at, template_variant: r.template_variant, replied_at: r.contact && r.contact.replied_at })), sw && sw.value)));
+      firstEmailReplies.report(rows.map((r) => ({ sent_at: r.sent_at, template_variant: r.template_variant, replied_at: r.contact && r.contact.replied_at })), sw && sw.value, req.query.tz)));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
