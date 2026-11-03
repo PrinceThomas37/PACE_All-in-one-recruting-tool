@@ -143,4 +143,17 @@ async function fetchIds(o) {
   return { ids, count: ids.length, capped: cut, cap: IDS_CAP, source };
 }
 
-module.exports = { fetchIds, IDS_CAP, filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };
+// shortcut: at most BY_IDS_MAX leads per request (a technical guard on one request's size, not a business limit); the browser asks again for more.
+const BY_IDS_MAX = 100;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Whole leads (the same shape as a page row) for ids the browser already knows — a lead opened from somewhere other than the list, a ticked lead on another page. */
+async function fetchByIds(o) {
+  const ids = [...new Set(String(o.ids || '').split(',').map((x) => x.trim()).filter((x) => UUID.test(x)))].slice(0, BY_IDS_MAX);
+  if (!ids.length) return { rows: [] };
+  const { data, error } = await o.scoped(o.supabase.from('jobs').select(o.listSelect).in('id', ids).is('deleted_at', null));
+  if (error) throw new Error(error.message);
+  // a row the viewer may not see is never returned (D-0034/35/36), whatever the database sent back
+  return { rows: (data || []).filter((j) => own.canSeeLead(j, o.scope)) };
+}
+
+module.exports = { fetchByIds, BY_IDS_MAX, fetchIds, IDS_CAP, filtersFrom, isTeamManager, pageSize, encodeCursor, decodeCursor, dayOr, fetchPage, fetchCounts, rpcArgs, missingFunction };

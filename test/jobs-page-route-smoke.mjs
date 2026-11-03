@@ -141,6 +141,22 @@ try {
   step('a huge filter is CUT at the cap and says so (the screen then says "the first N of many")', capped.body.capped === true && capped.body.count === capped.body.cap && capped.body.cap === 5000, JSON.stringify([capped.body.capped, capped.body.count, capped.body.cap]));
   fake.supabase.rpc = realRpc;
 
+  // whole leads by id (R-349 D): a lead opened from somewhere other than the list, a ticked lead on another page
+  const some = [uid(1), uid(2), uid(3)];
+  const byIds = await get('/jobs/by-ids?ids=' + some.join(','));
+  step('by-ids: the whole leads asked for come back (same shape as a page row, contacts included)', byIds.status === 200 && byIds.body.rows.length === 3 && byIds.body.rows.every((r) => some.includes(r.id) && Array.isArray(r.contacts)), JSON.stringify(byIds.body).slice(0, 160));
+  const foreignAsk = await get('/jobs/by-ids?ids=' + [uid(1), FOREIGN].join(','));
+  step("by-ids: another company's lead is never returned, even when asked for by id", foreignAsk.body.rows.length === 1 && foreignAsk.body.rows[0].id === uid(1));
+  const junk = await get('/jobs/by-ids?ids=' + ["x'; drop table jobs;--", 'not-a-uuid', uid(2)].join(','));
+  step('by-ids: anything that is not a lead id is ignored, not passed on', junk.status === 200 && junk.body.rows.length === 1 && junk.body.rows[0].id === uid(2));
+  step('by-ids: nothing asked → an empty list, not an error', (await get('/jobs/by-ids')).body.rows.length === 0);
+  const many = await get('/jobs/by-ids?ids=' + Array.from({ length: 150 }, (_, i) => uid(i % 50)).join(','));
+  step('by-ids: one request is capped (' + lp.BY_IDS_MAX + ' ids), so it cannot be unbounded', many.status === 200 && many.body.rows.length <= lp.BY_IDS_MAX);
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  const loneAsk = await get('/jobs/by-ids?ids=' + [uid(0), uid(1), uid(2), uid(3)].join(','));
+  step("by-ids: a BD gets only the lead they own (1 of the 4 asked for), never the others'", loneAsk.body.rows.length === 1 && loneAsk.body.rows[0].id === uid(2), JSON.stringify(loneAsk.body.rows.map((r) => r.assigned_to_bd)));
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+
   // page size
   step('page size: the admin\'s default (10) when the person has not chosen', (await get('/jobs/page')).body.perPage === 10);
   step('…the person\'s own choice (20) beats it', (await get('/jobs/page?perPage=20')).body.perPage === 20);

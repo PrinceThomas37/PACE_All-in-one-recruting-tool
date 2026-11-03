@@ -203,6 +203,16 @@ router.get('/jobs/ids', auth, async (req, res) => {
     res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// Whole leads by id (R-349 D): a lead opened from the inbox or a reminder, or a ticked lead on another page, is not on the page the browser holds.
+router.get('/jobs/by-ids', auth, async (req, res) => {
+  try {
+    const out = await leadPageRoute.fetchByIds({
+      supabase, scoped: (q) => withOrg(q, req), listSelect: ctx.JOB_LIST_SELECT || JOB_SELECT, scope: await scopeFor(req), ids: (req.query || {}).ids,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 router.get('/jobs/counts', auth, async (req, res) => {
   try {
     const org = orgIdFor(req);
