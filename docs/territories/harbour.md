@@ -397,3 +397,6 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 - 3 Nov 2026 (R-358): the old Manager Users delete route refuses a mailbox with mail on record (409 + Deactivate); count shared via services/mailbox-delete.js with the Deliverability panel.
 
 - 3 Nov 2026 (R-359): Block now also stops emails written one by one (inbox send/reply/forward refuse 409; services/mailbox-alerts.js blockedNotes); Pause stays outreach-only.
+
+
+- **WARM-UP POOL RULES (R-375/R-376, 4 Nov 2026).** A mailbox is in the pool only if it is active, is warming or opted in, has a live sign-in for ITS OWN provider (`microsoft_tokens` or `gmail_tokens`), and has no `auto_paused_at` (paused, auto-paused and blocked are all that one column). `warmup-engine.js poolMailboxes()` and `routes/warmup.js /warmup/mailboxes` must stay the same rule; `test/warmup-pool-smoke.mjs` pins both. Known limit: warm-up copy is 8 openers + 6 replies, fixed.

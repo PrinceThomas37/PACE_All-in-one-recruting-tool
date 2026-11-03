@@ -66,6 +66,7 @@ const walk = (d) => { for (const e of fs.readdirSync(path.join(root, d), { withF
 walk('');
 const ALLOWED = ['index.js', 'routes/recruiting/outreach.js', 'routes/candidate-outreach.js',              // the outreach engines: lead sends, sequences, candidate outreach
   'routes/deliverability.js', 'routes/mailbox-alerts.js', 'routes/mailbox-control.js', 'routes/system-health.js',   // the screens that SHOW or SET it (system-health only READS it, for the admin's banner: R-367)
+  'warmup-engine.js', 'routes/warmup.js',    // warm-up IS an outreach engine: the owner's 3 Nov rule is that a pause/block stops it (R-376) — the engine drops the mailbox, the screen counts it out
   'services/mailbox-control.js', 'services/mailbox-alerts.js'];
 const stray = readers.filter((f) => !ALLOWED.includes(f));
 ok('only the outreach engines and the screens read auto_paused_at — never the inbox, a one-off send or a reply', stray.length === 0 && readers.length >= 6, 'stray: ' + stray.join(', ') + ' | readers: ' + readers.join(', '));

@@ -55,10 +55,22 @@ module.exports = (ctx) => {
     return { level: 'good', note: `${poolCount} mailboxes across ${domainCount} domains — healthy pool.` };
   }
 
-  async function connectedSet(ids) {
+  const isGmailBox = (m) => !!m && String(m.platform || '').toLowerCase() === 'gmail';
+  // Which of these mailboxes have a live sign-in for THEIR OWN provider. Before R-375 only Microsoft was looked at, so every Gmail mailbox read
+  // "not connected" and the pool showed 0 while the engine (which does read gmail_tokens) would have counted it.
+  async function connectedSet(mbs) {
+    const ids = (mbs || []).map(m => m.id);
     if (!ids.length) return new Set();
+    const gmailIds = new Set((mbs || []).filter(isGmailBox).map(m => m.id));
     const { data } = await supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids);
-    return new Set((data || []).map(t => t.user_email_id));
+    const out = new Set((data || []).map(t => t.user_email_id).filter(id => !gmailIds.has(id)));
+    if (gmailIds.size) {
+      try {
+        const { data: g } = await supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', [...gmailIds]);
+        (g || []).forEach(t => out.add(t.user_email_id));
+      } catch (_) { /* no Gmail table → none connected: the screen says so rather than guessing */ }
+    }
+    return out;
   }
 
   // ── Pool overview: every active mailbox with its warm-up state + health ─────
@@ -66,7 +78,7 @@ module.exports = (ctx) => {
     try {
       if (!canView(req)) return res.status(403).json({ error: 'Forbidden' });
       const { data: mbs, error } = await db.forRequest(req).from('user_emails')
-        .select('id,user_id,email_address,display_name,platform,is_active,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,warmup_graduated_at,owner:users!user_id(name)')
+        .select('id,user_id,email_address,display_name,platform,is_active,auto_paused_at,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,warmup_graduated_at,owner:users!user_id(name)')
         .eq('is_active', true).order('warmup_status', { ascending: true });
       if (error) throw error;
       // Which of them this viewer may see: an admin, the organisation's; a lead,
@@ -74,7 +86,7 @@ module.exports = (ctx) => {
       // over the whole organisation — it describes the engine's pool.
       const visible = hasRole(req, 'admin') ? null : new Set(await reportingChainIds(req.user.id, orgOf(req)));
       const ids = (mbs || []).map(m => m.id);
-      const connected = await connectedSet(ids);
+      const connected = await connectedSet(mbs || []);
       const [start, step, hardCap, defDays] = await Promise.all([
         getSetting(supabase, 'warmup_pool_start', orgOf(req)), getSetting(supabase, 'warmup_pool_step', orgOf(req)),
         getSetting(supabase, 'warmup_daily_hard_cap', orgOf(req)), getSetting(supabase, 'warmup_pool_days', orgOf(req)),
@@ -97,7 +109,8 @@ module.exports = (ctx) => {
           _shown: shown,
           id: m.id, email: m.email_address, display_name: m.display_name || m.email_address,
           platform: m.platform, owner: (m.owner && m.owner.name) || null,
-          connected: m.platform === 'Microsoft' ? connected.has(m.id) : false,
+          connected: connected.has(m.id),
+          outreach_paused: !!m.auto_paused_at,      // paused / auto-paused / blocked: out of warm-up until started again (R-376)
           warmup_status: m.warmup_status || null,
           opt_in: !!m.warmup_pool_opt_in,
           start_date: m.warmup_start_date || null,
@@ -108,7 +121,7 @@ module.exports = (ctx) => {
         });
       }
       // pool = participants that can actually exchange mail
-      const poolMembers = out.filter(m => (m.warmup_status === 'warming' || m.opt_in) && m.connected);
+      const poolMembers = out.filter(m => (m.warmup_status === 'warming' || m.opt_in) && m.connected && !m.outreach_paused);   // the engine's own rule, so the screen matches what is sent
       const domains = new Set(poolMembers.map(m => (m.email.split('@')[1] || '').toLowerCase()).filter(Boolean));
       const warmingCount = out.filter(m => m.warmup_status === 'warming').length;
       res.json({
@@ -128,10 +141,7 @@ module.exports = (ctx) => {
       .select('id,user_id,email_address,platform,is_active').eq('id', id).maybeSingle();
     return data || null;
   }
-  async function isConnected(id) {
-    const { data } = await supabase.from('microsoft_tokens').select('user_email_id').eq('user_email_id', id).maybeSingle();
-    return !!data;
-  }
+  async function isConnected(mb) { return (await connectedSet([mb])).has(mb.id); }
 
   // ── Start warm-up on a mailbox ─────────────────────────────────────────────
   router.post('/warmup/:id/start', auth, async (req, res) => {
@@ -139,7 +149,7 @@ module.exports = (ctx) => {
       if (!canManage(req)) return res.status(403).json({ error: 'Admin only' });
       const mb = await loadMailbox(req, req.params.id);
       if (!mb || !mb.is_active) return res.status(404).json({ error: 'Mailbox not found or inactive' });
-      if (mb.platform === 'Microsoft' && !(await isConnected(mb.id)))
+      if (!(await isConnected(mb)))
         return res.status(400).json({ error: 'Mailbox must be connected before warm-up can send. Connect it under the user\'s Email IDs first.' });
       const defDays = await getSetting(supabase, 'warmup_pool_days', orgOf(req));
       let days = parseInt(req.body?.days, 10);

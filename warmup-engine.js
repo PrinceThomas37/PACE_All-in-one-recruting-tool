@@ -69,9 +69,11 @@ function createWarmupEngine(ctx) {
   // is only ever PAIRED with one in its own organisation (see sendWave).
   async function poolMailboxes() {
     const { data: mbs } = await supabase.from('user_emails')
-      .select('id,org_id,email_address,display_name,platform,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,is_active')
+      .select('id,org_id,email_address,display_name,platform,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,is_active,auto_paused_at')
       .eq('is_active', true);
-    const list = (mbs || []).filter(m => m.warmup_status === 'warming' || m.warmup_pool_opt_in);
+    // A paused, auto-paused or blocked mailbox is out of warm-up altogether (owner 3 Nov, D-0201/D-0203; R-376): it neither sends nor receives.
+    // All three states are the one column — services/mailbox-control.js — which every other send loop already refuses on.
+    const list = (mbs || []).filter(m => !m.auto_paused_at && (m.warmup_status === 'warming' || m.warmup_pool_opt_in));
     if (!list.length) return [];
     // A mailbox can participate if it has a live token for its provider.
     const ids = list.map(m => m.id);

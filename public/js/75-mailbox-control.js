@@ -136,12 +136,13 @@
   }
   function warmupBlock(d){
     var w=d.warmup||{}, off=(d.state==='blocked'||d.state==='deactivated');
+    var held=(d.state==='paused'||d.state==='auto_paused');   // R-376: a paused mailbox sends no warm-up mail either — say so, don't show it as "warming"
     var line, btns='';
     if(w.status==='warming'){ line='Warming up since '+esc(w.started||'')+(w.days?' · '+w.days+' days':''); btns='<button type="button" class="btn btn-sm btn-outline" onclick="mbcWarm(\'pause\')">Pause warm-up</button><button type="button" class="btn btn-sm btn-outline" onclick="mbcWarm(\'stop\')">Finish early</button>'; }
     else if(w.status==='paused'){ line='Warm-up is paused'; btns=off?'':'<button type="button" class="btn btn-sm btn-outline" onclick="mbcWarm(\'resume\')">Resume warm-up</button>'; }
     else if(w.status==='warmed'){ line='Warmed up'+(w.graduated_at?' on '+esc(String(w.graduated_at).slice(0,10)):'')+' — ready for outreach'; }
     else { line='Not warming'; btns=off?'':'<button type="button" class="btn btn-sm btn-outline" onclick="mbcWarm(\'start\')">Start warm-up</button>'; }
-    return '<div class="mbc-sec"><div class="mbc-h">Warm-up</div><div class="mbc-line"><span class="fs-13">'+line+(off?' <span class="c-text3">(a '+esc(d.state_label.toLowerCase())+' mailbox is out of warm-up)</span>':'')+'</span><span class="mbc-btns">'+btns+'</span></div></div>';
+    return '<div class="mbc-sec"><div class="mbc-h">Warm-up</div><div class="mbc-line"><span class="fs-13">'+line+(off?' <span class="c-text3">(a '+esc(d.state_label.toLowerCase())+' mailbox is out of warm-up)</span>':'')+(held&&w.status==='warming'?' <span class="c-text3">(on hold while the mailbox is '+esc(d.state_label.toLowerCase())+' — start it to carry on)</span>':'')+'</span><span class="mbc-btns">'+btns+'</span></div></div>';
   }
   function detailCard(){
     var m=M();
