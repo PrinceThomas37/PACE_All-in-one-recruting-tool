@@ -84,7 +84,7 @@ ok('after sign-out / a new sign-in the tag is gone', sent[6].inm === null);
 STATE.jobs = [];
 ok('an empty list never sends a tag (nothing to keep)', (() => { const n = sent.length; m.apiGetJobsList(); return sent[n].inm === null; })());
 // R-348: the list now loads BEHIND the open app (loadLeadsInBackground) — its first try still drops the tag, so it asks in full.
-ok('the first screen after sign-in always asks in full', /_jobsTag=null;[^\n]*\n[\s\S]{0,400}loadLeadsInBackground\(\)/.test(api) && /if\(!tries\)\{STATE\.jobs=\[\];STATE\.contacts=\[\];_jobsTag=null;\}/.test(api));
+ok('the first screen after sign-in always asks in full (R-349: the first page first, and the whole list when the server cannot answer it)', /_jobsTag=null;[^\n]*\n[\s\S]{0,400}leadsStartup\(\)/.test(api) && /return loadLeadsInBackground\(\);\s*\}\);\s*\}/.test(api) && /if\(!tries&&!opts\.keepWhileLoading\)\{STATE\.jobs=\[\];STATE\.contacts=\[\];_jobsTag=null;\}/.test(api));
 
 // ── no download of every sent email ────────────────────────────────────────
 const bind = fs.readFileSync(new URL('../public/js/11-bind-and-actions.js', import.meta.url), 'utf8');

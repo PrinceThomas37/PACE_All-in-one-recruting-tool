@@ -186,6 +186,8 @@
     LV.key=keyOf();
     return Promise.all([apiGet('/jobs/page?'+LV.key),apiGet('/jobs/counts?'+params(false)),apiGet('/jobs/facets').catch(function(){ return null; })]).then(function(r){
       if(STATE.token!==who)return false;
+      // an answer that is not a page of leads (an old server, a proxy's error page) is "the server cannot answer": the whole list loads as before
+      if(!r[0]||!Array.isArray(r[0].rows)||!r[1]||typeof r[1].strip!=='object'||r[1].strip===null){ store.reset(); return false; }
       LV.on=true; LV.perPageUsed=r[0].perPage||0;
       LV.rows=bring(r[0].rows||[]); LV.next=r[0].next||null; LV.status='ready'; LV.pageLoadedOnce=true; LV.rows.forEach(function(j){ LV.seen[j.id]=true; });
       LV.strip=r[1].strip||{}; LV.stripTotal=Number(r[1].stripTotal)||0; LV.team=r[1].team||null; LV.countsFor=params(false);
