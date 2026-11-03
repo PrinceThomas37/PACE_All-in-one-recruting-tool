@@ -1283,3 +1283,5 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 - **3 Nov 2026 (R-340):** `jobs.assigned_by` is written wherever a lead gets an owner: `services/lead-claim.js` (`ownerFields(user, mailbox, now, byUserId)`, `assignToManager`, `historyRows`/`writeHistory` — one insert per 200), `routes/lead-assign.js`, `routes/lead-take.js`, `index.js POST /distribute/execute`, `routes/jobs.js PUT` (only when the owner really changes), `routes/ownership-requests.js` (the approver), `routes/recruiting/job-orders.js`, `routes/outreach-generator.js`; `releaseToPoolUpdate()` clears it. `test/assigned-by-smoke.mjs` fails if any file writes `assigned_to_bd:` without `assigned_by` nearby.
 
 - 3 Nov 2026 (R-349 D): GET /jobs/by-ids and GET /jobs/facets (above /jobs/:id); services/lead-page.js fetchByIds / fetchFacets.
+
+- 3 Nov 2026 (R-367): GET /admin/system-health (routes/system-health.js); POST /follow-ups/run now stamps today's run on success.

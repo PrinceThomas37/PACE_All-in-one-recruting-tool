@@ -2698,6 +2698,8 @@ app.post('/follow-ups/run', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
     const result = await runFollowupEngine();
+    // A run that finished counts as today's run (the daily claim then skips the day instead of running it twice, and the health banner clears).
+    if (!result.error) await setLastFollowupRun(toIST(new Date()).toISOString().split('T')[0]);
     res.json({ success: true, ...result });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4548,6 +4550,7 @@ engineRunner.register('lead_finder', {
 //      matters on Render's free tier, where the service sleeps on idle and every
 //      in-process timer stops with it.
 app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole, isOperator, supabase }));
+app.use(require('./routes/system-health')({ runner: engineRunner, auth, hasRole, isOperator, supabase, db: routeCtx.db }));   // the admin's health banner: what is broken and which buttons to offer (R-367)
 
 // Check every 2 minutes; each job still only runs on its own cadence.
 setInterval(() => {

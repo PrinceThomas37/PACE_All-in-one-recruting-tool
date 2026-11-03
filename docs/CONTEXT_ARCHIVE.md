@@ -7238,3 +7238,7 @@ Server side: GET /jobs/by-ids (whole leads by id, scoped, capped 100), GET /jobs
 
 ### 3 Nov 2026 — R-359 Block stops one-by-one sends
 Owner: yes. routes/mailbox.js sendRoute refuses a BLOCKED mailbox (new, reply, forward) with 409 + sentence (services/mailbox-control.js blockedSendSentence); an unreadable lock refuses with 503; GET /mailbox/accounts carries blocked / blocked_note; 47-page-mailbox.js says so before sending. A Pause is unchanged (outreach only). mailbox-control-smoke pins the new block meaning; mailbox-smoke has 7 new checks (mutant caught).
+
+
+### 3 Nov 2026 — migration 074 applied; the system-health banner (R-367) built
+Owner: "do migration 74 and build health banner with action buttons". 074 (leads_facets): trialled in a rolled-back transaction (5 owner rows, 165 industry rows, 3,063 leads counted), then applied as `lead_list_facets`; service_role may call it, anon and authenticated may not. Banner: services/system-health.js (pure rules, sentences, which buttons), routes/system-health.js (reads the facts; admin only; engine and server facts only for the PACE operator; the company's mailboxes through db.forRequest), public/js/77-system-health.js (draws only what the server offered; confirm before a data-changing button; ignores a path that is not this app's own). A manual follow-up run now records today's run (so the daily run does not repeat it and the banner clears). Mutants: unscoped mailbox read caught; removed confirm caught.
