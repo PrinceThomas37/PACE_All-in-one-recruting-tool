@@ -52,6 +52,7 @@ function releaseToPoolUpdate(now = new Date()) {
   return {
     stage: 'Unassigned',
     assigned_to_bd: null,
+    assigned_by: null,          // R-340: back in the pool, nobody assigned it to anyone
     assigned_at: null,
     sending_email_id: null,
     last_recycled_at: now,

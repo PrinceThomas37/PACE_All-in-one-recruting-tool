@@ -110,7 +110,7 @@ module.exports = (ctx) => {
       for (let i = 0; i < chosen.length; i++) {
         // The pool conditions go ON the update: somebody else may have been handed this lead a moment ago.
         const { data: got, error } = await withOrg(supabase.from('jobs')
-          .update({ assigned_to_bd: req.user.id, assigned_to: req.user.id, sending_email_id: queue[i], stage: 'Assigned', assigned_at: now, updated_at: now })
+          .update({ assigned_to_bd: req.user.id, assigned_to: req.user.id, sending_email_id: queue[i], stage: 'Assigned', assigned_at: now, assigned_by: req.user.id, updated_at: now })
           .eq('id', chosen[i].id).eq('stage', 'Unassigned').is('assigned_to_bd', null).select('id'), req);
         if (!error && got && got.length) taken.push(chosen[i].id);
       }

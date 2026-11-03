@@ -391,3 +391,5 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 - **2 Nov 2026 (R-351):** the default sending mailbox is primary → oldest connected → address (was primary only; ties came back in database order, so interview mail switched mailboxes). The From picker always sends the id it shows; never again "send nothing and let the server choose".
 
 - **3 Nov 2026 (D-0201):** Pause = OUTREACH only. `user_emails.auto_paused_at` is read ONLY by the outreach engines (lead send loop + workflows in `index.js`, `routes/recruiting/outreach.js`, `routes/candidate-outreach.js`); never by the inbox, one-off sends or replies — `test/mailbox-control-smoke.mjs` pins the list of files that may read it. Admin Pause/Block store `auto_paused_at` + a note (`kind: manual|blocked`, `services/mailbox-control.js`); sentences say "Outreach … stopped; emails written one by one and replies still go".
+
+- **3 Nov 2026 (R-340):** `routes/outreach-generator.js` creates its lead with `assigned_by` = the sender (nobody else handed it over). No send-path change.

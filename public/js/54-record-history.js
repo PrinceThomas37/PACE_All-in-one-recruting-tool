@@ -170,7 +170,7 @@
               (e.actor ? '<span class="rw-who">' + esc(e.actor) + '</span>' : '') +
               (held ? '<span class="rw-held">' + esc(held) + '</span>' : '') +
             '</div>' +
-            (e.note && e.kind !== 'note' && !/^Stage: /.test(e.note)
+            (e.note && e.kind !== 'note' && !/^Stage: /.test(e.note) && ACTION_WORDS[e.kind]   // a kind with no fixed word already printed its note as the main line (describe) — never twice
               ? '<div class="rw-note">' + esc(e.note) + '</div>' : '') +
           '</div>' +
         '</li>';

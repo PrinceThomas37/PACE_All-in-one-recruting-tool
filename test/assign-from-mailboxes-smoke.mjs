@@ -5,12 +5,13 @@ const results = [];
 const step = (n, ok) => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n); };
 const idx = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 const exec = idx.slice(idx.indexOf("app.post('/distribute/execute'"), idx.indexOf('// /distribute/pool-stats + /distribute/today-summary'));
+const claimSvc = fs.readFileSync(new URL('../services/lead-claim.js', import.meta.url), 'utf8');   // R-340: the write moved out of index.js into assignToManager (behaviour proven in assigned-by-smoke.mjs)
 const dist = fs.readFileSync(new URL('../routes/distribution.js', import.meta.url), 'utf8');
 const page = fs.readFileSync(new URL('../public/js/19-distribution.js', import.meta.url), 'utf8');
 const assign = fs.readFileSync(new URL('../public/js/21-assign-leads.js', import.meta.url), 'utf8');
 
-step('a lead is taken only while it is still unassigned', /\.eq\('stage', 'Unassigned'\)\.is\('assigned_to_bd', null\)\.select\('id'\)/.test(exec));
-step('one write per email ID, not one per lead', /for \(const emailId of Object\.keys\(byBox\)\)/.test(exec) && !/\.eq\('id', job\.id\);\n\s*assignedLeads\.push/.test(exec));
+step('a lead is taken only while it is still unassigned', /\.eq\('stage', 'Unassigned'\)\.is\('assigned_to_bd', null\)\.select\('id'\)/.test(claimSvc) && /leadClaim\.assignToManager\(/.test(exec));
+step('one write per email ID, not one per lead', /for \(const emailId of Object\.keys\(byBox/.test(claimSvc) && !/\.eq\('id', job\.id\);\n\s*assignedLeads\.push/.test(exec));
 step('only the leads really taken get follow-ups and the send', /if \(!takenIds\.has\(selected\[i\]\.id\)\) selected\.splice\(i, 1\)/.test(exec));
 step('the chosen email IDs limit where the leads go', /req\.body\.email_ids[\s\S]{0,300}accounts = accounts\.filter/.test(exec));
 step('GET /distribute/mailboxes answers room, queue and due-today per email ID', /router\.get\('\/distribute\/mailboxes'/.test(dist) && /due_today_not_queued/.test(dist) && /free_today/.test(dist));
