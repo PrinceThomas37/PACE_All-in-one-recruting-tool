@@ -1,223 +1,45 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
-
-**Updated**: 2026-11-03 (Session 59). **Highest ids:** decision **D-0191** · contract C-0038 · roadmap **R-350** (next build `R-343`) · next migration **071** (069 and 070 both applied live — re-checked against the database on 2 Nov).
-
-## START HERE (3 Nov, Session 59, end) — the owner continues in a NEW chat. Read this block first.
-
-**Live now (merged, deployed):** R-351 interview mail from the mailbox shown (#385) · D-0194 AI call record + Admin → AI usage (migration 071 applied) · R-343 first half (#386/#387): versions per person (admin ceiling 20), AI on/off per person, Work-arrangement detail, import progress + notice · **R-352 follow-ups fixed (#388, live 3 Nov 01:55 UTC)** — they had silently stopped 30 Oct–2 Nov; backlog of 2,379 chains DROPPED by the owner (D-0199, ids saved in app_settings `r352_followups_stopped_2026_11_03`) · **R-343 second half (#389)** — nothing AI-written at send time, "AI drafts it for me", first-email reply report (merged at the end of this session once the full suite passed; set app_settings `templates_switched_on` = the merge day).
-
-**BALANCE TO-DO (owner's list, in order):**
-1. **Watch the switch (owner is checking now).** Martin Smith and BD Lead 1 had "AI writes each one"; they now send their saved templates, with **0 versions** — every lead gets identical words at hundreds/week. Offer: walk them through "How many versions" (3–5) or write 3 versions per template for the owner to approve. BD Lead 1's template names "Fute Global LLC".
-2. **Investigate the reply drop (owner not yet asked yes/no — ask).** Replies fell 2.4 % → 0.35 % from the week of 19 Oct while first emails tripled (720 → 1,697/week); templates out-replied AI in Sep–early Oct, so the drop is NOT AI vs template. Read-only check: bounces, spam signs, per-email-ID volume before/after 19 Oct.
-3. **Check tonight's follow-up run (18:30 IST = 13:00 UTC, 3 Nov):** Render log "[FollowupEngine] FU1: … skipped_no_initial: …" — expect FU1 > 0 only for first emails sent from 3 Nov; admin engine card shows "Follow-ups could not run today" if it failed 3 times.
-4. **R-353:** report first-email replies before/after the switch ~17 Nov (Outreach Insights card).
-5. **R-349:** lead list page by page from the server (~20 screens count leads in the browser).
-6. **Small:** `MaxListenersExceededWarning` in the server log; re-check Media industry filter on the next Find Leads search; confirm R-350 closed (both suites passed in the 3 Nov full runs).
-7. **Owner's open questions (ask once):** R-326 lead card · R-345 notification-centre actions · R-340 record who assigned a lead · R-344 Google sign-in steps · paid Render ~$7/mo (also fixes sending gaps) · R-329 second contact-data vendor · R-306 old unreplied leads · whether the import "finished" notice should show on every page (today: Leads tab only) · whether the Compose generator should show for AI-off people (today: yes, rules-only).
-8. **Parked by owner:** R-328 security fixes with the paid-server move.
-
-**Lessons this session (keep):** every lookup over a list of ids goes through `services/batched-read.js` (a big `.in()` failed silently and stopped all follow-ups); a failed read must throw; edits during a full test run contaminate it (use a separate git worktree); check contrast on any new box (cream-on-cream happened).
-
-## START HERE (2 Nov, Session 58) — the plan for this week is `docs/PLAN_NEXT_WEEK_2026-11-02.md`; nothing was built yet
-
-**Where PACE stands, checked rather than assumed (2 Nov):** HEAD `320b35c` = **#383 MERGED** (R-346 missed first emails repaired ·
-R-347 each person's send queue on its own + a "Sending has stalled" alert · R-348 sign-in no longer waits for the leads list).
-The live app answers: `/health` 200 in 0.14 s and the app page 200 in 0.16 s (server awake, not a cold start). The **database matches
-the code**: `contact_labels` present on `candidates` and `contacts` (migration 069) and `research_list`, `posting_chars`, `posting_words`,
-`posting_all_chars` present on `jobs` (migration 070) — so the newest screens are not running ahead of their columns.
-
-**The two-version baseline, taken this session with nothing changed** (327 suites; run in six chunks because one command exceeds the
-5-minute tool limit; logs in `~/logs/n22-*.log`, `~/logs/n26-*.log`): **Node 22 — 333/335, and Node 26.11.1 — 333/335, identical**
-(the union is larger than 327 because `run-all.mjs` matches arguments as substrings). The same **two** suites fail on both versions and
-fail for a reason in the test, not the app: `sourcing-honesty-smoke` (23 checks pass, then `#content` is null) and
-`overlay-opacity-smoke` (10/14, the four record-drawer checks find no panes). Both drive the app with no backend behind it, and their
-background calls get an answer the app reads as "signed out", so the shell is gone by the time they measure; the sibling
-`page-renders-smoke` passes because it aborts every off-origin call first. Written up as **R-350** (harness fix, never a weakened check).
-**Everything else passes on both Node versions.**
-
-**Not started, confirmed in the code:** R-343 (`services/sequence-versions.js` still `const EXTRA = [2, 3]` — the admin-set limit is step 1)
-and R-349 (the browser still holds the whole lead list).
-
-**The owner's standing rule from this session:** every code change is run on **Node 22 AND Node 26**, read the count, never pipe the run
-(CLAUDE.md already says this because the sandbox is Node 22 and Render is Node 26; it is now explicit rather than assumed). Nothing is merged
-without their explicit permission. No helper agent is started without their yes (D-0060).
-
-## START HERE (30 Oct, Session 56, end) — the owner resumes the week of 2 Nov. READ `docs/PLAN_NEXT_WEEK_2026-11-02.md` FIRST.
-
-**Done this session:** #378 confirmed live on Render (workspace "My Workspace", the only one — no need to ask). **#380 MERGED**
-(`b527424`): R-342 Direct / Office on added emails and phones (migration 069 APPLIED live, owner's go) + R-333 every Find Leads
-industry a real filter (36 coded, each checked live for 36 credits with the owner's go; Media narrowed after the check; 4 job types
-uncoded and said on screen). Clean worktree 323/323 on Node 22 and Node 26.11.1. **R-320** Compose → "Find at a company" **MERGED** (#381 `29cbb70`,
-clean worktree 324/324 on Node 22 and Node 26.11.1; owner: "merge it after the test").
-**Next:** R-343 (all-template outreach, D-0188) per the plan; the owner's open questions are listed there (ask once, plainly).
-
-## START HERE (29 Oct, Session 55, end) — #378 MERGED (`21ef7ec`); the owner resumes in a NEW chat. Build the queue below in this order.
-
-**Merged:** #378 = R-335…R-341 (blocked/invalid bounces, 5 MB attachments, send runs as passes + resume after restart, Pending per email ID
-+ RA Lead live card, Assign from chosen email IDs with queue counts, RA Lead "Outreach — all users" insights, Rewrite with AI in Pending,
-re-write waiting first emails after a sequence edit, My leads / team leads, lead card on demand, admin role cards, sidebar arrow at the bottom,
-run-finished notice, wake-up retries, no-cache scripts). Clean worktree: 323/323 on Node 22 AND Node 26.11.1. **Deploy NOT confirmed from the
-sandbox** (proxy blocks both PACE hosts; Render tools need the owner to pick a workspace — ask first). First thing next session: confirm live
-(owner hard-refresh; Render log "[Send] … fresh pass"; a "Message blocked" bounce → Blocked; a 4–5 MB attachment from Gmail and Outlook).
-
-**BUILD QUEUE — owner already said yes (decisions recorded, do not re-ask):**
-1. **R-342 / D-0189 direct vs office** on an added email/phone: migration 069 (label per contact point), add to `models/tables.js` if needed;
-   apply to the live DB only with the owner's fresh go-ahead at merge.
-2. **R-333 / D-0190 all Find Leads industries** get real industry codes (NAICS, like D-0185 hospitals) + a live check each (~1 credit each).
-3. **R-320 / D-0191 company-first compose**: company (+location) → people from the provider-neutral contact layer (`services/contact-data.js`,
-   D-0175) → tick → AI writes one email per person (title + JD) → send or add to a sequence; 1 credit per email lookup.
-4. **R-343 / D-0188 all-template outreach**: up to 10 AI-written variants per step from the mother template (extend
-   `services/sequence-versions.js`, today max 2), JD read once per lead for blanks (skills, industry, project area, on-site/remote), no per-email
-   AI. Owner chose this OVER the recommended hybrid; recorded risk: AI first emails had ~2× replies (1.23 % vs 0.54 %). Keep a way to turn AI
-   first emails back on, and report first-email reply rate ~2 weeks after it ships. Plan: `docs/PLAN_2026-10-29_AI_TEMPLATE_VARIANTS.md`.
-
-**WAITING ON THE OWNER (ask once, plainly):** R-326 what the lead card shows and does (and for candidates) · R-345 actions on the paused-mailbox
-/ notification centre · R-340 follow-up: start recording WHO assigned each lead so the RA Lead can see "only the leads I assigned" · R-344 Google
-sign-in steps (owner: put the Cloud project under the company Workspace + Internal user type, add redirect
-`https://app.paceconsultant.in/auth/google/callback`; then I switch `GOOGLE_REDIRECT_URI` in Render with their go-ahead) · paid Render
-instance (~$7/mo) for the slow first log-in, owner's call · older: R-328 new Render service security list, R-306, R-329 second vendor.
-
-## START HERE (27 Oct, Session 54, evening) — #374, #375, #376 MERGED; clean-worktree 317/317 on Node 22 and Node 26.11.1 for each
-
-**Merged after the last note below:** #374 (sidebar manual only + send order fu1→fu2, D-0181/0182) · #375 (paused-mailbox notice D-0183; the company's own bounce limit; **every admin setting read for the company, D-0184/R-332**) · #376 (**Hospitals & health care industry in Find Leads, a real NAICS-622 filter, D-0185; verified on a live search: 74 hospital companies in Texas, none staffing**). **Deploy: live, shown by the data (28 Oct check, not by Render's own log — the Render tools lost their workspace selection, ask the owner before choosing one):** at 17:16 UTC sam.wilson@ had 6 bounces of 61 sent (9.8%) and spencer.brown@ 4 of 59 (6.8%) and NEITHER was paused — the old shared-5% code would have paused both; none of the five once-paused mailboxes is paused. Martin Smith's queue drained in the intended order: 0 first emails pending (309 sent), 5 fu1 and 34 fu2 left (264 fu2 / 54 fu1 sent).
-
-**Open for the owner:** the sidebar button (kept; "remove that arrow" read as the `››` mark only) · pause-limit sensitivity (2 bounces on ~30 sends paused five mailboxes; the owner set 10%, now honoured) · actions for the paused-mailbox notice (R-331) · which health categories count (clinics 621, nursing homes 623) and the other industries' codes (R-333) · plus the earlier list (R-328 at the new Render service, R-306, speed verdict R-324/R-303, R-325/R-326, R-329 second vendor, R-320).
-**Mine, offered:** `wf_tick_batch` belongs with the operator's settings (R-332 leftover); `POST /admin/mailbox/:id/resume` has no same-company check (rampart).
-**Traps learned:** a `pkill -f`/`kill` whose own command line contains the pattern kills my shell — use PIDs; two test scripts writing one log give false results — one run at a time; a merge into the dev branch after a squash conflicts only in append-only docs — take main's and re-append mine.
-
-## START HERE (27 Oct, Session 54, end) — everything built this session is MERGED; what is left is in the list below
-
-**Merged today:** #372 (P3, R-319) · #373 (R-321 contact data from any provider; **migration 068 applied live**, D-0180) · #374 (sidebar opens only by its button, `››` mark gone — D-0181; send basket goes first outreach → fu1 → fu2 → fu3–5 → reminders — D-0182). Each had a clean-worktree full suite: 315/315 on Node 22 and on Node 26.11.1. **Not yet confirmed from this session:** that the Render deploys of #373/#374 are live and error-free (the Render tools lost their workspace selection — ask the owner before choosing one; service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng` per the older note below).
-
-**Owner's questions answered (no code):** send order is not random (window-open first → first outreach → [now] fu1 → fu2 …; mailboxes interleaved; oldest first); Martin's 173→209 pending was the daily follow-up engine adding 72 follow-ups at 13:03:52 UTC (`followup_send_time` 18:30 IST = 13:00 UTC), no duplicate first emails (0 of 136 already sent to the same address).
-
-**Open for the owner's reaction:** the sidebar (does the button itself stay? I kept it; "remove that arrow on the side of PACE" was read as the `››` mark only). **Left, by who is blocked** — see the reply to the owner in the archive entry "Session 54, what's left"; short form: owner owes R-328's steps when the new Render service exists, R-306 (95 vs 78 import), the `[SlowReq]` speed verdict after a US working day (R-303 if still slow), R-325/R-326 offers, R-329 (name the second vendor + docs + test key); I owe confirming the deploys and R-320 (P4 compose around contact search, now unblocked) once the owner decides.
-
-## START HERE (27 Oct, Session 54, R-321) — contact data from any provider: MERGED (#373, D-0180); migration 068 APPLIED live
-
-`services/contact-data.js` (contract + registry + per-organisation choice; Apollo = `people-apollo.js` unchanged), routes/screens through it, a picker in Integrations. Plan doc: `docs/PLAN_R-321_contact_data_any_provider.md`. R-329: the real second vendor needs the owner to name it + docs + a test key; Apollo-named data leftovers.
-
-## START HERE (27 Oct, Session 54, security) — the owner parked a security list for the NEW Render service (R-328)
-
-`docs/TODO_SECURITY_AT_NEW_RENDER_SERVICE.md` is the checklist (owner's steps A, my fixes B, checks C, decisions D). Read it when the owner says the new service is ready; first things then: the secret key (R-205), the new web address in the sign-in settings, a database backup. Nothing is built.
-
-## START HERE (27 Oct, Session 54, later) — P3 (R-319, all six) is MERGED and LIVE (#372, 11:31 UTC)
-
-**Owner: "Complete p3 and merge the changes."** Built directly, no agents. Roadmap R-319 (DONE on the branch), new R-325 (Rewrite with AI in Email → Pending), R-326 (lead card for candidates), R-327 (logo + arrow are a first draft). Archive entry "Session 54, later" has the mechanism per item. **Done:** clean-worktree full suite on head `5fecd6f` = 314/314 on Node 22 and on Node 26.11.1; merged as `66ddf8a`; Render deploy `dep-dbg8mgrbc2fs73a04mog` live 11:31:07 UTC, no error logs. **Owed:** the owner's reaction to the logo/arrow (R-327) and the feel of the zoom and fold; a hard refresh to see it. **Still waiting on the owner:** the four R-321 answers (plan in `docs/PLAN_R-321_contact_data_any_provider.md`); the speed verdict needs a busy day of `[SlowReq]`.
-
-## START HERE (27 Oct, Session 54) — speed check read (too early to call); R-321 planned, waiting on the owner
-
-**Render, read ~10:06 UTC after #370/#371 went live:** no crash event, no slow GET /jobs, memory 84–90 MB — but [Certain] there was almost no user traffic yet, so this proves nothing. **Re-read `*SlowReq*` after a US working day** (service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`); still 15 s+ → plan R-303. **R-321 plan is written** (`docs/PLAN_R-321_contact_data_any_provider.md`) — four plain questions for the owner at the end; build nothing until they answer. After that: P3 (R-319), then R-320 on top of R-321. Small open: R-306, R-163.
-
-## START HERE (27 Oct, end of Session 53) — the 28-note doc: P0, P1, P2 done; the owner continues in a NEW chat
-
-**Read first:** `docs/PLAN_2026-10-26_28_NOTES.md` — the owner's 28 notes, the P0–P4 ranking, the model/cost answer (agents save
-context, not money; Haiku `scout` only for read-only look-ups; Opus on mail/data/security/AI), what shipped in which PR, and the
-rulings D-0174…D-0179.
-
-**Live:** #368 (P0), #369 (P1 + client-owner rules + sign-in survives a slow server + reminder → lead), #370 (R-324 speed step 1 +
-R-322) — live 27 Oct 02:42 UTC. **P2** (R-316 Outreach Insights click-through + D-0179 bounce split, R-317 interview emails per
-person with the client copy + résumé, R-318 mailbox Undo / Star / Pop out / resize) — the P2 PR merges after its clean-worktree runs.
-
-**Next, in the owner's order:** (1) read Render `[SlowReq]` for GET /jobs after a working day on #370; if loads are still 15 s+, plan
-R-303 (a list that never loads everything); (2) **plan R-321** (contact data from any provider — ~370 Apollo references in 17 files;
-needs vendor docs + a customer key per vendor) and bring the plan to the owner before building; (3) P3 (R-319) items; then R-320 on
-top of R-321. Small open bugs: R-306 (95 vs 78 import), R-163 (stalled retry sweep).
-
-**Working rules learned this session:** one PR at a time on the session branch (stash the next piece); full suite on Node 22 AND 26
-from a clean `git worktree` of the exact head; screenshots before claiming a screen is right.
-
-## START HERE (26 Oct, Session 53, very last) — #369 merging (clean-worktree runs); R-324 speed step 1 built, next PR
-
-R-324 step 1 (lead-list cache: skip unrelated writes, shared load, parallel pages, 5-min copy) is built and tested in the working tree, committed only after #369 merges, on the branch restarted from main. Then: re-read Render [SlowReq] for GET /jobs after it is live; if still slow → R-303.
-
-## START HERE (26 Oct, Session 53, last) — D-0177 managers open jobs (owner's pipeline); D-0178 reminder → your lead
-
-Both built on #369 with tests; #369 waits on the owner's "merge" (it now carries P1, D-0174/0176/0177, R-323, R-309/D-0178). Find Leads ownership left as D-0111 — owner told it is my reading; re-open if they meant ownership at save time.
-
-## START HERE (26 Oct, Session 53, late night) — sign-in bounce fixed on the branch (R-323); server load is R-324
-
-D-0176: admin's part in clients is control, not opening jobs — D-0174 stands for admins (managers same, as built). Ash's "Log In sends me back to login" = a busy server failing one first-load call and PACE signing her out; fixed on #369 (keep sign-in, retry once, Try again screen). The root cause — GET /jobs 17–32 s, +100 MB per call, a listener leak warning — is R-324, plan first. #369 still waits on the owner's "merge". R-309 (Martin): the "Add as a lead" idea was mine; owner asked where it came from.
-
-## START HERE (26 Oct, Session 53, evening) — P0 LIVE (#368), P1 built on the dev branch (R-315)
-
-**Owner's rulings 26 Oct:** D-0174 — only a client's owner opens jobs for that client, any number, any time (anyone else, admin included, refused; built on this branch, replaces #368's looser R-311). D-0175 — no contact-data vendor hard-wired; every company brings its own (R-321, plan first). Martin (R-309) explained; owner to answer. P0 merged and deployed (21:25 UTC). P1's six items are built with tests (see R-315 / surface.md 26 Oct): reminder Reconnect button, email-address links → PACE compose, inbox day headings, earlier-message attachments, job status note, "What went out" counts on Sent. **Next after P1 merges: P2 (R-316 Outreach Insights drill-down, R-317 interview emails, R-318 undo/pop-out/resize/star).** Owner still owes answers on: Martin's "Add as a lead" button (R-309), the own-client reading of the cooldown (R-311), and Apollo compose (R-320).
-
-## START HERE (26 Oct, Session 53, later) — the owner's 28-note doc: P0 built, P1 next (R-308…R-320)
-
-**The doc** ("In find leads", 28 notes) is on the ROADMAP as R-309…R-320 by priority. **P0 is built on the dev branch** (R-310…R-314: industry filter + search, Find Leads dropdown repaint, re-search guard, second job for own client, signature "Replace" box, Gmail bounces) with tests; R-309 (Martin) was a manual reminder, not lead generation — the owner's call. **Next: P1 (R-315)** — reconnect button on the reminder, email address → PACE compose, inbox grouped by day, client attachments in a thread, notes on stage change, Sent split into first/FU1/FU2. **Model team (R-308):** I build small things directly; a Sonnet agent only for a big feature AND only with the owner's yes (D-0060) — they asked about cost and were told agents save context, not money. New read-only Haiku `scout` agent. Surface memory trimmed to 38 KB (`surface-archive.md` holds the rest). **Owner to-do from P0:** re-open My Setup → their mailbox → Save once (the stored signature still has the old phone until rebuilt). Seen: prince.thomas@futeglobal.com is connected under THREE PACE users.
-
-## START HERE (26 Oct, Session 53) — assigned leads never come back; 95-vs-78 import is OPEN
-
-**D-0173:** the owner ruled "once a lead is assigned it's assigned" — the 30-day auto-return sweep is removed (dev branch, not merged until the full run is green). 76 leads it had already returned (23/25 Sep) were soft-deleted in the live DB at the owner's word (undo in `docs/territories/deep.md`). **R-306 OPEN:** the owner imported "78" but 95 landed in ONE insert today; asked for the 78 companies / the file. Do not delete any of the 95 without that answer. Owner's word: "very dangerous" — find the cause, do not guess.
-
-## START HERE (22 Oct) — DO R-304 FIRST when the owner asks
-
-**The one-day measurement (D-0171) is in.** Crash watch CLOSED: no server_failed/restart since 20 Oct 22:15 UTC, peak 302 MB. But **[Certain] GET /jobs got SLOWER after R-301/R-302**: 7-10 s before → 13-20 s typical, worst 57 s; memory per load unchanged (+60-150 MB, so the job-description trim did NOT save memory as predicted); and a 304 "not changed" still costs 15-20 s because the server cache (60 s) is older than the 3-min poll, so every check rebuilds the list (3 sequential trips to Seoul from the 500-row batching + a sha1 of the whole list on 0.1 CPU). **R-304 is the fix** (one read again + 5-min server cache; see ROADMAP). Then re-read `[SlowReq]` (`list_logs` text `*SlowReq*`).
-
-**Top slow things (21-22 Oct):** 1 GET /jobs (every tab every 3 min, 13-20 s); 2 GET /mailbox/unread-count (the most frequent, 3-8 s, worst 44 s); 3 the sign-in burst (~15 small requests at once — /next-actions, /ai/morning-briefing, /client-intel/digest, /insights/bd/:id — each 8-13 s): CPU starvation on the free 0.1-CPU server. After R-304 the owner's choice is R-303 (paged lead list, free, big) or the $25/mo Standard instance (10x CPU). Be plain: code alone will not fix #3 on the free server.
-
-## START HERE (21 Oct) — speed work released; WAITING ONE DAY FOR MEASUREMENTS (D-0171)
-
-**Released 21 Oct (both after Node 22 + 26 full runs, owner: "merge once the test is passed"):**
-- **#363** (2d54c6b) R-301 — the Jobs list carries no pasted job description (7.7 MB of 8.7 MB of research text; GET /jobs had grown the server 65-110 MB per load). Read in pages (`services/lead-list.js`), `posting` summary instead, text loaded per lead on demand (`22-api loadLeadPosting`), saves from a list copy keep the stored text (`lead-posting.keepStoredPosting`).
-- **#364** R-302 / D-0170 — sign-in no longer downloads every SENT email (4,421, read by no screen); GET /emails look-ups in parallel; GET /jobs answers 304 "not changed" (`services/list-tag.js`, `22-api apiGetJobsList`); `[SlowReq]` log for any request ≥3 s; list batch 500.
-
-**THE OWNER'S CALL (D-0171): wait one day, read what is slow, then decide.** Build nothing more for speed until then. The scheduled check `trig_01UBp12zL5oHbvPtWRd5zTUF` (22 Oct 10:40 UTC, fires into this session) does the final crash verdict AND ranks `[SlowReq]` / `[MemWatch]` lines (`list_logs` text `*SlowReq*`, `*MemWatch*`) with one recommended next step. A NEW session: do that reading yourself. Candidates it will choose between: R-303 (server-paged lead list — the lasting answer to a very big database), R-292 (database out of Seoul), or whatever the numbers show. Day-1 crash check (21 Oct) was clean: no restart, peak 242 MB.
-
-## START HERE (Session 52, 20 Oct) — the crashes are fixed; "Needs you today" reworked
-
-**The owner's report:** "PACE did not answer properly — the server may be waking up" appearing mid-use, then "very very slow". **Root cause (found with a watcher, not guessed):** a new `Intl.DateTimeFormat` per row (native memory, never freed) — `/insights/bd` alone took the server 170 → 542 MB. Fixed in **#360** (`services/date-format.js`, one formatter per kind; `test/date-format-smoke.mjs` bans the old pattern). Owner after release: "its working fine right now"; memory ~155 MB after Today (was 464–549 MB). **RULE: never `new Intl.DateTimeFormat` / `toLocale*String({timeZone})` in server code.**
-
-**Released this session (all MERGED and LIVE, Node 22 + 26 full runs green before each):**
-- **#357** (409925d) R-296 / D-0167 — "did we reply?" learned in the background: the reply sweep reads each Gmail/Outlook Sent folder (`services/sent-sweep.js`) and keeps our replies to people who wrote to us as outbound `conversation_messages`; no list asks a mailbox while it loads.
-- **#358** (60a68ea) R-297 / D-0168 — owner's order on Needs you today (group first), positive replies owed after 2 days, Interview / Submission rows, owed replies kept in today's list, sent mail back to 90 days a slice per visit.
-- **#359** (6429803) R-298 — memory watcher (`services/memory-watch.js`): `[MemWatch]` lines in Render logs name the requests / engine jobs running above 380 MB and any request growing memory 60+ MB. Read with `list_logs` text `*MemWatch*`. Leave it on.
-- **#360** (fc69dc8) R-298 — the fix above.
-- **#361** (b13d76d) R-299 + R-300 / D-0169 — the app asks once for everyone's mailboxes (`GET /users-emails`, was once per person); **Needs you today holds only what is owed**: replies we owe, interview / submission steps, reminders a PERSON set, promises that came due. No "No reply yet" tiles, no sequence-made reminders (`reminder-source.isSequenceMade`), the "move them forward?" row folded into the candidate's reply row; `nudge_quiet_after_days` removed. Also fixed: a pipeline row's snooze keyed per candidate (payload lacked `submission_id` / `step`).
-
-**FIRST THING NEXT WINDOW:** `list_events` (service `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`) since 2026-10-20T22:15Z for `server_failed` / `oomKilled`, and `list_logs` text `*MemWatch*` — tell the owner plainly whether any crash came back. A two-day crash watch is scheduled in this session (owner: "keep it on for 2 days and see if there is any crash. If not close it"): day 1 on 21 Oct 10:40 UTC (`trig_01YMqGj17MV3vSaUL6dZG3G7`), final on 22 Oct 10:40 UTC (`trig_01UBp12zL5oHbvPtWRd5zTUF`) — no crash → say "sorted" and stop; a crash → name the cause from the watcher and propose the fix. If you are a NEW session, do the check yourself anyway.
-
-**21 Oct — R-301:** the Jobs list no longer carries each lead's pasted job description (7.7 MB of 8.7 MB of research text; GET /jobs had grown the server 65-110 MB per load). Read in pages, text loaded per lead on demand (`services/lead-list.js`, `22-api loadLeadPosting`). `/emails` was measured — 2.9 MB in total, not heavy; it only appeared in MemWatch alongside /jobs. **Still open:** the database in Seoul (R-292, decided: after the current outreach). Not covered by the sent sweep: Zoho / IMAP mailboxes.
-
-**Owed by the owner (say it plainly, once):** a paid always-on server before other customers use PACE (D-0163/D-0165; the $25 Render "Pro" WORKSPACE adds no memory — the Standard INSTANCE, $25/mo, 2 GB, does); R-205 `MAILBOX_SECRET_KEY`; `WEBSITE_LEADS_ORG_ID` on Render.
-
-## Process lessons from Session 52 (read before building)
-- **Measure inside the process before naming a culprit.** Hours went on R-268 because crashes followed its bursts in time; one watcher line (heap 50 MB, rss 540 MB → native memory) found the real cause in minutes. Render keeps no request log for this service — the watcher is the only way to see what ran.
-- **Never `git reset --hard origin/main` over a pushed notes-only commit.** Notes written after a merge and pushed to the dev branch were overwritten three times this session by the next reset; they had to be rewritten at the close. Put notes in the PR before it merges, or merge a notes PR.
-- **When the owner says "don't screw up", ask which tiles stay before building** — the answer (D-0169) changed what was removed.
-- A row's serialized copy of an item (`data-na-item`) is a whitelist: a new field the buttons need must be added there, or the window and the snooze silently lose it.
-
-## THE TO-DO LIST (owner asked for it; read `docs/ROADMAP.md` for the full rows)
-
-*Decided, build later (owner's go needed to START each):*
-- **R-287** continue a Gmail / Outlook draft inside PACE (owner: "yes, build it later", D-0164).
-- **R-250** several sequences per person, one Primary for sales.
-- **R-246 / R-254** the AI learns from the user's own emails and workflow.
-- **R-247 / R-248** plain-words detail picker; what happens when a detail is missing.
-- **R-260** candidates: "let the AI read each resume" switch (one credit per candidate).
-- **R-255** a plain automatic reply (no return date) stops the follow-ups.
-- **R-256** the test email built exactly like a real lead's first email.
-- **R-252** "why they are hiring / how long open" as a usable detail.
-
-*Fixes and safety (not started, no go given):*
-- **R-241** a "blocked" bounce must not mark a good contact Invalid · **R-242** bounce auto-pause misses small senders · **R-243** the bounce lookup has no org filter.
-- **R-204** numbers still typed into code (7-day reply look-back, the generator's draft counter default).
-- **R-206** a window that closes and reopens still blinks.
-- **R-262 / R-263** marked DOING from Session 47 (new user's first sign-in; login glitch after sign-out) — **check whether they are actually finished** before anything else is said about them.
-- Tidy-up: the dead `tmplHtml` (old My wording editor) in `public/js/07-page-email.js` and its helpers are computed and unused since D-0161.
-
-*Parked by the owner:* **R-253** real count of matching candidates in client emails.
-
-## Process lessons from Session 50 (read before building)
-- **A decision that removes a screen is not done until that screen's old TESTS have been run** — they list what it did (R-286 found three lost controls and three dead buttons that way).
-- **Building a layout "as drawn" must not drop what the drawing did not mention** (the morning briefing vanished for six roles until the full run caught it).
-- **Look at screenshots of every new screen before showing the owner** — they caught three bugs the suites passed (an archive count that said 0, a panel below the window's edge, "To —").
-- The engine runner treats a job's `skipped` field as "nothing to do": never name a counter that. `execCommand('fontSize')` reports success and does nothing inside the app window.
-- `pkill -f "node test/"` (or `run-all.mjs`) kills your own shell command too — its text matches. Use the PID.
-- Supabase `apply_migration` may be cancelled at the permission step: the owner can paste the file into the SQL editor; always read the table back afterwards.
-- Run the Node 22 and Node 26 full runs one after the other, on the exact head being merged; never merge on targeted suites.
-
-**Render facts learned this session (read these):** the Render tools (`list_services`, `list_deploys`, `list_events`, `list_logs`, `get_metrics`) work and are read-only; service `fute-lms-backend` = `srv-d7avlfali9vc73fk4ov0`, workspace `tea-d7av4bnfte5s73d0o3ng`, free plan, 512 MB (one OOM kill 14 Oct 16:00 UTC; normal use ~230–265 MB). **`trigger_deploy` was denied on 14 Oct, allowed on 15 Oct** — the owner starts a deploy by hand (Manual Deploy → Deploy latest commit) or adds a permission rule. **A Render incident (19:32–22:18 UTC, 14 Oct) paused deploys for free services**: #337 merged at 20:53 UTC and never deployed on its own, the app instance vanished ~21:30 and a restart did not bring it back until 22:19 (the static website kept working because it needs no instance). After an outage, check `list_deploys` — a merge during the pause deploys nothing. **15 Oct: #340 did not auto-deploy with NO incident (Render got no event at all) — after every merge, check `list_deploys` for the merge commit; if missing, `trigger_deploy` (allowed on 15 Oct). Sandbox curl to onrender.com is blocked; use Firecrawl or the Render tools.** `status.render.com/incidents/<id>` is readable.
+> **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). The previous version of this file (Session 59 and older "START HERE" blocks) is kept whole at the end of the archive.
+
+**Updated**: 2026-11-03 (Session 60, end). **Highest ids:** decision **D-0204** · contract C-0038 · roadmap **R-370** · next migration **075** (072, 073, 074 all applied live). Main = `3cc78ed` (#394). Live deploys: #392, #393 confirmed live; #394 was deploying at the end of the session (check it).
+
+## START HERE — the owner continues in a NEW chat. Read this block first.
+
+**Who the owner is (again, because it matters):** product owner and end user, NOT an engineer. Does not read code or use git. Evaluates by using the app and screenshots. Gives short answers; "do not guesswork" — ask when in doubt. Wants the uncomfortable answer first, confidence tagged ([Certain]/[Likely]/[Guessing]), no agreement openers (their saved preferences). Every reply ends with one line: what was skipped or not checked.
+
+**Merged and live this session (all two-version tested):**
+- **#392 R-340** — every path that gives a lead an owner records who assigned it (`jobs.assigned_by`, migration 072) and writes it to the lead history. Old leads stay "not recorded".
+- **#393** — **R-349 Stages A–D**: the lead list is found, counted and paged by the DATABASE (migration 073: `leads_page`, `leads_counts`, search column + triggers + indexes; migration 074: `leads_facets` for the Assigned-to / Industry drop-downs). Browser: `public/js/76-leads-store.js`; Leads tab draws server pages with **Previous / Next** (no jump-to-page); sign-in asks for the FIRST PAGE + numbers, not every lead; the whole list loads once, on demand, only when a screen reads `STATE.jobs` (an accessor). Endpoints (above `/jobs/:id`): `/jobs/page`, `/counts`, `/ids` (select-all, cap 5000), `/by-ids` (≤100), `/facets`. Also the **candidate card in the inbox** (R-362/365), **R-358** (old mailbox delete tells the truth: 409 + Deactivate), **R-359** (a BLOCKED mailbox sends nothing, one-by-one emails included; Pause stays outreach-only).
+- **#394** — **R-367 system-health banner** on the admin Dashboard (`services/system-health.js` rules, `routes/system-health.js`, `public/js/77-system-health.js`): follow-ups not run / failed three times, background jobs overdue / failed, silent heartbeat, mailboxes expired / auto-paused / blocked, server restarted / near memory. Buttons: Run follow-ups now, Run <job> now (operator only), Open the mailbox panel; each data-changing button asks first. A manual follow-up run now stamps today's run. **R-306** — import preview says "N rows are hidden", imports only visible rows by default, "Import all" on request (`public/js/78-import-visible.js`; cause found: SheetJS reports hidden rows only when read with `cellStyles:true`). `xlsx` 0.18.5 added as a TEST-ONLY devDependency.
+- Earlier this session: #390 (listener diagnostic), #391 (Deliverability: one search-first mailbox panel, D-0201).
+
+**FIRST THINGS TO DO next chat:**
+1. Confirm the #394 deploy is live (Render service `srv-d7avlfali9vc73fk4ov0`).
+2. Ask the owner for a screenshot of: the admin Dashboard (banner), the Leads tab (press Next, Select all), an Excel import with hidden rows. **Nothing was seen on real data yet** — all proof is tests.
+
+**BUILD QUEUE (owner's decisions are in `docs/territories/DECISIONS.md` D-0203 and D-0204):**
+1. **R-368 inbox-placement test + domain check** (owner: yes, button + weekly): send "PACE test" mails from each sending mailbox to the company's own connected Gmail/Outlook mailboxes, read Inbox / Spam / not arrived, table on the mailbox panel (mailbox × provider, dated), warn on the mailbox card if Spam; plus a free SPF/DKIM/DMARC check per sending domain. A second domain is the owner's purchase.
+2. **R-369 bounce rule — the ADMIN sets every number (D-0123/D-0204).** Defaults exist (`bounce_rate_threshold_pct` 5, `bounce_min_sample` 20, nobody has set them). To do: confirm both are visible/editable in Settings; check whether bounces that arrive on a LATER day are counted; offer "hold growth while a mailbox is over the limit" ONLY as an admin switch with the admin's own number.
+3. **R-360** show open rate on the mailbox card WITH a note "opens are undercounted" (owner's yes; 2,779 tracked, 5 opened in 30 days).
+4. **Second contact-data vendor (R-361 / R-329b):** owner will NOT create a Hunter.io account or hold any key — every company/user brings its own key (D-0175). Build the Hunter adapter from public documentation behind the existing provider-neutral layer (R-321), test with realistic fakes, and say on the Integrations screen "built from public documentation, not yet tested with a live account". ZoomInfo / Lusha / ContactOut are one adapter each, later. "SingleHire" was never recognised.
+5. **R-306 leftover:** tidy source names ("Simplyhired" / "Simply hired"). The owner has no copy of the original 78-row file; the hidden-rows fix is proven on made-up sheets only.
+6. **R-370 banner gaps (need data first):** emails stuck at "sending" (no claim timestamp on the row → needs a column = migration + owner's go before any Release button), a mailbox at its daily limit with a queue behind it, a company bounce trend.
+7. **R-349 Stage E:** the Assign screen and Email → Compose company picker still need the whole list (`leads-whole-list-wake-smoke` names the only screens allowed to wake it: `assign`); give them server-side Unassigned pool / company search; archive/horizon and email-table splitting; a running-totals table only if counts are measured slow (700k leads: pages 4–50 ms, counts 25–400 ms; known slow: filter combos matching nothing over a huge scope 2–4 s).
+8. **Still open from earlier:** R-353 report first-email replies ~17 Nov (reminder set); R-326 / R-345 / R-340-filter ("only leads I assigned"); R-344 Google sign-in fix waits for the switch to company email; R-329; BD Lead 1 / Martin Smith have 0 versions; reply-drop recommendations (stop growing volume until bounces are low, start warm-up, second domain); R-352 daily follow-up check is now the banner.
+
+**Known behaviour differences to tell the owner if they ask:** leads created in the same instant tie-order differently than before (old id ASC, now DESC); no jump-to-page, use Next or filters.
+
+## Rules and lessons that cost something (keep)
+- **Test gate (owner's standing rule):** nothing merges without a clean full run on **Node 22 AND Node 26.11.1** (`node test/run-all.mjs`, read the count, never pipe it) in a CLEAN worktree, and **nothing else may run on the machine during it** (parallel runs made `login-load-fail` and `screen-stability` miss timing windows; both pass alone). Killing the parent run leaves its child test processes alive — and `pkill -f` with the script name in the command line killed the shell itself; list pids then `kill` them. The failing detail is printed at the END of the log. A new devDependency needs `npm install` in each worktree. 352/352 is the current count.
+- **Migrations:** never applied without the owner's fresh go. Pattern that worked: trial inside a transaction that ends in `RAISE EXCEPTION 'TRIAL OK …'` (rolls back) via `execute_sql`, then `apply_migration`, then read back the grants. Supabase MCP may ask to confirm destructive statements (DROP/REVOKE); a timeout means wait, do not retry in the same turn.
+- **Git:** designated dev branch `ccr-42502345-dim9or`; NEVER force-push (blocked) — after each squash merge, merge the remote branch history back with `-s ours`, push fast-forward, open the PR, mark ready, squash-merge. Never `git add -A`.
+- **A guard test must fail when the thing is absent:** every new guard this session was proved by reintroducing the bug (mutants) — keep doing it. A test that cannot measure must FAIL, not pass (the first write-refresh test was vacuous because `innerText` of a `<select>` lists all options).
+- **Org-scoping guard:** a route block counts as guarded only if it contains `withOrg`/`forRequest`; keep scoped lookups in services. New literal routes go above `/:id`. "Mirrors": `public/js/54-record-history.js` mirrors `services/record-history.js`.
+- **No number limiting a customer is typed in code (D-0123)**; every customer brings its own keys (D-0055/D-0175); the engines (follow-up, sweeps) are shared across companies → manual runs are PACE-operator-only (`isOperator`), the banner shows engine/server issues only to the operator.
+- **Mailbox rules (D-0201/D-0203):** Pause = outreach only (sequences, bulk, candidate outreach, warm-up); Block = locked, stops EVERYTHING sent from it (route `POST /mailbox/:mid/send|reply|forward` refuses 409; unreadable lock → 503) and warm-up; only an admin Unblocks (it becomes a plain pause, Start is separate). Delete is refused when mail is on record.
+- **Lead list design (D-0202):** scope decided FIRST (admin all | owner/creator/assigned in scope | pool if the role sees it); ordering `created_at DESC, id DESC`; keyset bookmark; dates as ranges; one trigram GIN on `jobs.search_text`; falls back to the in-memory list (`source:'memory'`) if a function is missing; org/viewer/chain only from the session.
+- **Client store facts:** server mode switches on only after the first page answers (`STATE.lv.on`); any failure or non-page answer → the old whole-list load; every successful write to `/jobs|/leads|/distribute|/ownership-requests|/contacts|/companies` re-fetches the page in place; `jobById()` looks in the working set first; sign-out resets everything.
+
+## Housekeeping in the sandbox (may not exist next time)
+Worktrees `~/wt` (clean test head), `~/wa` (branch r349-c1), `~/wm`, `~/w340`, `~/w358`, `~/wc`; logs `~/logs/`; `~/run-both.sh` runs Node 22 then Node 26 (Node 26.11.1 in `~/node26`). Everything of value is in main; these are disposable.
