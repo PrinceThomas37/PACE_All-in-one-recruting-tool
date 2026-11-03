@@ -7191,3 +7191,6 @@ Migration 071 `ai_calls` APPLIED live (2nd try; the 1st timed out waiting for th
 
 ## Session 60 (2 Nov 2026) — D-0198: five Ponytail-derived coding rules added to CLAUDE.md
 Owner asked how to use the Ponytail plugin. Read it: a 3.5 KB agent rulebook + hooks; most already in CLAUDE.md, and its "nothing for later" conflicts with the growth-bets rule. Owner approved adding only the new parts (section "How I write code" above "Working conventions"); plugin not installed. No code or screens changed.
+
+## Session 59 (3 Nov 2026) — R-352 follow-ups stopped since 30 Oct
+Owner: "why are the follow ups paused". Live: last fu1/fu2 29 Oct; 2 Nov run "FU1: 0 … skipped_no_initial: 982" (Render log 13:01 UTC). runFollowupEngine's `.in('contact_id', dueContactIds)` (~1,000 UUIDs) failed and its error was unread → empty map → all skipped; same pattern in liveOutreachPairs (the duplicate guard) and variantByPair; follow_ups active read was capped at 1,000 rows and carried 12 MB of jd_raw. Fix: services/batched-read.js (100 ids/request, pages of 1,000, throws), research_list for the job, a failed run gives the day back. test/followup-lookup-smoke 9/9 (fake DB refuses >150 ids like the real one). Backlog: 1,505 fu1 + 705 fu2; combined mailbox limit 4,250/day → all would queue in ONE evening; release pace is the owner's call.

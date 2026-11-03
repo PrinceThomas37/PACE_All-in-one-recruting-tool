@@ -1040,6 +1040,8 @@ function renderEngineCard(isAdmin){
           (overdue?'<span class="fs-11" style="font-weight:600;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e">'+overdue+' overdue</span>':'')+
         '</div>'+
         '<div class="fs-12 c-text3" style="margin-top:3px">'+htmlEsc(explain)+'</div>'+
+        // R-352: follow-ups failed 3 times today and stopped for the day — said plainly, with the reason.
+        (s.followup_alert?'<div class="fs-12_5 c-red" role="alert" style="margin-top:6px"><strong>Follow-ups could not run today</strong> — tried 3 times and stopped until tomorrow. Reason: '+htmlEsc(s.followup_alert.error||'unknown')+'</div>':'')+
       '</div>'+
       '<button onclick="refreshEngineStatus()" class="fs-13 c-text2" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">Refresh</button>'+
       '<button onclick="STATE.engineExpanded='+(open?'false':'true')+';render()" class="fs-13 c-text2" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">'+(open?'Hide jobs':'Show '+jobs.length+' jobs')+'</button>'+

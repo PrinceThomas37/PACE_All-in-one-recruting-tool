@@ -19,7 +19,7 @@ const express = require('express');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { runner, auth, hasRole } = ctx;
+  const { runner, auth, hasRole, supabase } = ctx;   // supabase: R-352's follow-up alert
   const isOperator = ctx.isOperator || (() => false);   // the engines are shared by every company: only the PACE operator runs them by hand (R-049)
 
   // Timing-safe-ish comparison. The secret is low-value (it triggers idempotent
@@ -107,6 +107,15 @@ module.exports = (ctx) => {
         heartbeat_state: heartbeatState,
         minutes_since_ping: sincePing === null ? null : Math.round(sincePing / 60000),
         server_time: new Date().toISOString(),
+        // R-352: follow-ups could not run today after 3 tries (the reason), shown on the admin's engine card. Only today's.
+        followup_alert: await (async () => {
+          try {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'followup_engine_alert').maybeSingle();
+            const a = data && JSON.parse(data.value);
+            const todayIst = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+            return a && a.date === todayIst ? a : null;
+          } catch (_) { return null; }
+        })(),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
