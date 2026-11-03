@@ -47,6 +47,7 @@
   };
   store.markFull=function(){ _full=true; _fullAsked=true; };
   store.isFull=function(){ return _full; };
+  store.askedFull=function(){ return _fullAsked; };
   store.working=function(){ return _jobs; };
   store.byId=function(id){ for(var i=0;i<_jobs.length;i++){ if(_jobs[i].id===id)return _jobs[i]; } return null; };
 
@@ -216,5 +217,18 @@
     var sel=STATE.leadSeqSel||{}, vis=STATE._leadSelVisibleIds||null;
     var ids=Object.keys(sel).filter(function(k){return sel[k]&&(!vis||vis.indexOf(k)>-1);});
     store.ensureLeads(ids).then(function(){ _seq(); }).catch(function(e){ showToast('Could not load the selected leads: '+((e&&e.message)||e),'error'); });
+  };
+})();
+
+// A lead opened from somewhere other than the list (the inbox's lead card, a reminder, a link): fetch that one lead first, then open its window.
+(function(){
+  var store=window.leadsStore, _open=window.openJob;
+  if(typeof _open!=='function')return;
+  window.openJob=function(id){
+    if(store.use(STATE.user)&&!store.byId(id)&&!store.isFull()){
+      store.lead(id).then(function(l){ if(l)_open(id); else showToast('That lead is not on your list right now.','info'); });
+      return;
+    }
+    return _open(id);
   };
 })();

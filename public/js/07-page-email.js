@@ -59,7 +59,7 @@ function composeTarget(){
   if(STATE.composeContactId){
     var parts=String(STATE.composeContactId).split('|');
     contact=(STATE.contacts||[]).find(function(c){return c.id===parts[0];})||null;
-    job=(STATE.jobs||[]).find(function(j){return j.id===parts[1];})||null;
+    job=jobById(parts[1])||null;
   }
   return { contact:contact, job:job };
 }
@@ -881,7 +881,8 @@ function renderEmail(){
   }
 
   // ── COMPOSE TAB ──
-  var myJobs=getMyJobs(u);
+  // Only the Compose tab needs the leads (its company picker). The other tabs must not wake the whole-list load (R-349 D).
+  var myJobs=STATE.emailTab==='compose'?getMyJobs(u):[];
 
   // Build company list for step-1 picker
   var companyIds={};

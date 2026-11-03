@@ -159,6 +159,13 @@ try {
   await ev((id) => openJob(id), expected[0]); await page.waitForTimeout(600);
   step('opening a row and the lead window did not download the whole list', fullAsks() === before, calls.filter((c) => c === 'GET /jobs').length + ' whole-list asks');
   await ev(() => { STATE.modal = null; render(); });
+  // a lead that is NOT on the page (opened from the inbox's lead card, a reminder, a link): that one lead is fetched, its window opens, still no whole list
+  const faraway = expected[110]; const b2 = calls.length;
+  await ev((id) => { const w = leadsStore.working(); const i = w.findIndex((j) => j.id === id); if (i > -1) w.splice(i, 1); }, faraway);   // this browser has never seen it
+  await ev((id) => openJob(id), faraway); await page.waitForTimeout(700);
+  const opened = await ev(() => STATE.modal && STATE.modal.type === 'jobDetail' && STATE.modal.id);
+  step('a lead that is not on the page opens from one small request (its id), not from the whole list', opened === faraway && calls.slice(b2).some((c) => /\/jobs\/by-ids\?ids=/.test(c)) && fullAsks() === before, String(opened) + ' ' + calls.slice(b2).join(' ; ').slice(0, 160));
+  await ev(() => { STATE.modal = null; render(); });
 
   // ── a screen that needs the whole list gets it, once ──
   const n0 = fullAsks();
