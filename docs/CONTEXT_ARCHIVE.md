@@ -7197,3 +7197,11 @@ Owner: "why are the follow ups paused". Live: last fu1/fu2 29 Oct; 2 Nov run "FU
 
 ## Session 59 close (3 Nov 2026)
 Shipped: R-351, D-0194 (AI record), R-343 first half, R-352 follow-up fix + backlog drop (D-0199), R-343 second half (D-0195/D-0200: no AI at send time; "AI drafts it for me"; reply report). Found: follow-up versions WERE sent (earlier claim corrected); replies fell from the week of 19 Oct regardless of AI vs template (R-353 note). Balance to-do written at the top of CONTEXT_WINDOW.md.
+
+## Session 60 (3 Nov 2026) — the small three + R-349 plan (owner: "do all 4 step by step")
+Owner's answers: spend the 1 credit on the Media check; R-349 starts with Leads tab + Dashboard cards; nothing merges without their go each time.
+1) **Listener warning (R-354):** Render log (service srv-d7avlfali9vc73fk4ov0) shows "11 finish listeners added to [ServerResponse]" about once per server start, with NO request attached; it did not reproduce locally with a dead database across 15 routes, signed in and out. Our code adds at most 2 'finish' listeners per request (`services/memory-watch.js`, `index.js:808`), so 11 comes from elsewhere. Built a log-only diagnostic in `memory-watch.js` (`[Listeners] <route> ended with N 'finish' listeners`, once per route, ≥8). `memory-watch-smoke` 18/18; with the diagnostic switched off it falls to 16/18. NOT merged, NOT yet a fix — read the log after it is live.
+2) **R-353:** `app_settings.templates_switched_on` = 2026-11-03 read back from the live DB (project teiqievahzhllojvgsku); self-reminder scheduled for 17 Nov 10:00 IST to report first-email replies before/after.
+3) **Media filter (R-355):** one live Apollo company search (owner's yes, 1 credit): 103,856 matches; first 25 real media, no software publishers; Meta/TikTok/YouTube/Course are platform noise via 516/5191. Owner's call whether to drop those codes.
+4) **R-349 plan:** `docs/PLAN_R-349_lead_list_paged.md` — 5 stages, server does the finding/counting on its existing in-memory copy (no migration), side-by-side count tests, two plain questions for the owner. Nothing in the screens changed yet.
+Not checked: that the warning's real source is a library (only ruled out our own code); the Render deploy; the full suite (only memory-watch-smoke run so far).

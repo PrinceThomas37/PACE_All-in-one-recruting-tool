@@ -1377,3 +1377,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - R-347/R-348: `send-stall-smoke` (14), `lead-list-light-smoke` (16); `lead-list-cache-smoke` now pins ≤ 2 pages at once (was "4 at once", changed on purpose); `login-load-fail-smoke` drives the first-load failure through /users and adds 8 checks for the list loading behind the open app. Each new guard mutation-checked.
 
 - **2 Nov 2026 (R-351):** interview/From picker now sends the mailbox it shows (`10b-from-picker.js` value() always returns the shown id); `from-picker-smoke` pins it. See harbour.md / archive Session 59.
+
+- **3 Nov 2026 (R-354):** `services/memory-watch.js` now also logs `[Listeners] <route> …` when a response ends with ≥8 'finish' listeners (once per route, log only) — Node's own MaxListeners warning names no route. `memory-watch-smoke` 18/18 (guard fails when the diagnostic is off). Plan for R-349 is `docs/PLAN_R-349_lead_list_paged.md`.
