@@ -269,7 +269,7 @@ module.exports = (ctx) => {
         { key: `u_${uid}_random_template_mode`, value: 'false' },
         { key: aiTeach.key(uid), value: mode === 'ai' ? JSON.stringify(teach) : '' },
       ].concat(vCount == null ? [] : [{ key: versions.countKey(uid), value: String(vCount) }],
-        versions.rowsFor(uid, 'o1', mode === 'template' ? first.versions : [], room));
+        versions.rowsFor(uid, 'o1', first.versions, room));   // D-0195: both modes send the template and its versions
       followupSteps.STEPS.forEach((t, i) => {
         const f = fus[i];
         if (!f) { rows.push(...versions.rowsFor(uid, t, [])); return; }        // a follow-up taken away keeps its wording, loses its versions

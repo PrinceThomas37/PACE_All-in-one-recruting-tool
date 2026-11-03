@@ -31,11 +31,6 @@ const { isStaleProgress, reconcileProgress } = require('../services/send-progres
 const sendRetry = require('../services/send-retry');
 const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
-const engineDraft = require('../services/engine-draft');
-const aiFirstChoice = require('../services/ai-first-choice');
-const aiTeach = require('../services/ai-teach');
-const followupSteps = require('../services/followup-steps');
-const wordingScope = require('../services/wording-scope');
 const pendingByMailbox = require('../services/pending-by-mailbox');
 const own = require('../services/ownership');
 const { createDb } = require('../models');
@@ -162,27 +157,8 @@ router.get('/emails', auth, async (req, res) => {
         .select('id,email_address,display_name').in('id', ids);
       (pinned || []).forEach(m => { pinnedById[m.id] = m; });
     }));
-    // D-0032: the engine's first email is written by AI at send time, so a
-    // queued one still shows the template. Say so on the row rather than let
-    // the preview pass for the final text.
-    const loadAiFirstOn = (async () => {
-      try { return Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', orgOf(req))) === 1; } catch (_) { return false; }
-    })();
-    // D-0117: the badge follows the person's own choice (and, when wording is per email ID, that email ID's).
-    const loadAiChoices = (async () => {
-      try {
-        const owners = [...new Set(allData.map(e => e.sent_by).filter(Boolean))];
-        const mids = [...new Set(allData.map(e => e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id)).filter(Boolean))];
-        const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id), aiTeach.key(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
-        const map = {};
-        await Promise.all(chunk(keys, 60).filter(part => part.length).map(async (part) => {
-          const { data } = await supabase.from('app_settings').select('key,value').in('key', part);
-          (data || []).forEach(r => { map[r.key] = r.value; });
-        }));
-        return map;
-      } catch (_) { return {}; }
-    })();
-    const [, aiFirstOn, aiChoiceMap] = await Promise.all([loadPinned, loadAiFirstOn, loadAiChoices]);
+    await loadPinned;
+
     const isAdmin = hasRole(req, 'admin');
     // {{sendercompany}} is filled from the mailbox's own "sends as" — so the preview shows the real company (services/sender-company.js).
     const companyOf = await senderCompany.companiesFor(supabase, allData.map(e => (e.sending_email_id && pinnedById[e.sending_email_id] && e.sending_email_id) || e.job?.sending_email?.id));
@@ -198,16 +174,7 @@ router.get('/emails', auth, async (req, res) => {
         is_mine: isMine,
         retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) && (isMine || isAdmin),
         ai_written: e.template_variant === 'ai',
-        ai_will_write: (aiFirstChoice.shouldWriteFirst({
-          companyOn: aiFirstOn, aiReady: true, settings: aiChoiceMap, userId: e.sent_by,
-          mailboxId: e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id),
-          each: wordingScope.isEach(aiChoiceMap, e.sent_by),
-          isFirst: engineDraft.isFirstEmail(e), alreadyAi: e.template_variant === 'ai',
-        }) || (followupSteps.isFollowupType(e.followup_type) && e.template_variant !== 'ai'      // R-259: a follow-up its sender taught the AI
-          && !!aiTeach.followupFor(aiChoiceMap[aiTeach.key(e.sent_by)], followupSteps.stepNumber(e.followup_type))
-          && aiFirstChoice.allows({ companyOn: aiFirstOn, choice: aiFirstChoice.resolveChoice(aiChoiceMap, { userId: e.sent_by,
-            mailboxId: e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id), each: wordingScope.isEach(aiChoiceMap, e.sent_by) }) }))
-        ) && e.status === 'pending' };
+        ai_will_write: false };   // D-0195: nothing is AI-written at send time any more
     });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -236,9 +236,9 @@
     var pt=(typeof personTexts==='function')?personTexts():null;   // showing an email ID's wording: the main wording is the saved copy
     var fs=pt?pt.subject:Q.first.subject, fb=pt?pt.body:Q.first.body;
     return { mode:Q.mode,
-      first:{ subject:htmlToTokens(fs).replace(/\n/g,' ').trim(), body:htmlToTokens(fb).trim(), versions:Q.mode==='template'?Q.first.versions:[] },
-      followups:Q.fus.map(function(f,i){ var p=pt&&pt.fus[i]; return { day:Number(f.day), subject:p?p.subject:f.subject, body:htmlToTokens(p?p.body:f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }),
-      teach:teachPayload(), versions_count:Q.mode==='template'&&Q.vCount?Q.vCount:undefined };
+      first:{ subject:htmlToTokens(fs).replace(/\n/g,' ').trim(), body:htmlToTokens(fb).trim(), versions:(Q.mode==='template'||!named())?Q.first.versions:[] },
+      followups:Q.fus.map(function(f,i){ var p=pt&&pt.fus[i]; return { day:Number(f.day), subject:p?p.subject:f.subject, body:htmlToTokens(p?p.body:f.body).trim(), versions:(Q.mode==='template'||!named())?f.versions:[] }; }),
+      teach:teachPayload(), versions_count:Q.vCount||undefined };
   }
   function teachPayload(){
     var t=Q.teach; return { purpose:t.purpose, use:t.use.slice(), end:t.end, len:t.len, voice:t.voice,
@@ -292,7 +292,8 @@
         ? c('template','I write it','Your email, filled in for each candidate.')+
           c('ai','AI writes each one','An email for every candidate from the job and their resume. Uses AI credits; the email you write goes when it cannot.')
         : c('template','I write it','Your email, filled in for each lead. AI can add versions so leads do not all get the same words.')+
-          c('ai','AI writes each one','A new email for every lead from their job description. Uses AI credits.'))+'</div></div>';
+          // D-0195 (owner, 2 Nov 2026): the AI helps write the TEMPLATE, never each email.
+          c('ai','AI drafts it for me','Answer a few questions; AI writes your email and its versions. You read and edit them. Leads get your email or one of its versions — no new AI email per lead.'))+'</div></div>';
   }
   function stepsHtml(){
     var names=['Write','Start'];
@@ -345,9 +346,10 @@
     if(ai&&!named()) h+=teachCard(skel);
     h+=perIdHtml();
     h+=(window.aiOffNote?aiOffNote():'');   // D-0195: AI off for this person — one plain line
-    if(!ai&&!cand&&Q.mbTab==='person') h+=versionCountCard();
-    h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
-      (ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
+    var aiHelp=ai&&!named();   // D-0195: "AI drafts it for me" — the AI writes the template; leads get it (or a version), as with "I write it"
+    if((!ai||aiHelp)&&!cand&&Q.mbTab==='person') h+=versionCountCard();
+    h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai&&!aiHelp?'Your backup email':'Your first email')+'</h2>'+
+      (aiHelp?'<p class="sq-sub">Press "Write it from my answers" and read what the AI wrote — change anything. This is what your leads get, or one of its versions.</p>':ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
         :'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>'):'')+
       '<label class="sq-lbl" for="sq-subj">Subject</label>'+editor('sq-subj',Q.first.subject,'A short subject line',true,skel)+
       '<label class="sq-lbl" for="sq-body">Message</label>'+editor('sq-body',Q.first.body,'Write it the way you would write to one person: why you are writing, what you can offer, and one question.',false,skel)+
@@ -358,20 +360,20 @@
         '<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
       (cand?'':toolsHtml('first'))+
-      msgHtml('first')+(ai||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
+      msgHtml('first')+((ai&&!aiHelp)||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
     Q.fus.forEach(function(f,i){
       var min=i?Number(Q.fus[i-1].day)+1:1;
       h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="btn btn-sm btn-outline" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
         '<p class="sq-sub">Sent <select class="sq-sel" data-sq-day="'+i+'" aria-label="Days after the first email">'+dayOptions(f.day,min)+'</select> after the first email, only if they have not replied.</p>'+
         fuThreadHtml(f,i,skel)+
-        (ai&&!named()?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
-        msgHtml('fu'+i)+(ai||cand||Q.mbTab!=='person'?'':versionsHtml(String(i),f.versions,skel))+'</div>';
+        (aiHelp?fuTeachHtml(i,skel)+fuEditorHtml(f,i,skel):fuEditorHtml(f,i,skel))+
+        msgHtml('fu'+i)+((ai&&!aiHelp)||cand||Q.mbTab!=='person'?'':versionsHtml(String(i),f.versions,skel))+'</div>';
     });
     if(Q.fus.length<Q.max) h+='<div><button type="button" class="btn btn-outline" data-sq="addfu">+ '+(Q.fus.length?'Add another follow-up':'Add a follow-up')+'</button></div>';
     var who=cand?'candidate':'lead';
     // How the AI writes for you (the old "AI style" tab, D-0161): your note for every email the AI writes in your name.
     if(!named()&&typeof renderAiStyleCard==='function') h+=detailsHtml('aistyle','How the AI writes for you — your note for every email it writes in your name',renderAiStyleCard());
-    h+='<div class="card sq-card"><h2 class="sq-h4">'+(ai?'Your backup, filled in for ':'Your email, filled in for ')+esc((Q.sample&&Q.sample.name)||'a '+who)+'</h2>'+
+    h+='<div class="card sq-card"><h2 class="sq-h4">'+(ai&&!aiHelp?'Your backup, filled in for ':'Your email, filled in for ')+esc((Q.sample&&Q.sample.name)||'a '+who)+'</h2>'+
       (Q.sample&&Q.sample.example?'<p class="sq-hint">An example '+who+(cand?'.':' — you have no leads of your own yet.')+'</p>':'')+
       '<div id="sq-pv">'+previewMail(skel)+'</div></div>';
     return h;
@@ -464,7 +466,7 @@
   }
   function startStep(){
     if(named()) return namedStartStep();
-    var p=Q.preview, ai=Q.mode==='ai';
+    var p=Q.preview, ai=false;   // D-0195: a person's sequence is sent as written in either mode — no AI email per lead to try
     // First emails already written and waiting keep the words they were written with (owner, 29 Oct: "I want to edit the
     // sequence that has active leads in it"). Offer to re-write them in the new words; follow-ups are written on their day,
     // so they already use these.
@@ -566,7 +568,8 @@
   function answersPrompt(){
     var t=Q.teach, o=Q.opts||{ends:[],lens:[]};
     var lab=function(list,k){ for(var i=0;i<list.length;i++) if(list[i].k===k) return list[i].label.toLowerCase(); return k; };
-    return t.purpose.trim()+'. It is the backup email, sent when the AI cannot write one for the lead, so keep it general to any job. End: '+lab(o.ends,t.end)+'. Length: '+lab(o.lens,t.len)+'.';
+    // D-0195: in a person's sequence this IS the email every lead gets (or a version of it) — no per-lead AI email any more.
+    return t.purpose.trim()+'. '+(named()?'It is the backup email, sent when the AI cannot write one for the lead':'It is the template every lead gets, with their details filled in')+', so keep it general to any job. End: '+lab(o.ends,t.end)+'. Length: '+lab(o.lens,t.len)+'.';
   }
   function draftFirst(){
     saveEditors();
@@ -620,11 +623,11 @@
   }
   function test(){
     var b=payload();
-    if(!b.first.subject || b.first.body.length<20){ Q.preview={error:Q.mode==='ai'?'Write your backup email first — go back one step.':'Write your first email first — go back one step.'}; return repaint(); }
+    if(!b.first.subject || b.first.body.length<20){ Q.preview={error:Q.mode==='ai'&&named()?'Write your backup email first — go back one step.':'Write your first email first — go back one step.'}; return repaint(); }
     Q.busy='test'; repaint();
     var backup=apiPost('/my-setup/sequence/preview',{subject:b.first.subject, body:b.first.body, versions:b.first.versions}).then(function(r){ Q.preview=r; })
       .catch(function(e){ Q.preview={error:(e&&e.message)||String(e)}; });
-    if(Q.mode!=='ai'){ backup.then(function(){ Q.busy=''; repaint(); }); return; }
+    if(Q.mode!=='ai'||!named()){ backup.then(function(){ Q.busy=''; repaint(); }); return; }   // D-0195: a person's sequence is previewed as sent
     // AI mode: the AI writes for a real lead with the answers on screen; the backup is shown beside it, as that lead's fallback.
     Promise.all([backup, apiPost('/my-setup/sequence/ai-test',{teach:b.teach}).then(function(r){ Q.aitest=r; })
       .catch(function(e){ Q.aitest={error:(e&&e.message)||String(e)}; })]).then(function(){ Q.busy=''; repaint(); });
@@ -743,7 +746,7 @@
     if(a==='next'){ saveEditors(); var p=payload();
       if(named()&&!String(Q.target.name||'').trim()){ say('name','Give the sequence a name.'); return repaint(); }
       if(Q.mode==='ai'&&!named()&&Q.teach.purpose.trim().length<5){ say('teach','Say in one line what the email is for, so the AI knows what to write.'); return repaint(); }
-      if(!p.first.subject||p.first.body.length<20){ say('first',Q.mode==='ai'?'Write your backup email first: a subject and a few lines.':'Write your first email first: a subject and a few lines.'); return repaint(); }
+      if(!p.first.subject||p.first.body.length<20){ say('first',Q.mode==='ai'&&named()?'Write your backup email first: a subject and a few lines.':'Write your first email first: a subject and a few lines.'); return repaint(); }
       var empty=p.followups.findIndex(function(f){ return f.body.length<5; }); if(empty>=0){ say('fu'+empty,'This follow-up has no text yet. Write it, or remove it.'); return repaint(); }
       Q.step=2; Q.preview=null; paint(true); var pb=document.querySelector('.pg-body'); if(pb) pb.scrollTop=0; return; }
     if(a==='back'){ Q.step=1; Q.saved=false; paint(true); return; }
