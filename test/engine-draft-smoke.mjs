@@ -126,10 +126,9 @@ await t('the sender\'s title (from the sending mailbox\'s "sends as") reaches th
   assert.equal(withTitle.sender.title, 'Vice President');
   assert.equal(D.engineInput({ job, contact, sender }).sender.title, '');
 });
-await t('budget feature and on/off setting exist, setting defaults ON', () => {
+await t('the Rewrite-with-AI budget line exists; the old "AI writes first emails" switch is gone (it would change nothing — D-0195)', () => {
   assert.ok(budget.FEATURES ? budget.FEATURES.engine_first_email : readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8').includes('engine_first_email:'));
-  const def = settings.SETTINGS_SCHEMA.find(s => s.key === 'engine_ai_first_email');
-  assert.ok(def); assert.equal(def.default, 1); assert.equal(def.max, 1);
+  assert.ok(!settings.SETTINGS_SCHEMA.find(s => s.key === 'engine_ai_first_email'), 'an admin switch that does nothing must not be offered');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

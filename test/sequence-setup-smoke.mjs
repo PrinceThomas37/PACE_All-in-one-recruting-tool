@@ -134,7 +134,9 @@ r = await call('POST', '/my-setup/sequence/ai-test', 'bd1', { teach: teachIn });
 step('the AI test with no AI set up says so, and names the lead the backup would go to', r.code === 200 && r.out.ai === false && r.out.reason === 'not_configured' && r.out.to.name === 'Dana Lee', JSON.stringify(r.out).slice(0, 200));
 step('the AI test without a purpose is refused', (await call('POST', '/my-setup/sequence/ai-test', 'bd1', { teach: {} })).code === 400);
 r = await call('PUT', '/my-setup/sequence', 'bd1', Object.assign({}, good, { mode: 'ai', teach: teachIn }));
-step('"AI writes each one" turns the AI first email ON, keeps the email as the backup, drops first-email versions', r.code === 200 && setting('u_bd1_ai_first') === 'on' && setting('u_bd1_tmpl_o1_body') === good.first.body && setting('u_bd1_tmpl_o1_v2_body') === '');
+// D-0195 (owner, 2 Nov 2026): "AI drafts it for me" — the AI helped write the TEMPLATE; it is what leads get, with its versions.
+const goodV = (good.first.versions || []).filter((v) => v && String(v.body || '').trim());
+step('"AI drafts it for me" saves the template as THE email and KEEPS its versions (no per-lead AI email any more)', r.code === 200 && setting('u_bd1_tmpl_o1_body') === good.first.body && (goodV.length ? setting('u_bd1_tmpl_o1_v2_body') === goodV[0].body : true), JSON.stringify({ v: goodV.length, v2: setting('u_bd1_tmpl_o1_v2_body') }));
 step('…and reads back as the AI choice', (await call('GET', '/my-setup/sequence', 'bd1')).out.mode === 'ai');
 r = await call('PUT', '/my-setup/sequence', 'bd1', good);
 step('"I write it" clears the answers, so no follow-up of theirs is AI-written any more', r.code === 200 && setting('u_bd1_ai_teach') === '' && !teachMod.followupFor(setting('u_bd1_ai_teach'), 1));
