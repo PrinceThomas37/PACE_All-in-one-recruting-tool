@@ -1278,3 +1278,5 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 - **3 Nov 2026 (R-349 Stage 1):** `GET /jobs/page` in `routes/jobs.js` (registered ABOVE `/jobs/:id`) over `services/lead-query.js`; scope first, filters after; page size = person's 10/20/50, else admin `leads_page_size_default`, else 20. Browser not wired yet. Proofs: `test/lead-query-smoke.mjs`, `test/jobs-page-route-smoke.mjs`.
 
 - **3 Nov 2026 (R-357):** `routes/mailbox-control.js` (mounted after `routes/deliverability.js`): `GET /admin/mailboxes/summary|search|:id/detail`, `POST /admin/mailboxes/:id/action` — admin only, `db.forRequest(req)` on every read/write (another company's mailbox is a 404). A mailbox's mail is matched by `emails.from_email` (escaped ILIKE), opens by `email_tracking.mailbox_email`.
+
+- **3 Nov 2026 (R-349 A/B):** `GET /jobs/page` (bookmark paging) and `GET /jobs/counts` in `routes/jobs.js` above `/jobs/:id`, glue in `services/lead-page.js`; the rules are SQL; until migration 073 is applied they answer from the in-memory list (`source: 'memory'`). Also `GET /mailbox/candidate-card` in `routes/mailbox.js` (R-365).

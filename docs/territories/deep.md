@@ -393,3 +393,5 @@ The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was 
 - 30 Oct: migration 069 APPLIED to the live DB (owner's go "Yes"), verified: `contact_labels` NOT NULL default '{}' on candidates and contacts.
 
 - Migration 070 (30 Oct, APPLIED live with the owner's go): `jobs.research_list` (research minus jd_raw), `posting_all_chars`, `posting_chars`, `posting_words` — GENERATED ALWAYS … STORED, so nothing writes them. Checked against `lead-posting.postingState` on 12 live rows: 0 mismatches. Why: the lead list pulled 12 MB of jd_raw per load (R-348).
+
+- **3 Nov 2026 (R-349 A):** migration `073_lead_list_in_database.sql` — `jobs.search_text` (kept by triggers on jobs / contacts / companies), 6 indexes for the lead list, functions `lead_where_sql`, `leads_page`, `leads_counts`, EXECUTE only for service_role. NOT applied to the live database (owner's go; a rolled-back dry run first). On a big live table create the indexes CONCURRENTLY first. Re-measure with `scripts/lead-list-bench/run.sh`.

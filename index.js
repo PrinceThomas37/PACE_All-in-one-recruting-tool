@@ -4103,7 +4103,7 @@ const routeCtx = {
   logActivity, INDUSTRIES, normInd,
   canTouchJob, isPermanentFollowupBlock, requireRole,
   addToSuppression, warmupLimit, loadSuppressedSet,
-  loadAllJobs, JOB_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
+  loadAllJobs, JOB_SELECT, JOB_LIST_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
   getSendWindowHours, getPersonSendWindow, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache, isSendAlive,
   pixelLimiter, openTracking,

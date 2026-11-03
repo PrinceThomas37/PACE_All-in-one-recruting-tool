@@ -512,3 +512,5 @@ Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's passwo
 - **2 Nov 2026 (D-0195):** `auth` runs each request inside `aiAccess.runAs(userId)`; `complete()`/`availability()` refuse (null / user_off) for a person whose AI is off. Mark any NEW AI button `data-ai="1"` so `body.ai-off` hides it.
 
 - **3 Nov 2026 (R-357 review):** `routes/mailbox-control.js` is admin-only and company-scoped (`mailbox-control-routes-smoke` pins 403, cross-company 404, and that every action is audited). Known and unchanged: `POST /admin/mailbox/:id/resume` (index.js) still has no same-company check.
+
+- **3 Nov 2026 (R-349 review):** who-may-see for the lead list is now written in SQL (`lead_where_sql`) AND checked again in `services/lead-page.js` (`canSeeLead` on every returned row); org / viewer / chain come ONLY from the session; the SQL equals `services/ownership.js` on a real Postgres (stranger gets nothing, other company's leads never returned, pool only for those who see it). The candidate card follows today's rule (shared pool of the company) — asked whether to narrow it.
