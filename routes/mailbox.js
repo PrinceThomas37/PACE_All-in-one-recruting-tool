@@ -30,6 +30,8 @@ const { mailboxConnections } = require('../mailbox-health');
 const { createMailboxSender, readAttachments, parseAddressField } = require('../services/mailbox-send');
 const recipientSuggest = require('../services/recipient-suggest');
 const { getSetting } = require('../config/settings');
+const alerts = require('../services/mailbox-alerts');          // R-359: is this mailbox locked?
+const mailboxControl = require('../services/mailbox-control');
 
 // The nav badge asks for an unread count on every render. That is one provider
 // call per mailbox per render, which is both slow and rude to the API — so the
@@ -172,8 +174,10 @@ module.exports = (ctx) => {
       const list = rows || [];
       const ids = list.map(m => m.id);
       const conns = await mailboxConnections(supabase, ids);
+      const locks = await alerts.blockedNotes(supabase, ids).catch(() => ({}));
       res.json(list.map(m => ({
         ...m,
+        blocked: !!locks[m.id], blocked_note: locks[m.id] ? mailboxControl.blockedSendSentence(locks[m.id]) : null,   // the composer says so before anyone writes (R-359)
         connection: conns[m.id] || { connected: false, status: 'none' },
         // Only a mailbox that is both switched on and holding a live token can
         // be opened; the UI uses this to decide between "open" and "reconnect".
@@ -236,6 +240,48 @@ module.exports = (ctx) => {
           owner: j.assigned_to_bd ? (names[j.assigned_to_bd] || '') : '', unassigned: !j.assigned_to_bd,
         })),
         more: Math.max(0, seen.length - 3),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── THE CANDIDATE BESIDE THEIR EMAIL (R-362, owner 3 Nov 2026: "do the same for candidates … a resume preview, contact number, email ID, small information") ──
+  // The same small card as the lead's, for an address PACE knows as a CANDIDATE: who they are, how to reach them, their skills, a short
+  // resume preview and the jobs they are in. VISIBILITY is the rule the app already has for opening a candidate (GET /candidates/:id): candidates are a
+  // shared pool of THIS company — another company's candidate and a deleted one are simply not there, and nothing found answers exactly like an address nobody
+  // knows ({ found:false }), so the card cannot be used to ask "is this person a candidate somewhere". Narrowing it to "my candidates" would be a rule
+  // change for the whole candidate area, not for this card. Literal path: above any `/mailbox/:mid/…`.
+  router.get('/mailbox/candidate-card', auth, async (req, res) => {
+    try {
+      const email = String(req.query.email || '').trim().toLowerCase();
+      if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email address is required' });
+      const scoped = db.forRequest(req);
+      const { data: found, error } = await scoped.from('candidates')
+        .select('id,full_name,first_name,last_name,email,phone,alt_phone,current_title,headline,current_employer,current_location,city,state,skills,tags,experience_years,work_authorization,availability,applicant_status,source,owner_id,resume_text,resume_filename')
+        .eq('email', email).is('deleted_at', null).order('created_at', { ascending: false }).limit(3);
+      if (error) throw error;
+      if (!found || !found.length) return res.json({ found: false });
+      const c = found[0];
+      const [ownerRes, docsRes, subsRes] = await Promise.all([
+        c.owner_id ? Promise.resolve(scoped.from('users').select('id,name').eq('id', c.owner_id).maybeSingle()).catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+        Promise.resolve(scoped.from('candidate_documents').select('id,filename,doc_type').eq('candidate_id', c.id).is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(3)).catch(() => ({ data: [] })),
+        Promise.resolve(scoped.from('submissions').select('id,stage,job_order_id,job_order:job_orders(id,job_title)').eq('candidate_id', c.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(4)).catch(() => ({ data: [] })),
+      ]);
+      const preview = String(c.resume_text || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+      const skills = [...String(c.skills || '').split(','), ...(Array.isArray(c.tags) ? c.tags : [])].map((x) => String(x).trim()).filter(Boolean);
+      res.json({
+        found: true,
+        candidate: {
+          id: c.id, name: c.full_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || email,
+          headline: c.current_title || c.headline || '', employer: c.current_employer || '',
+          location: c.current_location || [c.city, c.state].filter(Boolean).join(', '),
+          email: c.email || email, phone: c.phone || '', alt_phone: c.alt_phone || '',
+          skills: [...new Set(skills)].slice(0, 8), experience_years: c.experience_years == null ? null : Number(c.experience_years),
+          work_authorization: c.work_authorization || '', availability: c.availability || '', status: c.applicant_status || '', source: c.source || '',
+          owner: (ownerRes && ownerRes.data && ownerRes.data.name) || '',
+        },
+        resume: { preview, filename: c.resume_filename || '', files: ((docsRes && docsRes.data) || []).map((d) => ({ id: d.id, filename: d.filename || '', doc_type: d.doc_type || '' })) },
+        jobs: ((subsRes && subsRes.data) || []).map((x) => ({ id: x.job_order_id || (x.job_order && x.job_order.id) || null, title: (x.job_order && x.job_order.job_title) || 'Job', stage: x.stage || '' })),
+        more: Math.max(0, found.length - 1),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -602,6 +648,12 @@ module.exports = (ctx) => {
       if (error) return res.status(error.status).json(error.body);
       const refused = sender.check(kind, req.body);
       if (refused) return res.status(refused.status).json(refused.body);
+      // R-359 (owner 3 Nov 2026): a BLOCKED mailbox sends nothing — not outreach, not an email written one by one. (A Pause stops outreach only.)
+      // If the lock cannot be read the send is refused too: an admin's lock is never quietly skipped.
+      try {
+        const locks = await alerts.blockedNotes(supabase, [mailbox.id]);
+        if (locks[mailbox.id]) return res.status(409).json({ error: mailboxControl.blockedSendSentence(locks[mailbox.id]), code: 'mailbox_blocked' });
+      } catch (_) { return res.status(503).json({ error: 'Could not check whether this mailbox is locked. Try again in a moment.', code: 'lock_check_failed' }); }
       try {
         const r = await sender.send(mailbox, req.user.id, kind, req.params.id || null, req.body);
         recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on

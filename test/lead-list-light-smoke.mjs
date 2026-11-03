@@ -60,7 +60,8 @@ const { readdirSync } = await import('node:fs');
 for (const fn of readdirSync(new URL('../migrations/', import.meta.url))) {
   for (const m of readFileSync(new URL('../migrations/' + fn, import.meta.url), 'utf8').matchAll(/alter\s+table\s+(?:public\.)?jobs\s+add\s+column\s+(?:if\s+not\s+exists\s+)?(\w+)/gi)) added.add(m[1].toLowerCase());
 }
-const skip = new Set(['research', 'research_list', 'posting_all_chars', 'posting_chars', 'posting_words']);
+// search_text (migration 073) is the server's own search column — big, kept up to date by triggers, never drawn on any screen: it must NOT be in the list read.
+const skip = new Set(['research', 'research_list', 'posting_all_chars', 'posting_chars', 'posting_words', 'search_text']);
 const missingCols = [...added].filter((c) => !skip.has(c) && !list.has(c));
 step('every column ever added to leads is in the list read', missingCols.length === 0, missingCols.join(','));
 step('the list keeps the same people/company/contacts as the one-lead read', /JOB_SELECT\.slice\(JOB_SELECT\.indexOf\(', company:'\)\)/.test(idx));

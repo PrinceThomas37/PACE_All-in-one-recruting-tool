@@ -1,84 +1,192 @@
-// R-349 Stage 1 — GET /jobs/page, THE REAL ROUTE (routes/jobs.js mounted over an in-memory PostgREST).
-//   · WHO SEES WHAT is decided before any filter: a plain BD never gets a lead outside their reporting chain, even by asking for it
-//     with a filter, an assignee or a huge page; an admin sees the company; another company's lead is never in anyone's page.
-//   · the literal path is not swallowed by /jobs/:id (registration order — a dead route fails silently);
-//   · the page size: the person's own 10/20/50, else the ADMIN's default (app_settings), else 20 — never a number typed in the code;
-//   · "select all" ids cover every page; a team manager opens on "mine" with the mine/team counts.
+// R-349 A/B — GET /jobs/page and GET /jobs/counts, THE REAL ROUTES (routes/jobs.js + services/lead-page.js) over an in-memory PostgREST.
+// The SQL itself is proven on a real Postgres by lead-list-sql-smoke; THIS proves the wiring: what the route sends to the database and what it does with the answer.
+//   · the company, the viewer and the reporting chain come ONLY from the session — nothing in the query string can change them;
+//   · a row the database wrongly returned is dropped if the viewer may not see it (defence in depth);
+//   · a team manager opens on "mine"; page size = the person's 10/20/50, else the admin's default, else 20;
+//   · bookmarks: every lead once, in order; a made-up bookmark is a 400, not a silent first page;
+//   · until the migration is applied the SAME answer comes from the in-memory list (source: 'memory'); a real database error is a 500, never an empty list;
+//   · literal paths are not shadowed by /jobs/:id.
 // Usage: node test/jobs-page-route-smoke.mjs
 import http from 'node:http';
 import { createRequire } from 'node:module';
-import { createFakeDb, uid } from './helpers/fake-postgrest.mjs';
+import { createFakeDb } from './helpers/fake-postgrest.mjs';
 const require = createRequire(import.meta.url);
 const express = require('express');
 const { createDb } = require('../models');
+const own = require('../services/ownership'); const lq = require('../services/lead-query'); const lp = require('../services/lead-page');
 const results = [];
-const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };
+const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + String(d).slice(0, 260) : '')); };
 
-const ORG = 'org-a';
+const ORG = 'org-a', OTHER = 'org-b';
 const users = [
   { id: 'boss', org_id: ORG, manager_id: null }, { id: 'mgr', org_id: ORG, manager_id: 'boss' },
   { id: 'rep1', org_id: ORG, manager_id: 'mgr' }, { id: 'rep2', org_id: ORG, manager_id: 'mgr' }, { id: 'lone', org_id: ORG, manager_id: 'boss' },
 ];
 const owners = ['rep1', 'rep2', 'lone', 'mgr'];
+const uid = (n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');   // real lead ids are UUIDs, and the bookmark insists on it
+const POOL = uid(9001), FOREIGN = uid(9002);
 const jobs = [];
-for (let i = 0; i < 50; i++) {
-  jobs.push({ id: 'J' + String(i).padStart(2, '0'), org_id: ORG, position: 'Role ' + i, stage: i % 3 ? 'Assigned' : 'Connected', location: 'Austin',
-    company: { name: 'Co' + (i % 5), industry: 'Healthcare' }, contacts: [], created_by: owners[i % 4], assigned_to: owners[i % 4], assigned_to_bd: owners[i % 4], created_at: '2026-11-0' + (1 + (i % 3)) + 'T10:00:00Z' });
-}
-jobs.push({ id: 'POOL1', org_id: ORG, position: 'Pool', stage: 'Unassigned', company: { name: 'P' }, contacts: [], created_by: 'boss', assigned_to_bd: null, created_at: '2026-11-01T10:00:00Z' });
-const fake = createFakeDb({ tables: { users, app_settings: [], jobs: [] } });
-// the admin's own number, stored BEFORE the first read (settings are cached per process)
-fake.tables.app_settings.push({ key: 'sys_leads_page_size_default@' + ORG, value: '50' });
-const supabase = fake.supabase; const db = createDb(supabase);
+for (let i = 0; i < 50; i++) jobs.push({ id: uid(i), org_id: ORG, position: 'Role ' + i, stage: i % 3 ? 'Assigned' : 'Connected', location: 'Austin',
+  company: { name: 'Co' + (i % 5), industry: 'Healthcare' }, contacts: [], created_by: owners[i % 4], assigned_to: owners[i % 4], assigned_to_bd: owners[i % 4],
+  created_at: '2026-11-0' + (1 + (i % 3)) + 'T10:00:00.' + String(100 + i) + 'Z', deleted_at: null });
+jobs.push({ id: POOL, org_id: ORG, position: 'Pool', stage: 'Unassigned', company: { name: 'P' }, contacts: [], created_by: 'boss', assigned_to_bd: null, created_at: '2026-11-01T10:00:00.000Z', deleted_at: null });
+jobs.push({ id: FOREIGN, org_id: OTHER, position: 'Theirs', stage: 'Assigned', company: { name: 'F' }, contacts: [], created_by: 'lone', assigned_to_bd: 'lone', created_at: '2026-11-03T10:00:00.000Z', deleted_at: null });
+const raw = jobs.filter((j) => j.org_id === ORG);
 
+// A stand-in for the database function: the JavaScript reference. It records exactly what it was asked.
+const asked = [];
+const rpcs = {
+  leads_page: (a) => {
+    asked.push(a);
+    const scope = { all: a.p_all, ownerIds: a.p_owner_ids, seesPool: a.p_sees_pool, userId: a.p_viewer };
+    const scoped = own.scopeLeads(raw, scope);
+    const f = { search: a.p_search || '', industries: a.p_industries, whose: a.p_whose || '', assignee: a.p_assignee || '', dateRange: a.p_date_range || '', dateFrom: a.p_date_from || '', dateTo: a.p_date_to || '', stages: a.p_stages };
+    const out = lq.queryLeads(scoped, f, { userId: a.p_viewer, teamManager: a.p_team_manager, today: a.p_today, nowMs: Date.parse(a.p_now), page: 0, perPage: 10 });
+    const by = new Map(scoped.map((j) => [j.id, j]));
+    let list = out.ids.map((id) => ({ id, created_at: by.get(id).created_at })).sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : (x.id < y.id ? 1 : -1)));
+    if (a.p_after_created) list = list.filter((x) => x.created_at < a.p_after_created || (x.created_at === a.p_after_created && x.id < a.p_after_id));
+    if (leak.on) list.unshift({ id: uid(3), created_at: '2026-11-03T23:00:00.000Z' });        // the database "wrongly" returns someone else's lead
+    return list.slice(0, a.p_limit);
+  },
+  leads_counts: (a) => {
+    asked.push(a);
+    const scope = { all: a.p_all, ownerIds: a.p_owner_ids, seesPool: a.p_sees_pool, userId: a.p_viewer };
+    const out = lq.queryLeads(own.scopeLeads(raw, scope), { search: a.p_search || '', industries: a.p_industries, whose: a.p_whose || '', assignee: a.p_assignee || '', dateRange: a.p_date_range || '' }, { userId: a.p_viewer, teamManager: a.p_team_manager, today: a.p_today, nowMs: Date.parse(a.p_now), page: 0, perPage: 10 });
+    const rows = Object.entries(out.stageCounts).filter(([, n]) => n > 0).map(([k, n]) => ({ kind: 'strip', k, n }));
+    if (a.p_team_manager) rows.push({ kind: 'team', k: 'mine', n: out.team.mine }, { kind: 'team', k: 'team', n: out.team.team });
+    return rows;
+  },
+};
+const leak = { on: false };
+let dbError = null;
+const fake = createFakeDb({ tables: { users, jobs, app_settings: [] }, rpcs: { ...rpcs }, onQuery: (q) => (dbError && q.table === 'jobs' ? { data: null, error: { message: dbError } } : undefined) });
+// the settings are cached per process: the admin's number is stored BEFORE the first read
+fake.tables.app_settings.push({ key: 'sys_leads_page_size_default@' + ORG, value: '10' });
+const supabase = fake.supabase; const db = createDb(supabase);
 let current = { id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG };
 const app = express(); app.use(express.json());
-const auth = (req, res, next) => { req.user = current; req.orgId = ORG; next(); };
+const auth = (req, res, next) => { req.user = current; req.orgId = current.org_id; next(); };
 const hasRole = (req, ...r) => (req.user.roles || [req.user.role]).some((x) => r.includes(x));
 const ctx = {
-  supabase, db, auth, hasRole, today: () => '2026-11-03', canTouchJob: async () => true, logActivity: async () => {}, ownership: require('../services/ownership'),
-  orgIdFor: () => ORG, withOrg: (q) => q.eq('org_id', ORG), orgStamp: () => ({ org_id: ORG }), userOrgId: () => ORG, mailboxOrgId: () => ORG,
-  loadAllJobs: async () => jobs, JOB_SELECT: '*', getTimezoneFromLocation: () => null, persistLearnedSkills: () => {},
+  supabase, db, auth, hasRole, today: () => '2026-11-03', canTouchJob: async () => true, logActivity: async () => {}, ownership: own,
+  orgIdFor: (req) => req.orgId, withOrg: (q, req) => q.eq('org_id', req.orgId), orgStamp: (req) => ({ org_id: req.orgId }), userOrgId: () => ORG, mailboxOrgId: () => ORG,
+  loadAllJobs: async (org) => jobs.filter((j) => j.org_id === org), JOB_SELECT: '*', getTimezoneFromLocation: () => null, persistLearnedSkills: () => {},
 };
 app.use(require('../routes/jobs')(ctx));
 const srv = await new Promise((r) => { const s = http.createServer(app); s.listen(0, '127.0.0.1', () => r(s)); });
 const API = 'http://127.0.0.1:' + srv.address().port;
-const get = async (path) => { const r = await fetch(API + path); let b = null; try { b = await r.json(); } catch (_) {} return { status: r.status, body: b }; };
+const get = async (p) => { const r = await fetch(API + p); let b = null; try { b = await r.json(); } catch (_) {} return { status: r.status, body: b }; };
 const as = (u) => { current = u; };
+const allPages = async (qs, size = 'perPage=10') => { const ids = []; let after = ''; for (let g = 0; g < 50; g++) { const r = await get(`/jobs/page?${size}&${qs}${after ? '&after=' + after : ''}`); if (r.status !== 200) return { err: r }; ids.push(...r.body.rows.map((x) => x.id)); if (!r.body.next) break; after = r.body.next; } return { ids }; };
 
 try {
   as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
-  const all = await get('/jobs/page?perPage=50');
-  step('the literal /jobs/page is answered by its own handler (not shadowed by /jobs/:id)', all.status === 200 && Array.isArray(all.body.ids), String(all.status));
-  step('an admin sees the whole company: 51 leads, pool included', all.body.total === 51 && all.body.ids.includes('POOL1'), String(all.body.total));
+  const p1 = await get('/jobs/page?perPage=10');
+  step('the literal /jobs/page is answered by its own handler (not shadowed by /jobs/:id) and says where the answer came from', p1.status === 200 && Array.isArray(p1.body.rows) && p1.body.source === 'database', p1.status + ' ' + JSON.stringify(p1.body).slice(0, 100));
+  step('page 1 holds 10 leads and a bookmark for the next', p1.body.rows.length === 10 && typeof p1.body.next === 'string', String(p1.body.rows.length));
+  const walked = await allPages('');
+  step("walking the bookmarks returns EVERY lead of this company once (51), in newest-first order, and never the other company's", walked.ids.length === 51 && new Set(walked.ids).size === 51 && !walked.ids.includes(FOREIGN), String(walked.ids.length));
+  const sorted = raw.slice().sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : (x.id < y.id ? 1 : -1))).map((j) => j.id);
+  step('…in exactly the order the list is defined (created_at DESC, id DESC)', JSON.stringify(walked.ids) === JSON.stringify(sorted));
+  step('a row carries the lead\'s own fields (so the screen can draw it)', p1.body.rows[0].position && p1.body.rows[0].company);
 
+  // the session decides who is asking — nothing else
+  asked.length = 0;
+  await get('/jobs/page?perPage=10&org=org-b&p_org=org-b&owner_ids=lone&p_owner_ids=lone&viewer=lone&p_viewer=lone&all=true&p_all=true&sees_pool=true');
+  const a0 = asked[0];
+  step('the company and the viewer come from the session; a query string cannot change them', a0.p_org === ORG && a0.p_viewer === 'boss', JSON.stringify([a0.p_org, a0.p_viewer]));
   as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
-  const lone = await get('/jobs/page?perPage=50&assignee=rep1');
-  step('a plain BD asking for ANOTHER rep\'s leads gets nothing of theirs (scope is applied before the filter)', lone.status === 200 && lone.body.total === 0 && lone.body.ids.length === 0, JSON.stringify(lone.body.total));
-  const loneAll = await get('/jobs/page?perPage=50');
-  step('…and only their own leads otherwise', loneAll.body.ids.every((id) => jobs.find((j) => j.id === id).assigned_to_bd === 'lone') && loneAll.body.total > 0, String(loneAll.body.total));
-  step('a plain BD does not get the unassigned pool', !loneAll.body.ids.includes('POOL1'));
+  asked.length = 0;
+  const lone = await get('/jobs/page?perPage=50&p_all=true&all=true&p_sees_pool=true&sees_pool=1&owner_ids=rep1,rep2');
+  const a1 = asked[0];
+  step('a plain BD cannot ask to see everyone, the pool or another person\'s leads (scope is built from the session)', a1.p_all === false && a1.p_sees_pool === false && JSON.stringify(a1.p_owner_ids) === '["lone"]', JSON.stringify(a1.p_owner_ids));
+  step('…and only their own leads come back', lone.body.rows.length > 0 && lone.body.rows.every((j) => [j.assigned_to_bd, j.created_by].includes('lone')));
+  leak.on = true;
+  const leaked = await get('/jobs/page?perPage=50');
+  leak.on = false;
+  step('DEFENCE IN DEPTH: if the database ever returned someone else\'s lead, the route still drops it', !leaked.body.rows.some((j) => j.id === uid(3)) && leaked.body.rows.length === lone.body.rows.length, String(leaked.body.rows.length));
 
+  // a team manager
   as({ id: 'mgr', role: 'bd_lead', roles: ['bd_lead'], org_id: ORG });
-  const mgr = await get('/jobs/page?perPage=50');
-  step('a team manager opens on "mine" and is told the mine/team split', mgr.body.team.on === true && mgr.body.team.whose === 'mine' && mgr.body.team.mine > 0 && mgr.body.team.team > 0, JSON.stringify(mgr.body.team));
-  const team = await get('/jobs/page?perPage=50&whose=team');
-  step('…one click shows the team\'s (rep1 + rep2 only, never "lone")', team.body.total > 0 && team.body.ids.every((id) => ['rep1', 'rep2'].includes(jobs.find((j) => j.id === id).assigned_to_bd)));
-
+  asked.length = 0;
+  await get('/jobs/page?perPage=10');
+  step('a team manager is told to the database as a manager, with their reporting chain as scope', asked[0].p_team_manager === true && asked[0].p_owner_ids.includes('rep1') && asked[0].p_owner_ids.includes('mgr') && !asked[0].p_owner_ids.includes('lone'), JSON.stringify(asked[0].p_owner_ids));
+  as({ id: 'boss', role: 'admin', roles: ['admin', 'bd_lead'], org_id: ORG });
+  asked.length = 0; await get('/jobs/page?perPage=10');
+  step('an admin who also holds a lead role is NOT a "team manager" (they see the company, not just "my leads")', asked[0].p_team_manager === false && asked[0].p_all === true);
+  as({ id: 'mgr', role: 'bd_lead', roles: ['bd_lead', 'ra_lead'], org_id: ORG });
+  asked.length = 0; await get('/jobs/page?perPage=10');
+  step('an RA Lead who also manages people works the whole pool: not a "team manager" either', asked[0].p_team_manager === false && asked[0].p_sees_pool === true);
+  as({ id: 'mgr', role: 'bd_lead', roles: ['bd_lead'], org_id: ORG });
+  const cnt = await get('/jobs/counts');
+  step('the counts: stage numbers and the mine / team chips, from the database', cnt.status === 200 && cnt.body.source === 'database' && cnt.body.team.on === true && cnt.body.team.whose === 'mine' && cnt.body.team.mine > 0 && cnt.body.team.team > 0 && cnt.body.stripTotal > 0, JSON.stringify(cnt.body));
   as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
-  const p2 = await get('/jobs/page?perPage=20&page=2');
-  step('paging: page 3 of 20 holds the last 11 of 51; select-all ids still cover all 51', p2.body.rows.length === 11 && p2.body.ids.length === 51 && p2.body.pageCount === 3, `${p2.body.rows.length}/${p2.body.ids.length}/${p2.body.pageCount}`);
-  const stage = await get('/jobs/page?perPage=50&stages=Connected');
-  step('stage filter works through the query string; strip counts ignore the stage button', stage.body.total === jobs.filter((j) => j.stage === 'Connected').length && stage.body.stripTotal === 51);
+  const c2 = await get('/jobs/counts');
+  step('an admin\'s counts add up to the whole company (51)', c2.body.stripTotal === 51 && c2.body.team.on === false, JSON.stringify(c2.body));
+  step('counts: the literal path is not shadowed either', c2.status === 200 && !('id' in c2.body));
 
-  // page size: the person's choice, else the ADMIN's setting, else 20
-  // (settings are cached per process, so the admin's number is stored BEFORE the first read; "nothing stored → 20" is the schema default below)
-  step('the admin\'s default is used when the person has not chosen (50)', (await get('/jobs/page')).body.perPage === 50, String((await get('/jobs/page')).body.perPage));
-  step('a person\'s own choice (10) beats the admin\'s default', (await get('/jobs/page?perPage=10')).body.perPage === 10);
-  step('a made-up page size (7) is ignored, not obeyed', (await get('/jobs/page?perPage=7')).body.perPage === 50);
+  // "select all N matching": only the ids, the same rules, capped
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  const idsAll = await get('/jobs/ids');
+  step('"select all matching": the ids of every lead in the filter (51 for an admin), newest first, the other company\'s never', idsAll.status === 200 && idsAll.body.ids.length === 51 && idsAll.body.count === 51 && idsAll.body.capped === false && !idsAll.body.ids.includes(FOREIGN) && JSON.stringify(idsAll.body.ids) === JSON.stringify(sorted), JSON.stringify(idsAll.body).slice(0, 120));
+  const idsConn = await get('/jobs/ids?stages=Connected');
+  step('…the filter applies: only the Connected ones', idsConn.body.ids.length === jobs.filter((j) => j.org_id === ORG && j.stage === 'Connected').length && idsConn.body.ids.every((id) => raw.find((j) => j.id === id).stage === 'Connected'));
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  asked.length = 0;
+  const idsLone = await get('/jobs/ids?p_all=true&owner_ids=rep1');
+  step('a plain BD gets only their own ids and cannot widen it from the query string', idsLone.body.ids.length > 0 && idsLone.body.ids.every((id) => [raw.find((j) => j.id === id).assigned_to_bd, raw.find((j) => j.id === id).created_by].includes('lone')) && asked[0].p_all === false);
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  const realRpc = fake.supabase.rpc; fake.supabase.rpc = async (name, a) => (name === 'leads_page' ? { data: Array.from({ length: a.p_limit }, (_, i) => ({ id: uid(100000 + i), created_at: '2026-11-01T00:00:00.000Z' })), error: null } : realRpc.call(fake.supabase, name, a));
+  const capped = await get('/jobs/ids');
+  step('a huge filter is CUT at the cap and says so (the screen then says "the first N of many")', capped.body.capped === true && capped.body.count === capped.body.cap && capped.body.cap === 5000, JSON.stringify([capped.body.capped, capped.body.count, capped.body.cap]));
+  fake.supabase.rpc = realRpc;
 
-  const names = require('../config/settings.js').SETTINGS_SCHEMA.find((s) => s.key === 'leads_page_size_default');
-  step('the default page size is an admin setting in SETTINGS_SCHEMA (D-0123), not a number in the code', !!names && names.default === 20 && names.min === 10 && names.max === 50);
+  // whole leads by id (R-349 D): a lead opened from somewhere other than the list, a ticked lead on another page
+  const some = [uid(1), uid(2), uid(3)];
+  const byIds = await get('/jobs/by-ids?ids=' + some.join(','));
+  step('by-ids: the whole leads asked for come back (same shape as a page row, contacts included)', byIds.status === 200 && byIds.body.rows.length === 3 && byIds.body.rows.every((r) => some.includes(r.id) && Array.isArray(r.contacts)), JSON.stringify(byIds.body).slice(0, 160));
+  const foreignAsk = await get('/jobs/by-ids?ids=' + [uid(1), FOREIGN].join(','));
+  step("by-ids: another company's lead is never returned, even when asked for by id", foreignAsk.body.rows.length === 1 && foreignAsk.body.rows[0].id === uid(1));
+  const junk = await get('/jobs/by-ids?ids=' + ["x'; drop table jobs;--", 'not-a-uuid', uid(2)].join(','));
+  step('by-ids: anything that is not a lead id is ignored, not passed on', junk.status === 200 && junk.body.rows.length === 1 && junk.body.rows[0].id === uid(2));
+  step('by-ids: nothing asked → an empty list, not an error', (await get('/jobs/by-ids')).body.rows.length === 0);
+  const many = await get('/jobs/by-ids?ids=' + Array.from({ length: 150 }, (_, i) => uid(i % 50)).join(','));
+  step('by-ids: one request is capped (' + lp.BY_IDS_MAX + ' ids), so it cannot be unbounded', many.status === 200 && many.body.rows.length <= lp.BY_IDS_MAX);
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  const loneAsk = await get('/jobs/by-ids?ids=' + [uid(0), uid(1), uid(2), uid(3)].join(','));
+  step("by-ids: a BD gets only the lead they own (1 of the 4 asked for), never the others'", loneAsk.body.rows.length === 1 && loneAsk.body.rows[0].id === uid(2), JSON.stringify(loneAsk.body.rows.map((r) => r.assigned_to_bd)));
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+
+  // the two drop-downs: who owns how many / how many per industry (until migration 074 is applied they are counted from memory and say so)
+  const fa = await get('/jobs/facets');
+  step('facets: an admin gets every visible lead counted by owner (51 in all), industries counted, the other company never', fa.status === 200 && fa.body.total === 51 && fa.body.source === 'memory' && fa.body.owners.reduce((a, o) => a + o.count, 0) + fa.body.nobody === 51 && fa.body.industries.some((i) => i.key === 'healthcare' && i.count === 50), JSON.stringify(fa.body).slice(0, 220));
+  step('facets: nobody-owned leads are counted apart (the pool lead)', fa.body.nobody === 1);
+  as({ id: 'lone', role: 'bd', roles: ['bd'], org_id: ORG });
+  const faLone = await get('/jobs/facets');
+  step("facets: a BD's numbers cover only the leads they may see (12 own, not the company's 51)", faLone.status === 200 && faLone.body.total < 51 && faLone.body.owners.every((o) => o.id === 'lone'), JSON.stringify(faLone.body).slice(0, 200));
+  as({ id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG });
+  step('facets: the literal path is not shadowed by /jobs/:id', !('position' in fa.body));
+
+  // page size
+  step('page size: the admin\'s default (10) when the person has not chosen', (await get('/jobs/page')).body.perPage === 10);
+  step('…the person\'s own choice (20) beats it', (await get('/jobs/page?perPage=20')).body.perPage === 20);
+  step('…a made-up size (7) is ignored, not obeyed', (await get('/jobs/page?perPage=7')).body.perPage === 10);
+
+  // bookmarks
+  step('a made-up bookmark is a 400 with a sentence, not a silent first page', (await get('/jobs/page?after=not-a-bookmark')).status === 400 && /not valid/.test((await get('/jobs/page?after=zzz')).body.error));
+  step('a bookmark cannot smuggle SQL: it is decoded and validated', (await get('/jobs/page?after=' + Buffer.from(JSON.stringify({ c: "2026-11-03'; DROP TABLE jobs;--", i: uid(1) })).toString('base64url'))).status === 400);
+
+  // until the migration is applied
+  delete fake.rpcs; fake.supabase.rpc = async () => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.leads_page' } });
+  const mem = await allPages('');
+  step('until migration 073 is applied: the SAME 51 leads in the SAME order, from memory, and it says so', mem.ids && JSON.stringify(mem.ids) === JSON.stringify(sorted) && (await get('/jobs/page?perPage=10')).body.source === 'memory');
+  const memIds = await get('/jobs/ids');
+  step('…and the ids too (51, same order)', memIds.body.source === 'memory' && JSON.stringify(memIds.body.ids) === JSON.stringify(sorted));
+  const memCounts = await get('/jobs/counts');
+  step('…and the counts too (51)', memCounts.status === 200 && memCounts.body.source === 'memory' && memCounts.body.stripTotal === 51, JSON.stringify(memCounts.body));
+  fake.supabase.rpc = async () => ({ data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } });
+  const boom = await get('/jobs/page?perPage=10');
+  step('a REAL database error is a 500 with its reason — never an empty list that looks like "no leads"', boom.status === 500 && /timeout/.test(boom.body.error), JSON.stringify(boom.body));
 } catch (e) { step('route test ran without throwing', false, e.stack); }
 srv.close();
 const failed = results.filter((x) => !x).length;

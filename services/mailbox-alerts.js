@@ -60,6 +60,20 @@ async function forgetNote(supabase, mailboxId) {
   try { await supabase.from('app_settings').delete().eq('key', pauseNoteKey(mailboxId)); return true; } catch (_) { return false; }
 }
 
+/**
+ * Is this mailbox LOCKED by an admin (Block)? Returns the note ({kind:'blocked', by, at}) or null. A Block stops outreach AND writing emails one by one
+ * (owner 3 Nov 2026, R-359); a Pause stops outreach only. Reads the same note the Deliverability panel writes, so there is one answer.
+ * `ids` form: one query for many mailboxes → { [id]: note }.
+ */
+async function blockedNotes(supabase, ids) {
+  const list = (ids || []).filter(Boolean), out = {};
+  if (!list.length) return out;
+  const { data, error } = await supabase.from('app_settings').select('key,value').in('key', list.map(pauseNoteKey));
+  if (error) throw new Error(error.message);
+  (data || []).forEach((r) => { try { const n = JSON.parse(r.value); if (n && n.kind === 'blocked') out[r.key.replace('mailbox_pause_note_', '')] = n; } catch (_) { /* not a note */ } });
+  return out;
+}
+
 // The line under "Sending emails…" when an email is held back by a paused mailbox — it must say WHICH mailbox (owner, 27 Oct 2026).
 function heldByPauseLine(toEmail, mailboxAddress) {
   return `${toEmail} (held: mailbox ${mailboxAddress || 'unknown'} was auto-paused for a high bounce rate)`;
@@ -175,6 +189,6 @@ function askRefusal({ askerId, ownerId, isAdmin, chainIds, state }) {
 }
 
 module.exports = {
-  reasonSentence, alertFor, sortAlerts, pauseNote, pausedSentence, pauseNoteKey, heldByPauseLine, saveNote, forgetNote,
+  reasonSentence, alertFor, sortAlerts, pauseNote, pausedSentence, pauseNoteKey, blockedNotes, heldByPauseLine, saveNote, forgetNote,
   HIDE_DAYS, hideKey, fingerprintOf, pruneHidden, recordHide, isHidden, applyHidden, askRefusal,
 };

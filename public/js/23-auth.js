@@ -59,7 +59,7 @@ window.sessionExpired=function(){
   if(window.stopProgressPoll)stopProgressPoll();
   STATE.token=null;STATE.user=null;STATE.modal=null;STATE.loading=false;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');
-  STATE.jobs=[];STATE.contacts=[];
+  STATE.jobs=[];STATE.contacts=[];if(window.leadsStore)leadsStore.reset();
   STATE.loginErr=null;STATE.loginTab='login';
   STATE.loginNotice='Your session expired. Sign in again and PACE will take you back to where you were.';
   STATE.page='login';
@@ -91,5 +91,5 @@ window.doLogout=function(){
   if(window.leadsNote)leadsNote(null);STATE.jobsLoading=false;
   STATE.loading=false;STATE.user=null;STATE.token=null;STATE.loginNotice=null;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');sessionStorage.removeItem('fg_resume');
-  STATE.jobs=[];STATE.contacts=[];STATE.page='login';render();
+  STATE.jobs=[];STATE.contacts=[];if(window.leadsStore)leadsStore.reset();STATE.page='login';render();
 };

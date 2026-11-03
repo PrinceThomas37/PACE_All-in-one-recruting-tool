@@ -393,3 +393,7 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 - **3 Nov 2026 (D-0201):** Pause = OUTREACH only. `user_emails.auto_paused_at` is read ONLY by the outreach engines (lead send loop + workflows in `index.js`, `routes/recruiting/outreach.js`, `routes/candidate-outreach.js`); never by the inbox, one-off sends or replies — `test/mailbox-control-smoke.mjs` pins the list of files that may read it. Admin Pause/Block store `auto_paused_at` + a note (`kind: manual|blocked`, `services/mailbox-control.js`); sentences say "Outreach … stopped; emails written one by one and replies still go".
 
 - **3 Nov 2026 (R-340):** `routes/outreach-generator.js` creates its lead with `assigned_by` = the sender (nobody else handed it over). No send-path change.
+
+- 3 Nov 2026 (R-358): the old Manager Users delete route refuses a mailbox with mail on record (409 + Deactivate); count shared via services/mailbox-delete.js with the Deliverability panel.
+
+- 3 Nov 2026 (R-359): Block now also stops emails written one by one (inbox send/reply/forward refuse 409; services/mailbox-alerts.js blockedNotes); Pause stays outreach-only.

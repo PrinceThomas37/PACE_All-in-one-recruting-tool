@@ -423,16 +423,39 @@
   function leadCardFetch(x){
     var em=cardParty(x); if(!em||_lc2[em]) return;
     var link=(M().crm||{})[em];
-    if(!link||link.type!=='contact') return;                  // PACE does not know this address as a lead's contact: nothing to ask
+    if(!link||(link.type!=='contact'&&link.type!=='candidate')) return;   // PACE does not know this address as a lead's contact or a candidate: nothing to ask
+    var kind=link.type==='candidate'?'candidate':'lead';
     _lc2[em]={ state:'loading' };
-    apiGet('/mailbox/lead-card?email='+encodeURIComponent(em)).then(function(d){
-      _lc2[em]=(d&&d.found)?{ state:'card', card:d }:{ state:'none' };
+    apiGet('/mailbox/'+(kind==='candidate'?'candidate-card':'lead-card')+'?email='+encodeURIComponent(em)).then(function(d){
+      _lc2[em]=(d&&d.found)?{ state:'card', card:d, kind:kind }:{ state:'none' };
       if(M().message&&cardParty(M().message)===em) paint();
     }).catch(function(){ _lc2[em]={ state:'none' }; });
   }
   window.mbLeadCardOpen=function(id){ if(typeof openJob==='function') openJob(id); };
+  window.mbCandidateCardOpen=function(id){ if(typeof bdOpenCandidate==='function') bdOpenCandidate(id); };
+  // The candidate's card (R-362): who, how to reach them, skills, a short resume preview, the jobs they are in — and a way into the whole record.
+  function candidateCardHtml(d){
+    var c=d.candidate||{}, r=d.resume||{};
+    var sub=[c.headline, c.employer, c.location].filter(Boolean).map(esc).join(' · ');
+    var reach=[c.email?'<div class="fs-12 mb-lc-line">'+esc(c.email)+'</div>':'', c.phone?'<div class="fs-12 mb-lc-line">'+esc(c.phone)+(c.alt_phone?' · '+esc(c.alt_phone):'')+'</div>':''].join('');
+    var skills=(c.skills||[]).map(function(s){ return '<span class="pill mute">'+esc(s)+'</span>'; }).join(' ');
+    var facts=[c.status, c.experience_years!=null?c.experience_years+' yrs':'', c.work_authorization, c.availability, c.owner?'Owner: '+c.owner:''].filter(Boolean).map(esc).join(' · ');
+    var files=(r.files||[]).map(function(f){ return esc(f.filename||f.doc_type||'file'); }).join(', ');
+    var resume=(r.preview||files)?'<details class="mb-lc-resume"><summary class="fs-12">Resume'+(files?' · '+files:'')+'</summary>'+(r.preview?'<div class="fs-12 mb-lc-pre">'+esc(r.preview)+(r.preview.length>=600?'…':'')+'</div>':'<div class="fs-12 c-text3">No text to preview.</div>')+'</details>':'';
+    var jobs=(d.jobs||[]).map(function(j){ return '<div class="mb-lc-lead"><span class="mb-lc-jobname">'+esc(j.title||'Job')+'</span>'+(j.stage?' <span class="pill mute">'+esc(j.stage)+'</span>':'')+'</div>'; }).join('');
+    return '<aside class="mb-leadcard" aria-label="Candidate details">'+
+      '<div class="mb-lc-k fs-11 c-text3">CANDIDATE IN PACE</div>'+
+      '<div class="mb-lc-name">'+esc(c.name||'')+'</div>'+
+      (sub?'<div class="fs-12 c-text3">'+sub+'</div>':'')+reach+
+      (skills?'<div class="mb-lc-skills">'+skills+'</div>':'')+
+      (facts?'<div class="fs-12 c-text3">'+facts+'</div>':'')+resume+jobs+
+      (d.more?'<div class="fs-12 c-text3">+ '+d.more+' more record'+(d.more===1?'':'s')+' with this address</div>':'')+
+      '<a href="#" class="mb-lc-job fs-12" onclick="event.preventDefault();mbCandidateCardOpen(\''+escAttr(c.id)+'\')">Open candidate</a>'+
+    '</aside>';
+  }
   function leadCardHtml(x){
     var e=_lc2[cardParty(x)]; if(!e||e.state!=='card') return '';
+    if(e.kind==='candidate') return candidateCardHtml(e.card);
     var d=e.card, c=d.contact||{}, co=d.company||{};
     var sub=[c.designation, co.name].filter(Boolean).map(esc).join(' · ');
     var leads=(d.leads||[]).map(function(l){
@@ -1100,6 +1123,8 @@
   }
   window.mbUndoButton=undoButton;
 
+  // R-359: a BLOCKED mailbox sends nothing, not even one email written by hand — said before the send, the server says it again.
+  function mbBlockedSentence(acct){ var a=(M().accounts||[]).filter(function(x){return x.id===acct;})[0]; return a&&a.blocked?(a.blocked_note||'This mailbox is blocked by an admin. Nothing can be sent from it.'):''; }
   window.mbSendComposer=function(){
     mbChipFlush();
     var m=M(); var c=m.composer; if(!c||!c.msgId||c.sending)return;
@@ -1109,6 +1134,7 @@
       var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value;
     });
     if(c.mode!=='forward' && mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
+    var _bl=mbBlockedSentence(c.acct); if(_bl){ showToast(_bl,'error'); return; }
     if(c.mode==='forward' && !String(c.to||'').trim()){ showToast('Who are you forwarding this to?','warning'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){
@@ -1661,6 +1687,7 @@
     });
     if(!String(c.to||'').trim()){ showToast('Who is this going to?','warning'); return; }
     if(mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
+    var _bl2=mbBlockedSentence(c.acct||m.activeId); if(_bl2){ showToast(_bl2,'error'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){ showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return; }
     var sendBody={
@@ -2467,7 +2494,7 @@
     if(!card) return renderHeadMain(x,threadLen);
     var open=!!M().leadCardOpen;
     return '<div class="mb-head-row"><div class="mb-head-main">'+renderHeadMain(x,threadLen)+'</div>'+
-      '<div class="mb-lc-wrap"><button type="button" class="btn btn-sm btn-outline mb-lc-btn" aria-expanded="'+open+'" onclick="mbToggleLeadCard()">Lead in PACE '+(open?'▴':'▾')+'</button>'+
+      '<div class="mb-lc-wrap"><button type="button" class="btn btn-sm btn-outline mb-lc-btn" aria-expanded="'+open+'" onclick="mbToggleLeadCard()">'+((_lc2[cardParty(x)]||{}).kind==='candidate'?'Candidate':'Lead')+' in PACE '+(open?'▴':'▾')+'</button>'+
       (open?card:'')+'</div></div>';
   }
   window.mbToggleLeadCard=function(){ var m=M(); m.leadCardOpen=!m.leadCardOpen; paint(); };

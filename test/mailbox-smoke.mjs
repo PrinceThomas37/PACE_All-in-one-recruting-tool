@@ -355,11 +355,13 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   const gmailSent = [];
   let failLabelling = false;
   const RAW_SIGNATURE = '<div><b>{{sender}}</b><br><a href="mailto:{{senderemail}}">{{senderemail}}</a></div>';
+  let blockedFor = null, lockReadFails = false;   // R-359: which mailbox an admin has BLOCKED (the pause note kind 'blocked'), and a failing read of that note
   function fakeSupabase() {
     function builder(table) {
       const filters = {};
+      let inList = null;
       const chain = {
-        select: () => chain, order: () => chain, in: () => chain, is: () => chain, limit: () => chain,
+        select: () => chain, order: () => chain, in: (c, list) => { inList = { c, list }; return chain; }, is: () => chain, limit: () => chain,
         eq: (c, v) => { filters[c] = v; return chain; },
         maybeSingle: async () => {
           if (table === 'user_emails') return { data: MAILBOXES[filters.id] || null, error: null };
@@ -369,7 +371,15 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
           return { data: null, error: null };
         },
         single: async () => chain.maybeSingle(),
-        then: (res) => Promise.resolve({ data: [], error: null }).then(res),
+        then: (res) => {
+          if (table === 'app_settings' && inList) {
+            if (lockReadFails) return Promise.resolve({ data: null, error: { message: 'timeout' } }).then(res);
+            const key = blockedFor && 'mailbox_pause_note_' + blockedFor;
+            if (key && inList.list.includes(key)) return Promise.resolve({ data: [{ key, value: JSON.stringify({ kind: 'blocked', by: 'Prince', at: '2026-11-03T10:00:00Z' }) }], error: null }).then(res);
+          }
+          if (table === 'user_emails' && filters.user_id) return Promise.resolve({ data: Object.values(MAILBOXES).filter(m => m.user_id === filters.user_id), error: null }).then(res);
+          return Promise.resolve({ data: [], error: null }).then(res);
+        },
       };
       return chain;
     }
@@ -572,6 +582,26 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   graphSent.length = 0;
   await call('POST', '/mailbox/mb-mine/messages/x/forward', { to: 'colleague@pace.io', body: 'FYI', label_ids: ['Forwarded'] });
   ok('Outlook forward: labels become categories too', graphSent.some(c => c.method === 'PATCH' && c.body && JSON.stringify(c.body.categories) === '["Forwarded"]'));
+  const callJ = async (m, p, b) => { const x = await call(m, p, b); let body = null; try { body = await x.json(); } catch (_) { /* none */ } return { status: x.status, body }; };
+  // ── R-359 (owner 3 Nov 2026): a BLOCKED mailbox sends nothing, not even an email written one by one ──
+  graphSent.length = 0; blockedFor = 'mb-mine';
+  for (const [what, method, p, b] of [['a new email', 'POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hi' }], ['a reply', 'POST', '/mailbox/mb-mine/messages/x/reply', { body: 'hi' }], ['a forward', 'POST', '/mailbox/mb-mine/messages/x/forward', { to: 'c@d.test', body: 'hi' }]]) {
+    r = await callJ(method, p, b);
+    ok('a BLOCKED mailbox refuses ' + what + ' (409, and the sentence names who and when)', r.status === 409 && r.body && r.body.code === 'mailbox_blocked' && /blocked by Prince on 2026-11-03/.test(r.body.error), JSON.stringify(r.body));
+  }
+  ok('…and nothing reached the mail provider', graphSent.length === 0);
+  r = await callJ('GET', '/mailbox/accounts');
+  ok('the account list says which mailbox is blocked, so the composer can say so first', Array.isArray(r.body) && r.body.find(a => a.id === 'mb-mine').blocked === true && r.body.find(a => a.id === 'mb-gmail').blocked === false && /one by one/.test(r.body.find(a => a.id === 'mb-mine').blocked_note || ''));
+  blockedFor = 'mb-gmail'; graphSent.length = 0;
+  r = await callJ('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hi' });
+  ok("another mailbox's lock does not stop this one", r.status === 200 && graphSent.some(c => c.path === 'sendNew'), String(r.status));
+  blockedFor = null; lockReadFails = true; graphSent.length = 0;
+  r = await callJ('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hi' });
+  ok('if the lock cannot be read the send is refused (503), never quietly allowed', r.status === 503 && r.body.code === 'lock_check_failed' && graphSent.length === 0, JSON.stringify(r.body));
+  lockReadFails = false; graphSent.length = 0;
+  r = await callJ('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hi' });
+  ok('unblocked, it sends again', r.status === 200 && graphSent.some(c => c.path === 'sendNew'), String(r.status));
+  graphSent.length = 0;
   graphSent.length = 0;
   await call('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hello', label_ids: ['Prospects'] });
   const sn = graphSent.find(c => c.path === 'sendNew');

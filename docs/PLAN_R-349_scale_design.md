@@ -33,3 +33,23 @@ Old, unreplied leads leave the working list on the 90-day rule into a searchable
 - A count that looks right and is wrong is worse than a slow screen — hence the side-by-side proofs.
 - The SQL scope rule is the dangerous part (another person's leads): `rampart` reviews it; a test seeds people with no visibility and asserts they get nothing.
 - Migration 072 builds indexes on a live table: small today (3k rows), so instant; the same migration on 700k rows would need `CREATE INDEX CONCURRENTLY` — write it that way now.
+
+
+## BUILT AND MEASURED (3 Nov 2026, night) — A and B, server side
+Real Postgres 16, **700,000 synthetic leads** (`scripts/lead-list-bench/run.sh` re-runs it; ~1 GB, ~40 s to load). One page / one set of numbers, best of 3, with the machine also busy running the test suite:
+
+| Case | Time |
+|---|---|
+| Admin, no filter | 5–9 ms |
+| A BD's own leads | 12–36 ms |
+| Manager with 20 / 100 reports | 8–10 ms |
+| Search, common word ('registered', ⅙ of all leads) | 4–5 ms |
+| Search, rare word | 9–16 ms (**was 11.8 s** with per-row matching) |
+| Admin, deep page (180 days back) | 5 ms (**was 0.7–0.85 s**) |
+| Created this week / custom dates | 5 ms (**was 0.2–0.27 s** until the date test became a range) |
+| Manager, team + email search | 40–50 ms |
+| Counts: admin (700k) / one BD / manager (100 reports) | 130–160 ms / 25–35 ms / 280–400 ms |
+
+**Known limit, said plainly:** a filter COMBINATION that matches nothing at all over a very large scope (e.g. a 100-report manager × stage × a common word × "team") can take 2–4 s at 700,000 leads, because the database proves "nothing matches" by walking the list. Ordinary typos take the fast trigram path (5 ms). Step E (old leads leave the working list) shrinks the walk. Counts for the whole company grow with the table (≈1.5 s at 7 million): that is when the running-totals table (B2) is built, not before.
+
+What was built: `migrations/073_lead_list_in_database.sql` (search column kept by triggers, 6 indexes, `lead_where_sql` / `leads_page` / `leads_counts`), `services/lead-page.js`, `GET /jobs/page` (bookmark paging) and `GET /jobs/counts`, `test/lead-list-sql-smoke.mjs` (real Postgres; the SQL equals the JavaScript reference on 130 viewer × filter cases + paging + counts + search + triggers), `test/jobs-page-route-smoke.mjs`. **Not wired to any screen yet (C), nothing applied to the live database (owner's go).**

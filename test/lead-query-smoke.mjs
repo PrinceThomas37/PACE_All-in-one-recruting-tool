@@ -55,13 +55,13 @@ const filters = [
 ];
 
 // the old block begins "var u=STATE.user; var jobs=getMyJobs(u);" — give it a getMyJobs through STATE.jobs
-const oracle2 = new Function('STATE', 'jobContacts', 'leadIndustryOf', 'userHasAnyRole', 'leadsIsTeamManager', 'todayIST', 'Date', 'getMyJobs',
+const oracle2 = new Function('STATE', 'jobContacts', 'leadIndustryOf', 'userHasAnyRole', 'leadsIsTeamManager', 'todayIST', 'Date', 'getMyJobs', 'window',
   body + '\nreturn {jobs: jobs, stripBase: stripBase, mineCount: mineCount, teamCount: teamCount};');
 function runOld(v, f) {
   const STATE = { user: v.user, jobs: norm, contacts, jobsFilter: Object.assign({ search: '', stages: [], industries: [], assignee: '', dateRange: 'all', dateFrom: '', dateTo: '' }, f) };
   const jobContacts = (id) => contacts.filter((c) => c.job_id === id);
   const leadIndustryOf = (j) => String((j && (j.industry || j.company_ind)) || '').trim();
-  return oracle2(STATE, jobContacts, leadIndustryOf, () => false, () => v.teamManager, () => TODAY, FixedDate, () => norm.slice());
+  return oracle2(STATE, jobContacts, leadIndustryOf, () => false, () => v.teamManager, () => TODAY, FixedDate, () => norm.slice(), {});   // window: {} — no leadsStore, so the block runs the browser's own finding, as it always did
 }
 
 let compared = 0, bad = [];

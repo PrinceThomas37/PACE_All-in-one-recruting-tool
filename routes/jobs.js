@@ -162,29 +162,72 @@ router.get('/jobs', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// R-349 Stage 1: the lead list ASKED OF THE SERVER instead of held whole by the browser. Same scope rule as GET /jobs (narrowed FIRST by
-// own.scopeLeads), then the Leads tab's own finding (services/lead-query.js, a port of renderJobs). Literal path: it stays ABOVE
-// /jobs/:id (a literal registered after a :param route is dead).
+// R-349 A/B: the lead list asked of the DATABASE — one page, and the numbers, without loading the leads. Literal paths: they stay ABOVE /jobs/:id
+// (a literal registered after a :param route is dead). The rules are SQL (migrations/073_lead_list_in_database.sql: leads_page, leads_counts), proven equal
+// to services/lead-query.js on a real Postgres (test/lead-list-sql-smoke.mjs). WHO MAY SEE a lead is decided in SQL, from the caller's scope built here
+// from the session — never from anything in the request: the company, the viewer and their reporting chain cannot be asked for.
+// Until migration 073 is applied the same answer is built from the in-memory list (`source: 'memory'`) — slower, never different.
 const leadQuery = require('../services/lead-query');
-const csv = (v) => String(v == null ? '' : v).split(',').map((x) => x.trim()).filter(Boolean);
+const leadPageRoute = require('../services/lead-page');
 router.get('/jobs/page', auth, async (req, res) => {
   try {
     const org = orgIdFor(req);
-    const all = await loadAllJobs(org);
     const scope = await scopeFor(req);
-    const scoped = own.scopeLeads(all, scope);
-    const q = req.query || {};
-    const roles = (req.user.roles && req.user.roles.length ? req.user.roles : [req.user.role]).filter(Boolean);
-    const manager = !hasRole(req, 'admin') && !roles.includes('ra_lead') &&
-      (roles.some((r) => ['bd_lead', 'director', 'associate_director'].includes(r)) || (scope.ownerIds || []).length > 1);
+    const f = leadPageRoute.filtersFrom(req.query || {});
+    const manager = leadPageRoute.isTeamManager({ isAdmin: hasRole(req, 'admin'), roles: req.user.roles && req.user.roles.length ? req.user.roles : [req.user.role], scope });
     const dflt = Number(await getSetting(supabase, 'leads_page_size_default', org)) || 20;
-    const asked = Number(q.perPage);
-    const out = leadQuery.queryLeads(scoped, {
-      search: q.search, industries: csv(q.industries), whose: q.whose, assignee: q.assignee,
-      dateRange: q.dateRange, dateFrom: q.dateFrom, dateTo: q.dateTo, stages: csv(q.stages),
-    }, {
-      userId: req.user.id, teamManager: manager, today: /^\d{4}-\d{2}-\d{2}$/.test(String(q.today || '')) ? q.today : new Date().toISOString().slice(0, 10),
-      nowMs: Date.now(), page: Number(q.page) || 0, perPage: leadQuery.PAGE_SIZES.includes(asked) ? asked : (leadQuery.PAGE_SIZES.includes(dflt) ? dflt : 20),
+    const perPage = leadPageRoute.pageSize((req.query || {}).perPage, dflt);
+    const cursor = leadPageRoute.decodeCursor((req.query || {}).after);
+    if (cursor === false) return res.status(400).json({ error: 'That page marker is not valid. Start again from the top.' });
+    const out = await leadPageRoute.fetchPage({
+      supabase, scoped: (q) => withOrg(q, req), listSelect: ctx.JOB_LIST_SELECT || JOB_SELECT, org, scope, manager, viewerId: req.user.id, filters: f, perPage, cursor,
+      today: leadPageRoute.dayOr((req.query || {}).today), now: new Date(), loadAllJobs,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// "Select all N matching" (owner 3 Nov: select-all means ALL matching leads, across every page). The browser no longer holds every lead, so it asks for the ids
+// of the leads that match the filter — the same rules as the page, only the ids, capped (a technical guard so one request cannot be unbounded; the answer says
+// whether the cap was hit, and a bulk action says how many it will touch before it does anything).
+router.get('/jobs/ids', auth, async (req, res) => {
+  try {
+    const org = orgIdFor(req);
+    const scope = await scopeFor(req);
+    const f = leadPageRoute.filtersFrom(req.query || {});
+    const manager = leadPageRoute.isTeamManager({ isAdmin: hasRole(req, 'admin'), roles: req.user.roles && req.user.roles.length ? req.user.roles : [req.user.role], scope });
+    const out = await leadPageRoute.fetchIds({
+      supabase, org, scope, manager, viewerId: req.user.id, filters: f, today: leadPageRoute.dayOr((req.query || {}).today), now: new Date(), loadAllJobs,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.get('/jobs/facets', auth, async (req, res) => {
+  try {
+    const out = await leadPageRoute.fetchFacets({ supabase, org: orgIdFor(req), scope: await scopeFor(req), viewerId: req.user.id, loadAllJobs });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Whole leads by id (R-349 D): a lead opened from the inbox or a reminder, or a ticked lead on another page, is not on the page the browser holds.
+router.get('/jobs/by-ids', auth, async (req, res) => {
+  try {
+    const out = await leadPageRoute.fetchByIds({
+      supabase, scoped: (q) => withOrg(q, req), listSelect: ctx.JOB_LIST_SELECT || JOB_SELECT, scope: await scopeFor(req), ids: (req.query || {}).ids,
+    });
+    res.set('Cache-Control', 'private, no-store');
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.get('/jobs/counts', auth, async (req, res) => {
+  try {
+    const org = orgIdFor(req);
+    const scope = await scopeFor(req);
+    const manager = leadPageRoute.isTeamManager({ isAdmin: hasRole(req, 'admin'), roles: req.user.roles && req.user.roles.length ? req.user.roles : [req.user.role], scope });
+    const out = await leadPageRoute.fetchCounts({
+      supabase, org, scope, manager, viewerId: req.user.id, filters: leadPageRoute.filtersFrom(req.query || {}),
+      today: leadPageRoute.dayOr((req.query || {}).today), now: new Date(), loadAllJobs,
     });
     res.set('Cache-Control', 'private, no-store');
     res.json(out);

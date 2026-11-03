@@ -77,7 +77,7 @@ function noteFor(action, byName, nowIso) {
 function day(iso) { const d = new Date(iso); return isNaN(d) ? '' : d.toISOString().slice(0, 10); }
 /** What to tell the person about a paused / blocked mailbox. Never invents numbers it does not have. */
 function noteSentence(state, note) {
-  if (state === 'blocked') return `Blocked by ${(note && note.by) || 'an admin'}${note && note.at ? ' on ' + day(note.at) : ''}. Outreach from it is stopped and it is out of warm-up until an admin unblocks it. Emails written one by one and replies still go.`;
+  if (state === 'blocked') return `Blocked by ${(note && note.by) || 'an admin'}${note && note.at ? ' on ' + day(note.at) : ''}. Nothing can be sent from it, outreach and emails written one by one alike, and it is out of warm-up until an admin unblocks it.`;
   if (state === 'paused') return `Paused by ${(note && note.by) || 'an admin'}${note && note.at ? ' on ' + day(note.at) : ''}. Outreach from it is stopped until it is started. Emails written one by one and replies still go.`;
   return null;
 }
@@ -146,7 +146,12 @@ function statsOf(o, bounceKind) {
   };
 }
 
-/** One sentence that says what Pause and Block do — shown on the card, so nobody has to guess (owner, 3 Nov 2026). */
-const SCOPE_NOTE = 'Pause and Block stop OUTREACH from this mailbox (sequences, bulk sends, candidate outreach) and its warm-up. The person can still write emails one by one, reply and hold conversations.';
+/** What to tell someone who tries to write an email one by one from a BLOCKED mailbox (owner 3 Nov 2026: Block stops those too). */
+function blockedSendSentence(note) {
+  return `This mailbox is blocked${note && note.by ? ' by ' + note.by : ''}${note && note.at ? ' on ' + day(note.at) : ''}. Nothing can be sent from it, including emails written one by one, until an admin unblocks it.`;
+}
 
-module.exports = { SCOPE_NOTE, STATES, STATE_LABEL, ACTIONS, LABEL, stateOf, actionsFor, check, noteFor, noteSentence, deleteCheck, healthOf, statsOf, pct };
+/** One sentence that says what Pause and Block do — shown on the card, so nobody has to guess (owner, 3 Nov 2026). */
+const SCOPE_NOTE = 'Pause stops OUTREACH from this mailbox (sequences, bulk sends, candidate outreach) and its warm-up; the person can still write emails one by one, reply and hold conversations. Block stops all of that AND every email sent from it, one by one included, until an admin unblocks it.';
+
+module.exports = { blockedSendSentence, SCOPE_NOTE, STATES, STATE_LABEL, ACTIONS, LABEL, stateOf, actionsFor, check, noteFor, noteSentence, deleteCheck, healthOf, statsOf, pct };

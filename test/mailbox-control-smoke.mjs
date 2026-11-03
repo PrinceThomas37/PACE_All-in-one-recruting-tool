@@ -46,7 +46,10 @@ ok('a block sentence names who and when', /Blocked by Prince on 2026-11-03/.test
 // OWNER, 3 Nov 2026: "Pause means outreach is paused, not individual emailing or conversations."
 const sayOutreach = (t) => /[Oo]utreach/.test(t) && /one by one/.test(t) && /replies still go/.test(t) && !/[Nn]othing (sends|will send|can send)/.test(t);
 ok('the pause sentence says OUTREACH stops and one-by-one emails and replies still go', sayOutreach(mc.noteSentence('paused', { kind: 'manual', by: 'P', at: '2026-11-03T10:00:00Z' })), mc.noteSentence('paused', { kind: 'manual' }));
-ok('…and so does the block sentence', sayOutreach(mc.noteSentence('blocked', { kind: 'blocked', by: 'P', at: '2026-11-03T10:00:00Z' })));
+// OWNER, 3 Nov 2026 (R-359): "Should Block also stop one-by-one sends? — yes." A block is a lock on EVERYTHING sent from the mailbox.
+const blockS = mc.noteSentence('blocked', { kind: 'blocked', by: 'P', at: '2026-11-03T10:00:00Z' });
+ok('the block sentence says NOTHING can be sent, one by one included (Pause is the outreach-only one)', /Nothing can be sent/.test(blockS) && /one by one/.test(blockS) && !/replies still go/.test(blockS), blockS);
+ok('the refusal a blocked mailbox gives a person who tries to write from it names who and when', /blocked by P on 2026-11-03/.test(mc.blockedSendSentence({ kind: 'blocked', by: 'P', at: '2026-11-03T10:00:00Z' })) && /one by one/.test(mc.blockedSendSentence({})));
 ok('…and PACE\'s own bounce pause', sayOutreach(alerts.pausedSentence({ bounces: 3, sent: 20, pct: 15 })), alerts.pausedSentence({ bounces: 3, sent: 20, pct: 15 }));
 ok('the health tip for a paused mailbox says the same', sayOutreach(mc.healthOf({ state: 'paused', connection: { status: 'ok' }, sent: 5 }).tips.join(' ')));
 ok('one sentence on the card says what Pause and Block do', /OUTREACH/.test(mc.SCOPE_NOTE) && /one by one/.test(mc.SCOPE_NOTE) && /reply/.test(mc.SCOPE_NOTE));
