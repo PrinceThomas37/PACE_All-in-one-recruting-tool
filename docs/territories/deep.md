@@ -396,3 +396,5 @@ The owner ran `067_scheduled_sends.sql` in the SQL editor (the tool's apply was 
 
 - **3 Nov 2026 (R-349 A):** migration `073_lead_list_in_database.sql` — `jobs.search_text` (kept by triggers on jobs / contacts / companies), 6 indexes for the lead list, functions `lead_where_sql`, `leads_page`, `leads_counts`, EXECUTE only for service_role. NOT applied to the live database (owner's go; a rolled-back dry run first). On a big live table create the indexes CONCURRENTLY first. Re-measure with `scripts/lead-list-bench/run.sh`.
 - **3 Nov 2026 (R-340/R-363):** migration `072_assigned_by.sql` — `jobs.assigned_by` (uuid → users, ON DELETE SET NULL), partial index `(org_id, assigned_by) WHERE assigned_by IS NOT NULL`, backfill ONLY from `activity_log` `first_email_claim` rows where the logger is the current owner. NULL = not recorded. NOT applied to the live database yet (owner's go before merge).
+
+- 3 Nov 2026 (R-349 D): migration 074_lead_list_facets.sql (leads_facets) written, NOT applied (needs owner's go); the route answers from memory until then.

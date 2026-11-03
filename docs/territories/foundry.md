@@ -1384,3 +1384,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 
 - **3 Nov 2026:** `test/helpers/local-postgres.mjs` starts a throw-away real PostgreSQL (needs the server programs; a machine without them FAILS the test). `lead-list-sql-smoke` (27: real migration, SQL == JS reference on 130 cases, paging, counts, search, triggers, permissions), `jobs-page-route-smoke` (23, rewritten for the new shape), `mailbox-candidate-card-smoke` (14) + `-ui-smoke` (14). `scripts/lead-list-bench/` = the 700k-lead benchmark.
 - **3 Nov 2026 (R-340):** `assigned-by-smoke` (15, with the "owner written without who" guard), `job-owner-edit-routes-smoke` (7), `assigned-history-ui-smoke` (6: server mapper → real panel in a browser); `lead-assign-smoke` (wording changed on purpose: "Assigned to Y by X"), `lead-take-smoke`, `ownership-requests-smoke` extended. Every deliberate break caught.
+
+- 3 Nov 2026 (R-349 C/D): tests leads-server-mode-ui-smoke (side by side with the old tab), leads-whole-list-wake-smoke (guard), mailbox-old-delete-smoke; lead-list-light-smoke skips search_text.
