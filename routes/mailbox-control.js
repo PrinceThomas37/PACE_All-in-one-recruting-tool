@@ -26,7 +26,7 @@ const MAX_ACTIVE_PER_USER = 4;      // the product's existing rule (routes/auth.
 const SEARCH_LIMIT = 10, STATE_LIMIT = 25;
 const isBadId = (err) => !!err && err.code === '22P02';
 // An address matched EXACTLY and ignoring case: `_` and `%` are wildcards to LIKE, so they are escaped (first_last@ must not match firstXlast@).
-const exactCi = (a) => String(a || '').replace(/[\\%_]/g, '\\$&');
+const { exactCi, mailOnRecord } = require('../services/mailbox-delete');
 const like = (s) => String(s || '').trim().replace(/[%,()*\\]/g, ' ').slice(0, 80);
 
 module.exports = (ctx) => {
@@ -196,9 +196,8 @@ module.exports = (ctx) => {
         await update({ is_active: false, ...leaveWarmup() });
         extra.reassignment = await reassignJobsOffMailbox(supabase, mb.id, mb.user_id);
       } else if (action === 'delete') {
-        const anyEmail = await (async () => { const { count, error } = await scoped.from('emails').select('id', { count: 'exact', head: true }).ilike('from_email', exactCi(mb.email_address)); if (error) throw error; return count || 0; })();
-        const byId = await (async () => { const { count, error } = await scoped.from('emails').select('id', { count: 'exact', head: true }).eq('sending_email_id', mb.id); if (error) throw error; return count || 0; })();
-        const d = mc.deleteCheck({ emailCount: Math.max(anyEmail, byId), typedAddress: req.body && req.body.confirm_address, address: mb.email_address });
+        const emailCount = await mailOnRecord(scoped, mb);
+        const d = mc.deleteCheck({ emailCount, typedAddress: req.body && req.body.confirm_address, address: mb.email_address });
         if (!d.ok) return res.status(d.status).json({ error: d.error, state });
         extra.reassignment = await reassignJobsOffMailbox(supabase, mb.id, mb.user_id);
         const { error } = await scoped.from('user_emails').delete().eq('id', mb.id);

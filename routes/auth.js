@@ -16,6 +16,8 @@ const sigLogo = require('../services/signature-logo');
 const { mailboxConnections } = require('../mailbox-health');
 const entitlements = require('../services/entitlements');
 const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
+const mailboxControl = require('../services/mailbox-control');
+const { mailOnRecord } = require('../services/mailbox-delete');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -574,8 +576,15 @@ router.delete('/users/:id/emails/:eid', auth, async (req, res) => {
     if (!(await guardUser(req, res, req.params.id))) return;
     // Move any leads off this mailbox before it's gone entirely — otherwise
     // they either block the delete or lose their sending mailbox outright.
+    // R-358: this used to ignore the database's refusal and say "removed" for a mailbox that was still there. A mailbox that has mail
+    // on record is kept (deleting it would erase that history) — say so and offer Deactivate, the same sentence as the Deliverability panel.
+    const { data: mb } = await supabase.from('user_emails').select('id,email_address').eq('id', req.params.eid).eq('user_id', req.params.id).maybeSingle();
+    if (!mb) return res.status(404).json({ error: 'Email ID not found' });
+    const d = mailboxControl.deleteCheck({ emailCount: await mailOnRecord(supabase, mb), typedAddress: mb.email_address, address: mb.email_address });
+    if (!d.ok) return res.status(d.status).json({ error: d.error });
     const reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
-    await supabase.from('user_emails').delete().eq('id', req.params.eid).eq('user_id', req.params.id);
+    const del = await supabase.from('user_emails').delete().eq('id', req.params.eid).eq('user_id', req.params.id);
+    if (del.error) return res.status(409).json({ error: 'It could not be deleted: ' + del.error.message + '. Deactivate it instead.' });
     res.json({ success: true, reassignment });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
