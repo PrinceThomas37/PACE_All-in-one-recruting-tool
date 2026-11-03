@@ -2797,6 +2797,11 @@ function isFollowupDueFromSend(sentAt, dayGap, todayDate) {
   return start.toISOString().slice(0, 10) <= String(todayDate).slice(0, 10);
 }
 
+// R-352: every follow-up lookup over a list of ids is batched, paged, and THROWS on failure (services/batched-read.js).
+const batchedRead = require('./services/batched-read');
+const readByIds = (table, select, col, ids, narrow) => batchedRead.readByIds(supabase, table, select, col, ids, narrow);
+const readAllPages = batchedRead.readAllPages;
+
 async function runFollowupEngine() {
   const todayDate = today();
   const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, fu3_queued: 0, fu4_queued: 0, fu5_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0, skipped_no_initial: 0, skipped_not_due_yet: 0 };
@@ -2805,10 +2810,11 @@ async function runFollowupEngine() {
   // marked invalid and gets skipped here instead of receiving another send.
   try { await runBounceSweep(); } catch (e) { console.error('[Followup] pre-run bounce sweep failed:', e.message); }
   try {
-    const { data: dueFu, error: fuErr } = await supabase.from('follow_ups')
-      .select(`*, contact:contacts(id,first_name,last_name,email,designation,email_status,ooo_until), job:jobs(id,position,location,salary_range,research,industry,stage,timezone,assigned_to_bd,company:companies(name,industry,location),sending_email:user_emails!sending_email_id(id,email_address,display_name,is_active))`)
-      .eq('status', 'active');
-    if (fuErr) throw fuErr;
+    // Every active row, page by page (there are more than the 1,000 one request returns). The lead's research WITHOUT the pasted
+    // posting (research_list, migration 070) — 2,500 postings in one read is what times out (R-348).
+    const dueFu = await readAllPages(() => supabase.from('follow_ups')
+      .select(`*, contact:contacts(id,first_name,last_name,email,designation,email_status,ooo_until), job:jobs(id,position,location,salary_range,research:research_list,industry,stage,timezone,assigned_to_bd,company:companies(name,industry,location),sending_email:user_emails!sending_email_id(id,email_address,display_name,is_active))`)
+      .eq('status', 'active').order('id', { ascending: true }));
     log.checked = (dueFu || []).length;
 
     const { data: settingsRows } = await supabase.from('app_settings').select('key,value');
@@ -2846,12 +2852,9 @@ async function runFollowupEngine() {
     const fuJobIds = [...new Set((dueFu || []).map(f => f.job_id).filter(Boolean))];
     const variantByPair = {};
     if (fuJobIds.length) {
-      const { data: o1Sent } = await supabase.from('emails')
-        .select('job_id, contact_id, template_variant, sent_at')
-        .in('job_id', fuJobIds)
-        .eq('status', 'sent')
-        .is('followup_type', null)
-        .order('sent_at', { ascending: false });
+      const o1Sent = (await readByIds('emails', 'job_id, contact_id, template_variant, sent_at', 'job_id', fuJobIds,
+        (q) => q.eq('status', 'sent').is('followup_type', null)))
+        .sort((x, y) => String(y.sent_at || '').localeCompare(String(x.sent_at || '')));
       (o1Sent || []).forEach(row => {
         const key = `${row.job_id}:${row.contact_id}`;
         if (!variantByPair[key] && row.template_variant) variantByPair[key] = row.template_variant;
@@ -2864,10 +2867,8 @@ async function runFollowupEngine() {
     const dueContactIds = [...new Set(Object.values(dueByStep).flat().map(f => f.contact_id).filter(Boolean))];
     const liveOutreachPairs = new Set();
     if (dueContactIds.length) {
-      const { data: liveRows } = await supabase.from('emails')
-        .select('job_id, contact_id, status, sent_at, followup_type')
-        .in('contact_id', dueContactIds)
-        .in('followup_type', FOLLOWUP_EMAIL_TYPES);
+      const liveRows = await readByIds('emails', 'job_id, contact_id, status, sent_at, followup_type', 'contact_id', dueContactIds,
+        (q) => q.in('followup_type', FOLLOWUP_EMAIL_TYPES));
       (liveRows || []).forEach(r => { if (isLiveOutreachRow(r)) liveOutreachPairs.add(`${r.job_id}:${r.contact_id}`); });
     }
 
@@ -2885,11 +2886,8 @@ async function runFollowupEngine() {
     // backlog size. So the pair must be proven sent, from the emails table.
     const initialSentPairs = new Map();
     if (dueContactIds.length) {
-      const { data: initialRows } = await supabase.from('emails')
-        .select('job_id, contact_id, sent_at')
-        .in('contact_id', dueContactIds)
-        .eq('status', 'sent')
-        .is('followup_type', null);
+      const initialRows = await readByIds('emails', 'job_id, contact_id, sent_at', 'contact_id', dueContactIds,
+        (q) => q.eq('status', 'sent').is('followup_type', null));
       (initialRows || []).forEach(r => {
         const key = `${r.job_id}:${r.contact_id}`;
         const prev = initialSentPairs.get(key);
@@ -3091,7 +3089,11 @@ engineRunner.register('followup', {
     // Claim the day before doing the work, so a concurrent tick can't double-send.
     await setLastFollowupRun(dateStr);
     console.log(`[Cron] Follow-up engine triggered (IST ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')})`);
-    return await runFollowupEngine();
+    const out = await runFollowupEngine();
+    // R-352: a run that could not read what it needed is NOT today's run — give the day back so the next tick (5 min) tries again,
+    // instead of a silent "done" with nothing queued (30 Oct – 2 Nov).
+    if (out && out.error) { await setLastFollowupRun(settings['last_followup_run'] || ''); console.error('[FollowupEngine] run failed, will retry:', out.error); }
+    return out;
   }
 });
 
