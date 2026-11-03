@@ -368,7 +368,7 @@ function renderJobs(){
       })+
       '<div class="fs-12_5 c-ink3" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
         '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>'+listTotal+' lead'+(listTotal===1?'':'s')+'</span>'+
-          (lv&&lv.status==='error'?'<span class="c-bad">'+escHtml(lv.error)+'</span><button class="btn btn-sm" onclick="leadsStore.retry()">Try again</button>':(lv&&(lv.status==='loading'||lv.status==='refreshing')?'<span class="c-text3">Updating…</span>':''))+
+          (lv&&lv.status==='error'?'<span class="c-red">'+escHtml(lv.error)+'</span><button class="btn btn-sm" onclick="leadsStore.retry()">Try again</button>':(lv&&(lv.status==='loading'||lv.status==='refreshing')?'<span class="c-text3">Updating…</span>':''))+
           '<label class="fs-12_5 c-ink3" style="display:flex;align-items:center;gap:6px">Show '+
             '<select class="sel sel-sm" id="leads-per-page" aria-label="Leads per page" onchange="setLeadsPageSize(this.value)">'+
               [10,20,50].map(function(n){ return '<option value="'+n+'"'+(n===_per?' selected':'')+'>'+n+'</option>'; }).join('')+
