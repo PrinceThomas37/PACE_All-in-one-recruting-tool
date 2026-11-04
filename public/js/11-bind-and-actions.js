@@ -387,6 +387,16 @@ window.closeFailedEmails=function(ids){
     scheduleRender(); loadEmailsForCurrentUser();
   });
 };
+// R-382: "Close for me" on a TEAMMATE's failed email — hides it for this person only (POST /emails/failed/close-for-me); the email itself is untouched.
+window.closeFailedEmailsForMe=function(ids){
+  ids=(ids||[]).slice(); if(!ids.length) return;
+  apiPost('/emails/failed/close-for-me',{ids:ids}).then(function(r){
+    var gone={}; ids.forEach(function(i){ gone[i]=1; });
+    STATE.failedEmails=(STATE.failedEmails||[]).filter(function(e){ return !gone[e.id]; });
+    showToast(r&&r.closed?'Closed for you — it stays on their list':'Nothing to close','info');
+    scheduleRender();
+  }).catch(function(e){ showToast((e&&e.message)||'Could not close that','error'); });
+};
 window.retryAllFailedEmails=function(ids){
   apiPost('/emails/retry-failed',{ids:ids||[]}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
 };

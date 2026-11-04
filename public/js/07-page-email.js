@@ -642,7 +642,10 @@ function renderEmail(){
             (isMine?'<div class="failed-acts">'+
               (e.can_retry?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
               '<button class="btn btn-outline btn-sm" title="Take this off the list. Nothing is sent." onclick="closeFailedEmails([\''+e.id+'\'])">Close</button>'+
-            '</div>':'')+
+            '</div>':'<div class="failed-acts">'+
+              // R-382: a teammate's failed email is theirs to retry or delete, but you can stop looking at it. Hides it for YOU only; nothing is sent or changed.
+              '<button class="btn btn-outline btn-sm" title="Hide this for you only. It stays on '+htmlEsc((e.sender&&e.sender.name)||'their')+'\'s own list and nothing is sent. It comes back if it fails in a different way." onclick="closeFailedEmailsForMe([\''+e.id+'\'])">Close for me</button>'+
+            '</div>')+
           '</div>';
         }).join('')+
         (failedList.length>50?'<div class="failed-sub" style="padding:8px 14px">Showing 50 of '+failedList.length+'.</div>':'')+

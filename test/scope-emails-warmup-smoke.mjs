@@ -320,6 +320,26 @@ try {
     const cross = (thA.json || []).find(t => t.id === 't1');
     ok('a historic cross-org partner address is withheld', thA.status === 200 && cross && cross.to === null && (thA.json || []).find(t => t.id === 't2').to.email_address === 'b1@a.test', JSON.stringify(thA.json));
     close(); }
+
+  // ── R-382: "Close for me" on a TEAMMATE's failed email — per viewer, never touches the email, only what the viewer may see ──
+  { const { T, call, close } = await boot();
+    const ids = async (who, path) => { const r = await call(who, 'GET', path); return Array.isArray(r.json) ? r.json.map(e => e.id).sort().join(',') : 'ERR:' + r.status; };
+    ok('(setup) the BD Lead sees their own failed email (e3) and a teammate\'s (e6, sent by b1)', await ids('bl', '/emails?status=failed') === 'e3,e6', await ids('bl', '/emails?status=failed'));
+    const c = await call('bl', 'POST', '/emails/failed/close-for-me', { ids: ['e6', 'e3'] });
+    ok('closing a teammate\'s failed email for yourself answers 200 and counts ONE (your own e3 is not closable this way — you Close that one yourself)', c.status === 200 && c.json && c.json.closed === 1, JSON.stringify(c.json));
+    ok('it leaves the BD Lead\'s failed list; their own stays', await ids('bl', '/emails?status=failed') === 'e3', await ids('bl', '/emails?status=failed'));
+    ok('the email itself is untouched (still failed, still b1\'s)', (() => { const e = T.emails.find(x => x.id === 'e6'); return e && e.status === 'failed' && e.sent_by === 'b1'; })());
+    ok('closing is PER PERSON — the admin still sees it, and so does its own sender', await ids('aA', '/emails?status=failed') === 'e3,e6' && await ids('b1', '/emails?status=failed') === 'e6');
+    ok('...and the BD Lead\'s all-status list is not affected (only the failed panel hides it)', (await ids('bl', '/emails')).includes('e6'));
+    const nope = await call('b2', 'POST', '/emails/failed/close-for-me', { ids: ['e6'] });
+    ok('someone who may not see that email cannot close it: counted 0, nothing written for them', nope.status === 200 && nope.json.closed === 0 && !T.app_settings.some(r => r.key === 'failed_closed_b2'), JSON.stringify(nope.json));
+    const foreign = await call('aA', 'POST', '/emails/failed/close-for-me', { ids: ['e5', 'e7'] });
+    ok('another company\'s email ids are ignored (counted 0)', foreign.status === 200 && foreign.json.closed === 0, JSON.stringify(foreign.json));
+    const empty = await call('bl', 'POST', '/emails/failed/close-for-me', { ids: [] });
+    ok('no ids is a 400, not a silent success', empty.status === 400);
+    T.emails.find(x => x.id === 'e6').fail_reason = 'a different failure after a retry';
+    ok('if it fails again in a DIFFERENT way it comes back for the person who closed it', await ids('bl', '/emails?status=failed') === 'e3,e6', await ids('bl', '/emails?status=failed'));
+    close(); }
 } catch (e) {
   ok('harness completed', false, String(e && e.stack || e));
 }

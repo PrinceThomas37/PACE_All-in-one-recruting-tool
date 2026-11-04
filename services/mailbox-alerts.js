@@ -122,50 +122,51 @@ function sortAlerts(list) {
     (rank[a.state] - rank[b.state]) || ((b.held || 0) - (a.held || 0)) || String(a.email).localeCompare(String(b.email)));
 }
 
-// ── HIDING A WARNING (R-122 step 3) ──────────────────────────────────────────
-// A warning that stays for weeks because the owner has not reconnected yet makes
-// the first screen crowded, so a person can hide it FOR THEMSELVES. Rules, all
-// callable (a test greps no source text):
-//   * it is hidden for a fixed time (default a week), never forever;
-//   * it is hidden against the FACT it was hidden against — the alert's state
-//     and when the mailbox last worked — so a mailbox that fails in a NEW way
-//     (or was reconnected and died again) comes straight back;
-//   * hiding is per person: it does not touch anyone else's warning, and it does
-//     not fix the mailbox — mail still waits behind it;
-//   * what is hidden is COUNTED and can be shown again; the page never hides
-//     without saying how many.
-// Storage is one app_settings row per person (like the needs-you snoozes), so
-// there is no migration; expired entries are dropped whenever it is read.
-const HIDE_DAYS = 7;
+// ── CLOSING A WARNING (R-122 step 3; R-382, owner 4 Nov: "an option to close … not shown if they don't happen again … it's just hide") ──────────────
+// A warning that stays for weeks because its owner has not reconnected yet crowds the first screen, so a person can CLOSE it FOR THEMSELVES. Rules,
+// all callable (a test greps no source text):
+//   * a closed warning has NO timer — it used to come back every week (that was the complaint);
+//   * it is closed against the FACT it was closed against — the alert's state and when the mailbox last worked — so a mailbox that fails in a NEW
+//     way (or was reconnected and died again) comes straight back;
+//   * closing is per person: it does not touch anyone else's warning, and it does not fix the mailbox — mail still waits behind it;
+//   * what is closed is COUNTED and can be shown again; the page never closes without saying how many (a dead mailbox must not be forgotten silently);
+//   * ONE store: the warnings block and the admin Dashboard banner both read it, so closing in one place closes it in the other.
+// Storage is one app_settings row per person (like the needs-you snoozes), so there is no migration. Entries an earlier version wrote with a one-week
+// `until` still work until they run out. shortcut: closed entries are one small record per mailbox and never expire on their own; upgrade if a
+// company ever has thousands of mailboxes.
 const MS_DAY = 24 * 60 * 60 * 1000;
 function pauseNoteKey(mailboxId) { return `mailbox_pause_note_${mailboxId}`; }
 function hideKey(userId) { return `mba_hide_${userId}`; }
 function fingerprintOf(alert) {
   return alert ? `${alert.state || ''}|${alert.since || ''}` : '';
 }
+function liveEntry(v, now) {
+  if (!v || typeof v !== 'object') return false;
+  if (v.closed === true) return true;
+  if (!v.until) return false;
+  const t = new Date(v.until).getTime();
+  return Number.isFinite(t) && t > now;
+}
 function pruneHidden(store, now = Date.now()) {
   const out = {};
   if (!store || typeof store !== 'object') return out;
   for (const [k, v] of Object.entries(store)) {
-    if (!v || typeof v !== 'object' || !v.until) continue;
-    const t = new Date(v.until).getTime();
-    if (!Number.isFinite(t) || t <= now) continue;
-    out[k] = { until: v.until, fp: typeof v.fp === 'string' ? v.fp : '' };
+    if (!liveEntry(v, now)) continue;
+    out[k] = v.closed === true ? { closed: true, at: v.at || null, fp: typeof v.fp === 'string' ? v.fp : '' }
+      : { until: v.until, fp: typeof v.fp === 'string' ? v.fp : '' };
   }
   return out;
 }
-function recordHide(store, alert, now = Date.now(), days = HIDE_DAYS) {
+function recordClose(store, alert, now = Date.now()) {
   const next = pruneHidden(store, now);
   if (!alert || !alert.mailbox_id) return next;
-  next[alert.mailbox_id] = { until: new Date(now + days * MS_DAY).toISOString(), fp: fingerprintOf(alert) };
+  next[alert.mailbox_id] = { closed: true, at: new Date(now).toISOString(), fp: fingerprintOf(alert) };
   return next;
 }
 function isHidden(store, alert, now = Date.now()) {
   if (!store || !alert) return false;
   const rec = store[alert.mailbox_id];
-  if (!rec || !rec.until) return false;
-  const t = new Date(rec.until).getTime();
-  if (!Number.isFinite(t) || t <= now) return false;
+  if (!liveEntry(rec, now)) return false;
   return (rec.fp || '') === fingerprintOf(alert);
 }
 function applyHidden(alerts, store, now = Date.now()) {
@@ -175,6 +176,14 @@ function applyHidden(alerts, store, now = Date.now()) {
     if (isHidden(store, a, now)) hidden++; else kept.push(a);
   }
   return { alerts: kept, hidden };
+}
+/** The person's closed warnings. Best-effort, like the needs-you snoozes: a store that cannot be read means a warning SHOWS, never that one is lost. */
+async function loadHidden(supabase, userId, now = Date.now()) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', hideKey(userId)).maybeSingle();
+    if (data && data.value) return pruneHidden(typeof data.value === 'string' ? JSON.parse(data.value) : data.value, now);
+  } catch (_) { /* shows the warning */ }
+  return {};
 }
 
 // WHO MAY ASK WHOM. A prompt drops a task on somebody's morning list, so only
@@ -190,5 +199,5 @@ function askRefusal({ askerId, ownerId, isAdmin, chainIds, state }) {
 
 module.exports = {
   reasonSentence, alertFor, sortAlerts, pauseNote, pausedSentence, pauseNoteKey, blockedNotes, heldByPauseLine, saveNote, forgetNote,
-  HIDE_DAYS, hideKey, fingerprintOf, pruneHidden, recordHide, isHidden, applyHidden, askRefusal,
+  hideKey, fingerprintOf, pruneHidden, recordClose, isHidden, applyHidden, loadHidden, askRefusal,
 };

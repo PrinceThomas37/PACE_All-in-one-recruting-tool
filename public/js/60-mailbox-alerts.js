@@ -44,7 +44,7 @@
     // one click brings it back (R-122 step 3: a warning that stays for weeks
     // crowds the first screen, so it can be put away — but not forgotten).
     var hiddenLine=s.hidden
-      ? '<div class="mba-hidden">'+s.hidden+' mailbox warning'+(s.hidden===1?'':'s')+' hidden for a week · '+
+      ? '<div class="mba-hidden">'+s.hidden+' mailbox warning'+(s.hidden===1?'':'s')+' closed · '+
           '<a href="#" onclick="mailboxAlertShow();return false;">Show</a></div>'
       : '';
     if(!list.length) return hiddenLine.replace('class="mba-hidden"','class="mba-hidden is-alone mb4"');
@@ -61,13 +61,13 @@
       var first=esc(a.owner_name||'them');   // the full name: a first word alone would read "Remind BD" for "BD 2"
       // A paused mailbox is not signed out: Reconnect would do nothing and "remind its owner to reconnect" would be wrong. The actions
       // for it are the owner's to define (27 Oct 2026), so it carries only the notice — and the same hide as the others.
-      var hideBtn='<button class="btn btn-sm btn-outline" onclick="mailboxAlertHide(\''+a.mailbox_id+'\',this)" title="Hide this warning for a week. It comes back sooner if the mailbox fails in a new way.">Hide for a week</button>';
+      var hideBtn='<button class="btn btn-sm btn-outline" onclick="mailboxAlertClose(\''+a.mailbox_id+'\',this)" title="Close this warning. It stays closed unless the mailbox fails in a new way. Mail from it still waits until it is fixed.">Close</button>';
       var action=paused?hideBtn:(mine
         ? '<button class="btn btn-sm btn-primary" onclick="mailboxAlertReconnect(\''+a.mailbox_id+'\',\''+(a.platform||'')+'\')">Reconnect</button>'
         : (a.asked
             ? '<span class="mba-ask">Asked '+first+' — it is on their list</span>'
             : '<button class="btn btn-sm btn-primary" onclick="mailboxAlertAsk(\''+a.mailbox_id+'\',this)" title="Puts a task on '+esc(a.owner_name||'their')+'\'s own list">Remind '+first+'</button>'))+
-        '<button class="btn btn-sm btn-outline" onclick="mailboxAlertHide(\''+a.mailbox_id+'\',this)" title="Hide this warning for a week. It comes back sooner if the mailbox fails in a new way.">Hide for a week</button>';
+        '<button class="btn btn-sm btn-outline" onclick="mailboxAlertClose(\''+a.mailbox_id+'\',this)" title="Close this warning. It stays closed unless the mailbox fails in a new way. Mail from it still waits until it is fixed.">Close</button>';
       return '<div class="mba-row">'+
         '<div class="mba-main">'+
           '<div class="mba-mail">'+who+esc(a.email)+(a.state==='probably_expired'?' <span class="mba-tag">probably</span>':'')+(paused?' <span class="mba-tag">paused</span>':'')+'</div>'+
@@ -85,18 +85,19 @@
     '</div>';
   };
 
-  window.mailboxAlertHide=function(mailboxId,btn){
+  window.mailboxAlertClose=function(mailboxId,btn){
     if(btn) btn.disabled=true;
-    apiPost('/mailboxes/alerts/hide',{mailbox_id:mailboxId}).then(function(){
-      showToast('Hidden for a week — it comes back sooner if it fails again','success');
+    apiPost('/mailboxes/alerts/close',{mailbox_id:mailboxId}).then(function(){
+      showToast('Closed — it comes back only if the mailbox fails in a new way','success');
       loadMailboxAlerts(true);
+      if(window.loadSystemHealth) window.loadSystemHealth(true);   // the Dashboard banner reads the same closes (R-382)
     }).catch(function(e){
       if(btn) btn.disabled=false;
-      showToast('Could not hide that: '+((e&&e.message)||e),'error');
+      showToast('Could not close that: '+((e&&e.message)||e),'error');
     });
   };
   window.mailboxAlertShow=function(){
-    apiPost('/mailboxes/alerts/show',{}).then(function(){ loadMailboxAlerts(true); })
+    apiPost('/mailboxes/alerts/show',{}).then(function(){ loadMailboxAlerts(true); if(window.loadSystemHealth) window.loadSystemHealth(true); })
       .catch(function(e){ showToast('Could not show them: '+((e&&e.message)||e),'error'); });
   };
   window.mailboxAlertAsk=function(mailboxId,btn){

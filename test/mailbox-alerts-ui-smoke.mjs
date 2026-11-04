@@ -47,7 +47,7 @@ async function api(route){
   const u=new URL(route.request().url()), p=decodeURIComponent(u.pathname), m=route.request().method();
   calls.push(m+' '+p);
   if (m==='POST') { let b={}; try{ b=route.request().postDataJSON()||{}; }catch(e){} bodies.push({p,b}); }
-  if (m==='POST' && p==='/mailboxes/alerts/hide') { hiddenIds.add(bodies[bodies.length-1].b.mailbox_id); return reply(route,{success:true}); }
+  if (m==='POST' && p==='/mailboxes/alerts/close') { hiddenIds.add(bodies[bodies.length-1].b.mailbox_id); return reply(route,{success:true}); }
   if (m==='POST' && p==='/mailboxes/alerts/show') { hiddenIds.clear(); return reply(route,{success:true}); }
   if (m==='GET' && p==='/mailboxes/alerts') {
     if (mode==='error') return reply(route,{error:'x'},500);
@@ -72,7 +72,7 @@ try{
     let t=await card();
     step(width+'px: the dashboard warns about the dead mailbox', t && /2 mailboxes can.t send/.test(t) && /bd@example.test/.test(t) && /12 emails waiting/.test(t), (t||'').slice(0,90));
     step(width+'px: the owner gets Reconnect; a manager gets "Remind Raj" (a task on Raj\'s list)', /Reconnect/.test(t) && /Remind Raj/.test(t) && !/Remind Test/.test(t), t.slice(0,300));
-    step(width+'px: every warning can be hidden for a week', (t.match(/Hide for a week/g)||[]).length===2);
+    step(width+'px: every warning can be CLOSED (no "for a week" any more — R-382)', (t.match(/\bClose\b/g)||[]).length===2 && !/Hide for a week/.test(t));
     step(width+'px: a guess is labelled "probably"', /PROBABLY|probably/.test(t));
     const over=await page.evaluate(()=>{ const c=document.querySelector('#content .mba-card'); return c ? c.getBoundingClientRect().right > document.documentElement.clientWidth + 1 : true; });
     step(width+'px: the card fits the screen', !over);
@@ -81,11 +81,11 @@ try{
       // Hide one: it leaves, is COUNTED, and Show brings it back.
       await page.evaluate(()=>{ document.querySelector('#content .mba-row .btn-outline').click(); }); await page.waitForTimeout(600);
       t=await card();
-      step('hiding one warning is a request to the server, for that mailbox', bodies.some(x=>x.p==='/mailboxes/alerts/hide' && x.b.mailbox_id==='mb1'));
-      step('a hidden warning leaves the card and is COUNTED', t && !/bd@example.test/.test(t) && /1 mailbox warning hidden for a week/.test(t) && /raj@example.test/.test(t), (t||'').slice(0,200));
+      step('closing one warning is a request to the server, for that mailbox', bodies.some(x=>x.p==='/mailboxes/alerts/close' && x.b.mailbox_id==='mb1'));
+      step('a hidden warning leaves the card and is COUNTED', t && !/bd@example.test/.test(t) && /1 mailbox warning closed/.test(t) && /raj@example.test/.test(t), (t||'').slice(0,200));
       await page.evaluate(()=>{ document.querySelector('#content .mba-hidden a').click(); }); await page.waitForTimeout(600);
       t=await card();
-      step('Show brings it back', t && /bd@example.test/.test(t) && !/hidden for a week/.test(t));
+      step('Show brings it back', t && /bd@example.test/.test(t) && !/warnings? closed/.test(t));
       // Remind: a manager puts a task on the OWNER's list.
       await page.evaluate(()=>{ [...document.querySelectorAll('#content .mba-row .btn-primary')].find(b=>/Remind/.test(b.textContent)).click(); }); await page.waitForTimeout(500);
       step('"Remind Raj" asks the server about THAT mailbox', calls.includes('POST /mailboxes/alerts/mb2/ask'));
@@ -93,7 +93,7 @@ try{
       hiddenIds.add('mb1'); hiddenIds.add('mb2');
       await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(500);
       const quiet=await page.evaluate(()=>{ const el=document.querySelector('#content .mba-hidden'); return el?el.innerText:null; });
-      step('with everything hidden, one quiet line says how many', quiet && /2 mailbox warnings hidden/.test(quiet), quiet||'');
+      step('with everything hidden, one quiet line says how many', quiet && /2 mailbox warnings closed/.test(quiet), quiet||'');
       hiddenIds.clear();
       await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(400);
       mode='none'; await page.evaluate(()=>loadMailboxAlerts(true)); await page.waitForTimeout(400);

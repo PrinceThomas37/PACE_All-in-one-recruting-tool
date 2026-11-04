@@ -50,11 +50,13 @@ step('each follow-up\'s day offset is read per-BD for the re-anchor (services/fo
   /followupSteps\.dayFor\(settings,\s*bdId,\s*stepNo\)/.test(SRC));
 
 // ── 3. The pure helper's date maths, extracted from source ─────────────────
-const fnMatch = SRC.match(/function isFollowupDueFromSend\([\s\S]*?\n\}/);
-step('isFollowupDueFromSend is present and pure-extractable', !!fnMatch);
+// R-379: the rule now lives in services/followup-queueable.js so the Assign screen reads the SAME one; index.js keeps a one-line wrapper the engine calls.
+import { createRequire } from 'node:module';
+const isFollowupDueFromSend = createRequire(import.meta.url)('../services/followup-queueable.js').isDueFromSend;
+step('the engine still calls the shared rule through its wrapper', /function isFollowupDueFromSend\(sentAt, dayGap, todayDate\) \{ return followupQueueable\.isDueFromSend\(sentAt, dayGap, todayDate\); \}/.test(SRC));
+step('isFollowupDueFromSend is a real, callable function', typeof isFollowupDueFromSend === 'function');
 
-if (fnMatch) {
-  const isFollowupDueFromSend = new Function(`${fnMatch[0]}; return isFollowupDueFromSend;`)();
+if (typeof isFollowupDueFromSend === 'function') {
 
   step('Not due before the gap elapses', isFollowupDueFromSend('2026-09-07', 3, '2026-09-09') === false);
   step('Due exactly on the gap day',    isFollowupDueFromSend('2026-09-07', 3, '2026-09-10') === true);

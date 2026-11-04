@@ -108,8 +108,17 @@ router.get('/distribute/mailboxes', auth, async (req, res) => {
     // Follow-ups that fall due today and have not been queued yet (the follow-up engine queues them at its daily time).
     const steps = require('../services/followup-steps');
     const dueToday = {};
-    const { data: fus } = await withOrg(supabase.from('follow_ups').select('*').eq('status', 'active').in('user_email_id', ids), req);
-    (fus || []).forEach(f => { const n = steps.nextDue(f, todayStr); if (n) { const k = f.user_email_id; dueToday[k] = dueToday[k] || { fu1: 0, fu2: 0, later: 0 }; dueToday[k][n === 1 ? 'fu1' : n === 2 ? 'fu2' : 'later']++; } });
+    // R-379: only the follow-ups the engine will REALLY queue — its own rule (services/followup-queueable.js: lead still Assigned, contact may be
+    // emailed, first email on record as sent, due counting from that real send). Anything else shows no number.
+    const queueable = require('../services/followup-queueable'), batchedRead = require('../services/batched-read');
+    const { data: fus } = await withOrg(supabase.from('follow_ups')
+      .select('*, contact:contacts(id,email,email_status,ooo_until), job:jobs(id,stage,assigned_to_bd)').eq('status', 'active').in('user_email_id', ids), req);
+    const dueRows = (fus || []).filter(f => steps.nextDue(f, todayStr));
+    const initialRows = await batchedRead.readByIds(supabase, 'emails', 'job_id, contact_id, sent_at', 'contact_id', dueRows.map(f => f.contact_id),
+      (q) => withOrg(q.eq('status', 'sent').is('followup_type', null), req));
+    const { data: setRows } = await supabase.from('app_settings').select('key,value').like('key', 'u_%_fu%_day');
+    const settings = {}; (setRows || []).forEach(r => { settings[r.key] = r.value; });
+    Object.assign(dueToday, queueable.dueNowByMailbox(dueRows, { todayDate: todayStr, settings, initialSent: queueable.initialSentMap(initialRows), isEligibleContact: ctx.isFollowupEligibleContact }));
     const dl = require('../services/daily-limit');
     const mailboxes = (boxes || []).map(b => {
       const limit = dl.limitOf(b, dailyDefault);

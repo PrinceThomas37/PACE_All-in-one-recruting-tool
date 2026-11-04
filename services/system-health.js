@@ -31,7 +31,7 @@ const names = (list, max = 4) => list.slice(0, max).join(', ') + (list.length > 
  *   now (ms), isOperator (bool),
  *   followups: { alert:{date,reason?,error?,tries?}|null, lastRunDate:'YYYY-MM-DD'|null, todayIst:'YYYY-MM-DD', sendTime:'HH:MM', istMinutes:number, checked:boolean }
  *   engine: { checked:boolean, heartbeat:{state,minutes_since_ping}, jobs:[{job,overdue,last_run_at,every_ms}], lastRuns:[{job_name,status,error,started_at}] }
- *   mailboxes: { checked:boolean, expired:[email], autoPaused:[email], blocked:[email] }
+ *   mailboxes: { checked:boolean, expired:[email], autoPaused:[email], blocked:[email], closed:number }   (closed = warnings this admin closed; they are left out of the lists, R-382)
  *   server: { uptimeMin, rssMb, rssLimitMb }
  * @returns issues sorted worst first
  */
@@ -110,7 +110,7 @@ function evaluate(f) {
       if (bits.length) {
         out.push({
           id: 'mailboxes_attention', level: (mb.expired.length || mb.autoPaused.length) ? 'bad' : 'warn', who: 'admin', title: 'Some mailboxes are not sending',
-          sentence: bits.join('; ') + '. Nothing is sent from them until they are fixed.',
+          sentence: bits.join('; ') + '. Nothing is sent from them until they are fixed.' + (mb.closed ? ` (${plural(mb.closed, 'more warning')} closed by you.)` : ''),
           since: null,
           actions: [{ id: 'go_mailboxes', label: 'Open the mailbox panel', go: 'deliverability' }],
         });
