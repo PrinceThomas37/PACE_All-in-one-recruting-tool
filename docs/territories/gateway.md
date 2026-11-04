@@ -1285,3 +1285,6 @@ Every `getSetting(supabase, key, orgId)` must name the company (`test/settings-f
 - 3 Nov 2026 (R-349 D): GET /jobs/by-ids and GET /jobs/facets (above /jobs/:id); services/lead-page.js fetchByIds / fetchFacets.
 
 - 3 Nov 2026 (R-367): GET /admin/system-health (routes/system-health.js); POST /follow-ups/run now stamps today's run on success.
+
+
+- **Two things added to `index.js` (4 Nov 2026):** (1) a middleware right after `cors` sets `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin` on EVERY response; the public `/i/` and `/apply/` pages set `no-referrer` themselves later and that replaces it. Anything served must have a correct content type now (a script sent as `text/html` would stop running). (2) `GET /health/deep` (own small rate limit) asks the database one question through `services/deep-health.js`; `/health` is still the cheap "ok" and must stay that way (the 30-minute heartbeat and Render use it). `test/health-headers-smoke.mjs` pins both. Not done and needing the owner: CSP, anti-framing, narrower CORS, request ids.
