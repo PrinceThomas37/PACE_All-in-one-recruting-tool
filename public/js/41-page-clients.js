@@ -45,7 +45,16 @@
     var html=renderClientDetail();
     if(!html) return;
     var d=document.createElement('div'); d.innerHTML=html;
-    if(d.firstChild) el.replaceWith(d.firstChild);
+    if(d.firstChild){
+      // R-391: a repaint of an OPEN drawer is not an opening. The drawer's open animation (fade + slide from transparent)
+      // used to replay on every answer from the server — up to six, so the list showed through again and again. The
+      // replacement starts at rest (.dwr-still) and keeps each pane's scroll, so nothing moves under the user's hands.
+      var keep=[]; el.querySelectorAll('*').forEach(function(n,i){ if(n.scrollTop>0) keep.push([i,n.scrollTop]); });
+      d.firstChild.classList.add('dwr-still');
+      el.replaceWith(d.firstChild);
+      var fresh=document.querySelector('.dwr-scrim');
+      if(fresh&&keep.length){ var all=fresh.querySelectorAll('*'); keep.forEach(function(k){ if(all[k[0]]) all[k[0]].scrollTop=k[1]; }); }
+    }
   }
 
   function loadClientDetail(id){

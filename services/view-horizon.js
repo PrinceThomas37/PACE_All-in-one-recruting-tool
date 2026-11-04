@@ -109,7 +109,8 @@ function partitionForView(rows, opts = {}) {
   const visible = [];
 
   for (const r of all) {
-    if (!showClosed && closedOf(r)) { closed++; continue; }
+    // R-392: showAll means everything, finished rows included (mirrors partition() in public/js/00-ui-kit.js).
+    if (!showClosed && !showAll && closedOf(r)) { closed++; continue; }
     if (!withinHorizon(dateOf(r), days, now)) { aged++; continue; }
     visible.push(r);
   }

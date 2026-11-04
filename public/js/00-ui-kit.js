@@ -395,7 +395,9 @@ window.UI = (function () {
     var closed=0, aged=0, visible=[];
     for(var i=0;i<all.length;i++){
       var r=all[i];
-      if(!o.showClosed&&closedOf(r)){closed++;continue;}
+      // R-392: "Show everything" means everything — finished rows too, not only the aged ones (it used to lift just the
+      // age limit, so the bar kept saying "2 finished hidden" after the click).
+      if(!o.showClosed&&!o.showAll&&closedOf(r)){closed++;continue;}
       if(!withinHorizon(dateOf(r),days,o.now)){aged++;continue;}
       visible.push(r);
     }
