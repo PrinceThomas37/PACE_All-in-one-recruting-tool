@@ -7520,3 +7520,5 @@ R-390 and R-388 built in the branch (Session 62): see the surface and gateway te
 R-392 and R-391 fixed (Session 62). Both were reproduced in a real browser first; both guards were proved to fail on the bug. Owner also said (4 Nov): reconnects of the three mailboxes are the users' own business; second warm-up mailbox later (warming up internally makes no sense); "Needs you" is cleared and will be checked after this merge; Assign / Deliverability to be looked at at the next assignment.
 
 R-393 (Outreach Insights reads in parallel) and R-381 (follow-up time: a free-tier sleep, by design) worked in Session 62. R-393 is counted and tested, not timed on the live server.
+
+Full gate for PR #401 (Session 62): 358/358 suites on Node 22 and on Node 26.11.1. Owner chose (c) for R-381 (D-0210).
