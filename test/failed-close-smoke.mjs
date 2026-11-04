@@ -1,7 +1,8 @@
 // "DIDN'T SEND" CAN BE CLOSED (owner, 8 Oct): a failure that needs a person used to sit on the Pending page for ever. Each of the
 // person's OWN failed emails now has Close (and Retry when the server says it may be retried), the header has "Close all", and a
-// teammate's failed row — which a manager can SEE — has neither (acting is the sender's, D-0020). Closing deletes only the failed row
-// (the server refuses anything else), sends nothing, and when the list is empty the whole panel is gone.
+// teammate's failed row — which a manager can SEE — has neither Retry nor the sender's Close (acting is the sender's, D-0020) but, since R-382
+// (owner 4 Nov), "Close for me": hides it for THIS person only, deletes nothing. Closing deletes only the failed row (the server refuses
+// anything else), sends nothing, and when the list is empty the whole panel is gone.
 // Usage: node test/failed-close-smoke.mjs
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -42,7 +43,7 @@ try{
   step('three failed rows are listed', rs.length===3, JSON.stringify(rs));
   step('the invalid-address row (cannot be retried) offers Close only — the person can always close it', JSON.stringify(rs[0].btns)==='["Close"]', JSON.stringify(rs[0].btns));
   step('a retryable row of their own offers Retry and Close', JSON.stringify(rs[1].btns)==='["Retry","Close"]', JSON.stringify(rs[1].btns));
-  step('a teammate\'s row (visible to a manager) offers neither — acting is the sender\'s', rs[2].btns.length===0, JSON.stringify(rs[2].btns));
+  step('a teammate\'s row (visible to a manager) offers no Retry and no sender\'s Close — only "Close for me" (R-382)', JSON.stringify(rs[2].btns)==='["Close for me"]', JSON.stringify(rs[2].btns));
   step('the header offers Retry all (1) and Close all', /Retry all \(1\)/.test(await panel()) && /Close all/.test(await panel()));
   if (SHOTS) { const el=await page.$('.failed-panel'); if(el) await el.screenshot({ path: path.join(SHOTS,'failed-close.png') }); }
 
@@ -56,6 +57,10 @@ try{
   step('Close all closes only the person\'s OWN rows (never the teammate\'s)', JSON.stringify(dels)==='["/emails/f2"]', JSON.stringify(dels));
   rs=await rows();
   step('the teammate\'s row stays, with the panel', rs.length===1 && /team@x\.com/.test(rs[0].to) && !!(await panel()));
+  await ev(()=>{ window.__calls.length=0; [...document.querySelectorAll('.failed-row button')].find(b=>/Close for me/.test(b.textContent)).click(); });
+  await page.waitForTimeout(400);
+  const calls=await ev(()=>window.__calls);
+  step('"Close for me" asks the server to hide THAT email for this person only (POST close-for-me), deletes nothing, and the row leaves', calls.some(c=>c[0]==='POST'&&c[1]==='/emails/failed/close-for-me'&&JSON.stringify(c[2])==='{"ids":["f3"]}') && !calls.some(c=>c[0]==='DELETE') && (await rows()).length===0, JSON.stringify(calls));
   await ev(()=>{ window.__server=[]; STATE.failedEmails=[]; render(); }); await page.waitForTimeout(200);
   step('when nothing is left to close the whole panel is gone', (await panel())===null);
   step('no script errors', errs.length===0, errs.join(' | ').slice(0,200));

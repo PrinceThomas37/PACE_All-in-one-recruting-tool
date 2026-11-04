@@ -133,15 +133,17 @@ step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
 {
   const t0 = Date.parse('2026-10-06T12:00:00Z');
   const al = { mailbox_id: 'mb1', state: 'failed', since: '2026-07-21T22:16:55Z' };
-  let st = ma.recordHide({}, al, t0);
-  step('a hidden warning is hidden now…', ma.isHidden(st, al, t0 + 1000));
-  step('…for a week, not forever', ma.isHidden(st, al, t0 + 6.9 * 864e5) && !ma.isHidden(st, al, t0 + 7.1 * 864e5));
+  let st = ma.recordClose({}, al, t0);
+  step('a closed warning is closed now…', ma.isHidden(st, al, t0 + 1000));
+  step('…with NO timer: still closed a week, a month and a year later (it used to come back after 7 days — R-382)',
+    ma.isHidden(st, al, t0 + 7.1 * 864e5) && ma.isHidden(st, al, t0 + 30 * 864e5) && ma.isHidden(st, al, t0 + 400 * 864e5));
   step('…and comes straight back if the mailbox fails in a NEW way (state or last-worked date changes)',
     !ma.isHidden(st, { ...al, state: 'probably_expired' }, t0 + 1000) && !ma.isHidden(st, { ...al, since: '2026-10-01T00:00:00Z' }, t0 + 1000));
-  step('hiding one mailbox hides no other', !ma.isHidden(st, { ...al, mailbox_id: 'mb2' }, t0 + 1000));
+  step('closing one mailbox closes no other', !ma.isHidden(st, { ...al, mailbox_id: 'mb2' }, t0 + 1000));
   const ap = ma.applyHidden([al, { ...al, mailbox_id: 'mb2' }], st, t0 + 1000);
-  step('what is hidden is COUNTED, never silently dropped', ap.alerts.length === 1 && ap.hidden === 1 && ap.alerts[0].mailbox_id === 'mb2');
-  step('an expired entry is pruned on the next write (the row cannot grow without bound)', Object.keys(ma.recordHide(st, { ...al, mailbox_id: 'mb3' }, t0 + 8 * 864e5)).join() === 'mb3');
+  step('what is closed is COUNTED, never silently dropped', ap.alerts.length === 1 && ap.hidden === 1 && ap.alerts[0].mailbox_id === 'mb2');
+  const legacy = { mbOld: { until: new Date(t0 - 864e5).toISOString(), fp: 'x' }, mbLive: { until: new Date(t0 + 864e5).toISOString(), fp: ma.fingerprintOf(al) } };
+  step('an old one-week hide that has run out is pruned on the next write; a closed entry is kept', Object.keys(ma.recordClose({ ...legacy, mb1: st.mb1 }, { ...al, mailbox_id: 'mb3' }, t0)).sort().join() === 'mb1,mb3,mbLive');
   step('nobody may ask themselves, a peer, or ask about an unowned mailbox',
     /own mailbox/.test(ma.askRefusal({ askerId: 'a', ownerId: 'a', chainIds: [] })) &&
     /own team/.test(ma.askRefusal({ askerId: 'a', ownerId: 'b', chainIds: ['c'] })) &&
@@ -189,17 +191,17 @@ step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
   x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-mgr' } });
   step('a working mailbox creates no task', x.code === 404 && written.reminders.length === 1);
 
-  x = await run('post', '/mailboxes/alerts/hide', mgr, { body: { mailbox_id: 'mb-rep' } });
-  step('hide works for a warning that is on your list', x.code === 200 && x.out.success === true);
+  x = await run('post', '/mailboxes/alerts/close', mgr, { body: { mailbox_id: 'mb-rep' } });
+  step('close works for a warning that is on your list', x.code === 200 && x.out.success === true);
   const after = await run('get', '/mailboxes/alerts', mgr);
-  step('the hidden warning leaves the list and is counted', after.out.alerts.length === 0 && after.out.hidden === 1, JSON.stringify(after.out));
+  step('the closed warning leaves the list and is counted', after.out.alerts.length === 0 && after.out.hidden === 1, JSON.stringify(after.out));
   const other = await run('get', '/mailboxes/alerts', { id: 'u-adm', roles: ['admin'], org_id: 'o1' });
-  step('hiding is PER PERSON — the admin still sees it', other.out.alerts.some(a => a.email === 'raj@a.com') && other.out.hidden === 0);
-  x = await run('post', '/mailboxes/alerts/hide', peer, { body: { mailbox_id: 'mb-rep' } });
-  step('you cannot hide a warning that is not yours to see', x.code === 404);
+  step('closing is PER PERSON — the admin still sees it', other.out.alerts.some(a => a.email === 'raj@a.com') && other.out.hidden === 0);
+  x = await run('post', '/mailboxes/alerts/close', peer, { body: { mailbox_id: 'mb-rep' } });
+  step('you cannot close a warning that is not yours to see', x.code === 404);
   x = await run('post', '/mailboxes/alerts/show', mgr);
   const back = await run('get', '/mailboxes/alerts', mgr);
-  step('Show brings every hidden warning back', x.out.success === true && back.out.alerts.length === 1 && back.out.hidden === 0);
+  step('Show brings every closed warning back', x.out.success === true && back.out.alerts.length === 1 && back.out.hidden === 0);
 }
 
 // ── A MAILBOX PACE PAUSED BY ITSELF (owner, 27 Oct 2026, D-0183) ─────────────

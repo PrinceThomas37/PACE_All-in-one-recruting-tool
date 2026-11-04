@@ -76,6 +76,32 @@ failSettings = true;
 r = await get();
 ok('when the follow-up record cannot be read the banner says so — never "all fine"', r.status === 200 && !!byId(r.body, 'followups_unchecked'), JSON.stringify((r.body.issues || []).map((i) => i.id)));
 failSettings = false;
+
+// ── R-382: what the admin CLOSED in the mailbox warnings block leaves the banner too (ONE store), and the banner says how many ─────────────────────
+{
+  const ma = require('../services/mailbox-alerts');
+  const { mailboxConnections } = require('../mailbox-health');
+  const conns = await mailboxConnections(supabase, ['m2', 'm3']);
+  const al = (id) => ma.alertFor({ mailbox: tables.user_emails.find((m) => m.id === id), conn: conns[id] });
+  ok('(setup) the two mailbox problems have alerts to close', !!al('m2') && !!al('m3'), JSON.stringify([al('m2') && al('m2').state, al('m3') && al('m3').state]));
+  let before = byId((await get()).body, 'mailboxes_attention');
+  ok('before closing: the expired sign-in is in the banner', before && /expired@acme.com/.test(before.sentence));
+  tables.app_settings.push({ key: ma.hideKey('boss'), value: JSON.stringify(ma.recordClose({}, al('m2'), NOW)) });
+  let after = byId((await get()).body, 'mailboxes_attention');
+  ok('after the admin CLOSES the expired sign-in it is gone from the banner, the others stay, and the banner says one was closed', after && !/expired@acme.com/.test(after.sentence) && /bouncy@acme.com/.test(after.sentence) && /1 more warning closed by you/.test(after.sentence), after && after.sentence);
+  current = { id: 'boss2', role: 'admin', roles: ['admin'], org_id: ORG };
+  const other = byId((await get()).body, 'mailboxes_attention');
+  ok('closing is PER PERSON — another admin still sees it', other && /expired@acme.com/.test(other.sentence) && !/closed by you/.test(other.sentence));
+  current = { id: 'boss', role: 'admin', roles: ['admin'], org_id: ORG };
+  tables.app_settings.find((x) => x.key === ma.hideKey('boss')).value = JSON.stringify(ma.recordClose(ma.recordClose({}, al('m2'), NOW), al('m3'), NOW));
+  after = byId((await get()).body, 'mailboxes_attention');
+  ok('closing the paused one too leaves only the lock an admin set on purpose (not a closable warning)', after && !/expired@acme.com/.test(after.sentence) && !/bouncy@acme.com/.test(after.sentence) && /locked@acme.com/.test(after.sentence) && /2 more warnings closed by you/.test(after.sentence), after && after.sentence);
+  const st = JSON.parse(tables.app_settings.find((x) => x.key === ma.hideKey('boss')).value);
+  st.m2.fp = 'failed|a-different-last-worked-date';
+  tables.app_settings.find((x) => x.key === ma.hideKey('boss')).value = JSON.stringify(st);
+  after = byId((await get()).body, 'mailboxes_attention');
+  ok('a mailbox that fails in a NEW way comes straight back into the banner', after && /expired@acme.com/.test(after.sentence), after && after.sentence);
+}
 srv.close();
 const failed = results.filter((x) => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`); process.exit(failed ? 1 : 0);

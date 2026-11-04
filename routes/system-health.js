@@ -50,11 +50,19 @@ module.exports = (ctx) => {
         const conns = ids.length ? await mailboxConnections(supabase, ids) : {};
         const locks = ids.length ? await alerts.blockedNotes(supabase, ids) : {};
         const blocked = live.filter((b) => locks[b.id]);
+        // R-382: the admin's own CLOSED warnings (the same store the mailbox warnings block writes) leave the banner too — closing in one place must
+        // close it in the other. A mailbox that fails in a NEW way is a different fingerprint and comes straight back. How many were closed is
+        // said, never silently dropped.
+        const closedStore = await alerts.loadHidden(supabase, req.user.id, t);
+        const closed = (b) => { const a = alerts.alertFor({ mailbox: b, conn: conns[b.id] }); return !!a && alerts.isHidden(closedStore, a, t); };
+        const expiredBoxes = live.filter((b) => !locks[b.id] && conns[b.id] && conns[b.id].status === 'expired');
+        const pausedBoxes = live.filter((b) => b.auto_paused_at && !locks[b.id]);
         facts.mailboxes = {
           checked: true,
-          expired: live.filter((b) => !locks[b.id] && conns[b.id] && conns[b.id].status === 'expired').map((b) => b.email_address),
-          autoPaused: live.filter((b) => b.auto_paused_at && !locks[b.id]).map((b) => b.email_address),
+          expired: expiredBoxes.filter((b) => !closed(b)).map((b) => b.email_address),
+          autoPaused: pausedBoxes.filter((b) => !closed(b)).map((b) => b.email_address),
           blocked: blocked.map((b) => b.email_address),
+          closed: [...new Set([...expiredBoxes, ...pausedBoxes].filter(closed).map((b) => b.id))].length,
         };
       } catch (_) { facts.mailboxes = { checked: false }; }
 

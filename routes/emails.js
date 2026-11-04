@@ -33,6 +33,7 @@ const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
 const pendingByMailbox = require('../services/pending-by-mailbox');
 const own = require('../services/ownership');
+const failedCloses = require('../services/failed-email-closes');
 const { createDb } = require('../models');
 
 const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
@@ -71,6 +72,14 @@ module.exports = (ctx) => {
 
   // Every page of a query. `build` must return a FRESH builder that is already
   // ORDERED — .range() without an ORDER BY repeats or skips rows between pages.
+  // What this person has closed for themselves among OTHER people's failed emails (R-382). Best-effort: unreadable → nothing is hidden.
+  async function readFailedClosed(userId) {
+    try {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', failedCloses.key(userId)).maybeSingle();
+      if (data && data.value) return typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    } catch (_) { /* shows the row */ }
+    return {};
+  }
   async function allPages(build) {
     let out = [], from = 0;
     while (true) {
@@ -114,6 +123,35 @@ module.exports = (ctx) => {
     return [].concat(...parts);
   }
 
+// R-382 — "Close for me" on a teammate's failed email: hides it for THIS person only and never touches the email (the sender's own Close deletes it).
+// A literal path, so it sits above every /emails/:id route. Only emails this person may SEE (the same boundary as the list) and that are failed and not
+// their own are accepted; anything else is ignored, never reported as closed.
+router.post('/emails/failed/close-for-me', auth, async (req, res) => {
+  try {
+    const ids = [...new Set((Array.isArray(req.body && req.body.ids) ? req.body.ids : []).map(String))].slice(0, 200);
+    if (!ids.length) return res.status(400).json({ error: 'Nothing to close.' });
+    const scope = await viewScopeFor(req);
+    const senderIds = own.queryOwnerIds(scope);
+    let rows = await allPages(() => {
+      let query = emailRows(req).in('id', ids).eq('status', 'failed');
+      if (senderIds) query = query.in('sent_by', senderIds);
+      return query.order('id', { ascending: true });
+    });
+    if (senderIds) {
+      const extra = await emailsOnOwnedLeads(req, senderIds, 'failed', new Set(rows.map(e => e.id)));
+      rows = rows.concat(extra.filter(e => ids.includes(e.id)));
+    }
+    const jobsById = new Map();
+    rows.forEach(e => { if (e.job && e.job.id) jobsById.set(e.job.id, e.job); });
+    rows = own.scopeEmails(rows, jobsById, scope).filter(e => e.sent_by !== req.user.id);
+    if (!rows.length) return res.json({ success: true, closed: 0 });
+    const store = failedCloses.addCloses(await readFailedClosed(req.user.id), rows, Date.now());
+    const { error } = await supabase.from('app_settings').upsert({ key: failedCloses.key(req.user.id), value: JSON.stringify(store) }, { onConflict: 'key' });
+    if (error) throw error;
+    res.json({ success: true, closed: rows.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/emails', auth, async (req, res) => {
   try {
     const { status } = req.query;
@@ -140,6 +178,8 @@ router.get('/emails', auth, async (req, res) => {
     const jobsById = new Map();
     allData.forEach(e => { if (e.job && e.job.id) jobsById.set(e.job.id, e.job); });
     allData = own.scopeEmails(allData, jobsById, scope);
+    // R-382: the failed emails THIS person closed for themselves (someone else's rows only) stay off their list; the sender's own list is untouched.
+    if (status === 'failed' && !mineOnly) allData = failedCloses.withoutClosed(allData, await readFailedClosed(req.user.id), req.user.id);
 
     // A queued email keeps {{sender}} in storage until it is sent, so it is
     // rendered HERE — once, for every screen — from the mailbox that will

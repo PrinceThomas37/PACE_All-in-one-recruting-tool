@@ -2718,17 +2718,10 @@ app.post('/follow-ups/run', auth, async (req, res) => {
 // sent? `sentAt` is a date ('YYYY-MM-DD'), `dayGap` the configured fu1/fu2 offset,
 // `todayDate` today in the same form. Kept pure and exported so every hour of the
 // calendar is testable without waiting for it.
-function isFollowupDueFromSend(sentAt, dayGap, todayDate) {
-  if (!sentAt || !todayDate) return false;
-  const gap = Number.isFinite(dayGap) ? dayGap : parseInt(dayGap, 10);
-  if (!Number.isFinite(gap)) return false;
-  const start = new Date(`${String(sentAt).slice(0, 10)}T00:00:00Z`);
-  if (Number.isNaN(start.getTime())) return false;
-  start.setUTCDate(start.getUTCDate() + Math.max(0, gap));
-  return start.toISOString().slice(0, 10) <= String(todayDate).slice(0, 10);
-}
+function isFollowupDueFromSend(sentAt, dayGap, todayDate) { return followupQueueable.isDueFromSend(sentAt, dayGap, todayDate); }   // defined once, services/followup-queueable.js (R-379)
 
 // R-352: every follow-up lookup over a list of ids is batched, paged, and THROWS on failure (services/batched-read.js).
+const followupQueueable = require('./services/followup-queueable');
 const batchedRead = require('./services/batched-read');
 const readByIds = (table, select, col, ids, narrow) => batchedRead.readByIds(supabase, table, select, col, ids, narrow);
 const readAllPages = batchedRead.readAllPages;
@@ -2817,16 +2810,11 @@ async function runFollowupEngine() {
     // 214 real prospects under the customer's name. Nothing on screen said so —
     // the only volume brake was the mailbox's 300/day cap, which is above the
     // backlog size. So the pair must be proven sent, from the emails table.
-    const initialSentPairs = new Map();
+    let initialSentPairs = new Map();
     if (dueContactIds.length) {
       const initialRows = await readByIds('emails', 'job_id, contact_id, sent_at', 'contact_id', dueContactIds,
         (q) => q.eq('status', 'sent').is('followup_type', null));
-      (initialRows || []).forEach(r => {
-        const key = `${r.job_id}:${r.contact_id}`;
-        const prev = initialSentPairs.get(key);
-        // Earliest real send is the anchor — that is the note being followed up on.
-        if (!prev || (r.sent_at && r.sent_at < prev)) initialSentPairs.set(key, r.sent_at || prev || null);
-      });
+      initialSentPairs = followupQueueable.initialSentMap(initialRows);   // the SAME map the Assign screen reads (R-379)
     }
 
     for (const stepNo of Object.keys(dueByStep).map(Number).sort((a, b) => a - b)) {
@@ -4114,7 +4102,7 @@ const routeCtx = {
   loadMailboxSignatures, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody,
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
   logActivity, INDUSTRIES, normInd,
-  canTouchJob, isPermanentFollowupBlock, requireRole,
+  canTouchJob, isPermanentFollowupBlock, isFollowupEligibleContact, requireRole,
   addToSuppression, warmupLimit, loadSuppressedSet,
   loadAllJobs, JOB_SELECT, JOB_LIST_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
   getSendWindowHours, getPersonSendWindow, isInLeadSendWindow, getMinutesUntilWindowOpens,

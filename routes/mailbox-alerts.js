@@ -93,16 +93,8 @@ module.exports = (ctx) => {
     return { alerts: mailboxAlerts.sortAlerts(alerts), scope: scope.label, isAdmin };
   }
 
-  // What this person has hidden (R-122 step 3). Best-effort, like the needs-you
-  // snoozes: a store that cannot be read means a warning shows, never that one
-  // is lost.
-  async function readHidden(userId) {
-    try {
-      const { data } = await supabase.from('app_settings').select('value').eq('key', mailboxAlerts.hideKey(userId)).maybeSingle();
-      if (data && data.value) return mailboxAlerts.pruneHidden(typeof data.value === 'string' ? JSON.parse(data.value) : data.value, Date.now());
-    } catch (_) { /* shows the warning */ }
-    return {};
-  }
+  // What this person has closed (R-122 step 3, R-382): services/mailbox-alerts.js loadHidden — the SAME store the admin Dashboard banner reads.
+  const readHidden = (userId) => mailboxAlerts.loadHidden(supabase, userId, Date.now());
   async function writeHidden(userId, store) {
     const { error } = await supabase.from('app_settings').upsert({ key: mailboxAlerts.hideKey(userId), value: JSON.stringify(store) }, { onConflict: 'key' });
     if (error) throw error;
@@ -130,21 +122,20 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // Hide one warning, for me only, for a week. It comes back sooner if the
-  // mailbox fails in a new way (the fingerprint changes).
-  router.post('/mailboxes/alerts/hide', auth, async (req, res) => {
+  // Close one warning, for me only, with no timer (R-382). It comes back if the mailbox fails in a NEW way (the fingerprint changes).
+  router.post('/mailboxes/alerts/close', auth, async (req, res) => {
     try {
       const id = req.body && req.body.mailbox_id;
       const built = await buildAlerts(req);
       const alert = built.alerts.find(a => a.mailbox_id === id);
       if (!alert) return res.status(404).json({ error: 'That warning is not on your list any more — it may already be fixed.' });
-      const store = mailboxAlerts.recordHide(await readHidden(req.user.id), alert, Date.now());
+      const store = mailboxAlerts.recordClose(await readHidden(req.user.id), alert, Date.now());
       await writeHidden(req.user.id, store);
-      res.json({ success: true, until: store[id].until });
+      res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // Bring every hidden warning back.
+  // Bring every closed warning back.
   router.post('/mailboxes/alerts/show', auth, async (req, res) => {
     try {
       await writeHidden(req.user.id, {});
