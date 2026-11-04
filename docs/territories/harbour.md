@@ -400,3 +400,5 @@ Warm-up start/step are read for the sending mailbox's company (`mailbox.org_id`)
 
 
 - **WARM-UP POOL RULES (R-375/R-376, 4 Nov 2026).** A mailbox is in the pool only if it is active, is warming or opted in, has a live sign-in for ITS OWN provider (`microsoft_tokens` or `gmail_tokens`), and has no `auto_paused_at` (paused, auto-paused and blocked are all that one column). `warmup-engine.js poolMailboxes()` and `routes/warmup.js /warmup/mailboxes` must stay the same rule; `test/warmup-pool-smoke.mjs` pins both. Known limit: warm-up copy is 8 openers + 6 replies, fixed.
+
+- **Expired Google sign-in wording (R-378, 4 Nov 2026):** `services/mailbox-alerts.js reasonSentence` must not say PACE's Google app is "in testing" (it is published); it names a sign-in made before publishing, or a password change, and says reconnect once. Pinned in `test/mailbox-alerts-smoke.mjs`.

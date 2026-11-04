@@ -7490,3 +7490,5 @@ Owner asked what Warm-up actually does. Read `warmup-engine.js`: real mail betwe
 
 ### 4 Nov 2026 (Session 61) — owner asked why the to-do list "reset" after a merge
 Answer found in code: not a reset. Clears are rows in `app_settings` (database); a deploy does not touch them. Real cause (reproduced with `services/next-action-dismissals.js`): the saved fingerprint includes `floor(overdue_days)`, which grows daily, so every snooze/drop on an item with a day count returns the next day. Pinned on purpose by `test/next-action-dismiss-smoke.mjs` ("the silence growing also voids it"). Logged as R-377 (not fixed; reverses an earlier design decision, owner to say go). Also R-378: owner says the Google app is published, so the "in testing" wording on expired sign-ins may be wrong.
+
+Built and merged the same day with the owner's yes: R-377 (fingerprint no longer holds the day counter; the old test that pinned "the silence growing also voids it" was reversed on purpose and now pins the opposite) and R-378 (reworded expired-Google-sign-in sentence). Clears made before the change were stored in the old format and return once.

@@ -57,9 +57,20 @@ store = d.recordDismissal({}, item, 'drop', NOW);
 const replied = { ...item, last_activity_at: '2026-09-10T11:00:00Z' };
 ok('a NEW message on the thread voids even a drop',
   d.isDismissed(store, replied, NOW + DAY) === false);
-const sameThreadOlderCount = { ...item, overdue_days: 5 };
-ok('the silence growing also voids it',
-  d.isDismissed(store, sameThreadOlderCount, NOW + DAY) === false);
+// R-377: the owner cleared the list and it was full again the next morning, because the day counter was part of the fingerprint.
+const aDayLater = { ...item, overdue_days: (item.overdue_days || 0) + 1 };
+ok('R-377: a day passing (the overdue count going up by itself) does NOT bring a snoozed item back',
+  d.isDismissed(store, aDayLater, NOW + DAY) === true);
+const aMonthLater = { ...item, overdue_days: (item.overdue_days || 0) + 30 };
+store = d.recordDismissal({}, item, 'month', NOW);
+ok('R-377: a one-month snooze still holds at 20 days even though the count has grown by 20',
+  d.isDismissed(store, { ...item, overdue_days: (item.overdue_days || 0) + 20 }, NOW + 20 * DAY) === true);
+ok('R-377: ...and is over at 31 days, as it always was',
+  d.isDismissed(store, aMonthLater, NOW + 31 * DAY) === false);
+const stateChanged = { ...item, state: 'something_else' };
+ok('a change of state still brings it back',
+  d.isDismissed(store, stateChanged, NOW + DAY) === false);
+store = d.recordDismissal({}, item, 'drop', NOW);
 ok('an unchanged thread stays snoozed',
   d.isDismissed(store, { ...item }, NOW + DAY) === true);
 

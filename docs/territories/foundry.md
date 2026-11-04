@@ -1392,3 +1392,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - 3 Nov 2026 (R-306): import-hidden-rows-smoke (real .xlsx made with SheetJS, devDependency xlsx 0.18.5).
 
 - **`test/warmup-pool-smoke.mjs` (4 Nov 2026, R-375/R-376):** 9 checks that the warm-up screen and `warmup-engine.js poolMailboxes()` agree on who is in the pool (Gmail sign-in counts; paused/blocked/no-sign-in do not). Reuses the in-memory PostgREST copied from `scope-emails-warmup-smoke.mjs`. Proved by three mutants (engine ignoring `auto_paused_at`; Gmail never connected; screen counting paused mailboxes) — each fails it.
+
+- **Two guards reversed on purpose (4 Nov 2026):** `test/next-action-dismiss-smoke.mjs` used to assert "the silence growing also voids it"; it now asserts a day passing does NOT (R-377) and fails when the counter is put back in the fingerprint (proved). `test/mailbox-alerts-smoke.mjs` used to require "7 days"; it now forbids "in testing" (R-378).
