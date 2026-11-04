@@ -420,28 +420,44 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// The client's contacts as THIS person may see them (D-0035/D5: a POC is seen with its lead, D-0020), plus the lead a NEW
+// contact would be added to (R-388): the newest lead of this client the caller can see. Shared by both routes below so the
+// two can never disagree about who is visible.
+async function clientContactsFor(req, companyId) {
+  const { data: jobs } = await withOrg(supabase.from('jobs')
+    .select('id,assigned_to_bd,created_by,assigned_to,created_at').eq('company_id', companyId).is('deleted_at', null), req);
+  const isAdmin = hasRole(req, 'admin');
+  const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+  const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  const seeable = (jobs || []).filter(j => own.canSeeLead(j, scope))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const jobIds = seeable.map(j => j.id);
+  if (!jobIds.length) return { contacts: [], attachJobId: null };
+  const { data: contacts } = await supabase.from('contacts')
+    .select('id,first_name,last_name,email,designation,phone,is_primary').in('job_id', jobIds);
+  const seen = {}, out = [];
+  (contacts || []).forEach(c => {
+    const em = (c.email || '').toLowerCase().trim();
+    if (!em || seen[em]) return; seen[em] = true;
+    out.push({ id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(), email: c.email, designation: c.designation || null, phone: c.phone || null, is_primary: !!c.is_primary });
+  });
+  out.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+  return { contacts: out, attachJobId: jobIds[0] };
+}
+
 router.get('/companies/:id/contacts', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
-    // D-0035/D5 (rampart review #4): a POC is seen with its lead (D-0020) —
-    // another BD's contacts at the same client are not shown here either.
-    const { data: jobs } = await withOrg(supabase.from('jobs')
-      .select('id,assigned_to_bd,created_by,assigned_to').eq('company_id', req.params.id).is('deleted_at', null), req);
-    const isAdmin = hasRole(req, 'admin');
-    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
-    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
-    const jobIds = (jobs || []).filter(j => own.canSeeLead(j, scope)).map(j => j.id);
-    if (!jobIds.length) return res.json([]);
-    const { data: contacts } = await supabase.from('contacts')
-      .select('id,first_name,last_name,email,designation,phone,is_primary').in('job_id', jobIds);
-    const seen = {}, out = [];
-    (contacts || []).forEach(c => {
-      const em = (c.email || '').toLowerCase().trim();
-      if (!em || seen[em]) return; seen[em] = true;
-      out.push({ id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(), email: c.email, designation: c.designation || null, phone: c.phone || null, is_primary: !!c.is_primary });
-    });
-    out.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
-    res.json(out);
+    res.json((await clientContactsFor(req, req.params.id)).contacts);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// R-388: what the "Email this client" window needs, from any entry point (a list row as well as the open record).
+router.get('/companies/:id/email-contacts', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    const r = await clientContactsFor(req, req.params.id);
+    res.json({ contacts: r.contacts, attach_job_id: r.attachJobId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -508,14 +508,24 @@
   };
 
   // ── email compose ────────────────────────────────────────────────────────────
+  // R-388: the window always asks the server for THIS client's contacts, so it is the same from a list row as from the open
+  // record (it used to read the open record's list, which is empty from a row). The server also names the lead a new contact
+  // would be saved on. A token drops an answer that arrives after the window was closed or reopened for another client.
   window.clientsOpenEmail = function(companyId, fromSelectedDocs, prefill){
     var c=(STATE.clients.list||[]).find(function(x){ return x.id===companyId; }); if(!c) return;
+    var tok=(STATE.clients._emailTok=(STATE.clients._emailTok||0)+1);
+    apiGet('/companies/'+companyId+'/email-contacts').then(function(r){ return r||{}; }).catch(function(){ return { failed:true }; }).then(function(r){
+      if(tok!==STATE.clients._emailTok) return;
+      clientsBuildEmail(c, fromSelectedDocs, prefill, r.contacts||[], r.attach_job_id||null, !!r.failed);
+    });
+  };
+  function clientsBuildEmail(c, fromSelectedDocs, prefill, contacts, attachJobId, failed){
+    var companyId=c.id;
     var sel=STATE.clients.selDocs||{};
     var docIds = fromSelectedDocs ? Object.keys(sel).filter(function(k){ return sel[k]; }) : [];
     prefill=prefill||{};
-    var contacts=STATE.clients.contacts||[];
     var toVal=prefill.to||(contacts[0]&&contacts[0].email)||'';
-    STATE.clients._emailDraft = { companyId:companyId, to:toVal, subject:prefill.subject||('Following up — '+c.name), body:prefill.body||'Hi,\n\n\n\nBest regards,', documentIds:docIds };
+    STATE.clients._emailDraft = { companyId:companyId, attachJobId:attachJobId, to:toVal, subject:prefill.subject||('Following up — '+c.name), body:prefill.body||'Hi,\n\n\n\nBest regards,', documentIds:docIds };
     // POC dropdown from the client's contacts, with a free-text fallback.
     var toField = contacts.length
       ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
@@ -526,6 +536,12 @@
           '<input id="client-em-to" class="sel" style="flex:1;min-width:180px" placeholder="or type an email" value="'+escAttr(toVal)+'">'+
         '</div>'
       : '<input id="client-em-to" class="sel" placeholder="contact@client.com" value="'+escAttr(toVal)+'">';
+    // A person who is not in the list: name + email, sent to and (when the client has a lead to put them on) saved as a contact.
+    var newContact='<div class="fs-11 c-text2" style="margin-top:8px">'+(contacts.length?'Not in the list? Add a new contact:':(failed?'The contact list could not be loaded. Add a contact:':'No contacts yet for this client. Add one:'))+'</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">'+
+        '<input id="client-em-newname" class="sel" style="flex:1;min-width:160px" placeholder="Name">'+
+        '<input id="client-em-newemail" class="sel" style="flex:1;min-width:180px" placeholder="Email" type="email">'+
+      '</div>';
     STATE.modal =
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
@@ -536,7 +552,7 @@
           // R-087: which of MY mailboxes it leaves from. The page names an id; the server checks it is mine.
           (window.FromPick?FromPick.slot('client-em-from'):'')+
           '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">To</label>'+
-            toField+'</div>'+
+            toField+newContact+'</div>'+
           '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Subject</label>'+
             '<input id="client-em-subject" class="sel" value="'+esc(STATE.clients._emailDraft.subject)+'"></div>'+
           '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
@@ -548,7 +564,7 @@
         '</div>'+
       '</div>';
     render();
-  };
+  }
   // ── MERGING A DUPLICATE CLIENT IN ──────────────────────────────────────────
   // A BD can create a client by typing its name, so near duplicates accumulate.
   // The survivor is the record you are already looking at — "this is the real
@@ -633,13 +649,26 @@
 
   window.clientsSendEmail = function(){
     var d=STATE.clients._emailDraft; if(!d) return;
-    var to=(document.getElementById('client-em-to')||{}).value||'';
+    var val=function(id){ return ((document.getElementById(id)||{}).value||'').trim(); };
+    var newName=val('client-em-newname'), newEmail=val('client-em-newemail');
+    // A typed new contact wins over the picker: they went out of their way to type it.
+    var to=newEmail||val('client-em-to');
     var subject=(document.getElementById('client-em-subject')||{}).value||d.subject;
     var body=(document.getElementById('client-em-body')||{}).value||d.body;
-    if(!to.trim()){ showToast('Recipient email required','error'); return; }
+    if(!to){ showToast('Recipient email required','error'); return; }
+    if(newEmail&&!newName){ showToast('Add the new contact\'s name too','error'); return; }
     showToast('Sending…','info');
     apiPost('/companies/'+d.companyId+'/email', { to:to, subject:subject, body:body, document_ids:d.documentIds||[], mailbox_id:(window.FromPick&&FromPick.value('client-em-from'))||undefined })
-      .then(function(){ showToast('Email sent','success'); closeModal(); })
+      .then(function(){
+        closeModal();
+        if(!newEmail){ showToast('Email sent','success'); return; }
+        // Sent first (that is the point), THEN saved — a contact is never created for an email that did not go.
+        if(!d.attachJobId){ showToast('Email sent. It was not saved as a contact: this client has no lead of yours to put them on.','warning'); return; }
+        var parts=newName.split(/\s+/), first=parts.shift(), last=parts.join(' ');
+        apiPost('/contacts', { job_id:d.attachJobId, first_name:first, last_name:last, email:newEmail })
+          .then(function(){ showToast('Email sent, and '+newName+' is saved as a contact','success'); })
+          .catch(function(e){ showToast('Email sent. '+newName+' was not saved as a contact: '+((e&&e.message)||'could not save'),'warning'); });
+      })
       .catch(function(e){
         if(/no_connected_mailbox/.test(e.message)) showToast('No connected mailbox — connect one under Email','error');
         else showToast('Send failed: '+e.message,'error');

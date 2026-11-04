@@ -7514,3 +7514,5 @@ Merged and live, all on a clean Node 22 + Node 26.11.1 pass (353 → 355 suites)
 
 ### 4 Nov 2026 (Session 62) — owner answers; R-387 built
 Owner answered the open questions (D-0209): R-389 cancelled (only the owner emails a client), R-380 closed (old leads left alone), Stop all keeps queued emails, flicker is on every client, Show everything fails on Jobs and probably Candidates, Outreach Insights cards load after ~1 minute (new R-393). Built R-387: `--bail` + quick-first ordering in `test/run-all.mjs`, CLAUDE.md habit. Next: R-390 + R-388 (batch B), then R-392 + R-391 reproduced first.
+
+R-390 and R-388 built in the branch (Session 62): see the surface and gateway territory memory. The first-email table is off Outreach Insights; the Email-client window lists the client's contacts and can add a new one. Guards changed in the same commits: `first-email-replies-smoke` (table gone), `from-picker-smoke` (contacts come from the server; new-contact flow, proved with a mutant). R-393 (cards take ~1 min) is measured next.
