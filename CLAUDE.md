@@ -215,6 +215,8 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
 
 ## Working conventions
 
+- **Guards fail EARLY, not late (R-387):** before any long run, grep `test/` for the text or behaviour the change touches and update those guards IN THE SAME COMMIT (a guard that fails on an intentional change is working — it just must not be found 20 minutes in). Use `node test/run-all.mjs --bail` (stops at the first failing suite and prints its detail; quick non-browser suites run before the browser ones) while developing; the final gate is still ONE full run, unpiped, on Node 22 and Node 26.
+
 Implement → `node --check` → targeted smoke → screenshot → commit → push to the session's dev branch → open a
 **draft PR** → when the owner approves, merge + let it deploy. Keep commits/PRs clean.
 

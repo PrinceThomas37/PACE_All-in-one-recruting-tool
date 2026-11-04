@@ -10,19 +10,35 @@
 // browser at $PLAYWRIGHT_BROWSERS_PATH. When those are missing the run says so
 // plainly instead of reporting a wall of unrelated failures.
 
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
-const only = process.argv.slice(2);
+const args = process.argv.slice(2);
+// --bail: stop at the FIRST failing suite and print its detail at once, so a
+// guard that needs updating is found in seconds, not at the end of a long run (R-387).
+const bail = args.includes('--bail');
+const only = args.filter(a => !a.startsWith('--'));
 const PER_SUITE_TIMEOUT_MS = 240000;
 
+// Quick suites (no browser) run first, browser suites after: the cheap guards
+// speak before the slow ones start. A suite is a browser suite if it names playwright.
+const isBrowser = f => /playwright/.test(readFileSync(join(testDir, f), 'utf8'));
 const suites = readdirSync(testDir)
   .filter(f => f.endsWith('.mjs') && f !== 'run-all.mjs')
   .filter(f => !only.length || only.some(o => f.includes(o)))
-  .sort();
+  .sort()
+  .map(f => ({ f, b: isBrowser(f) }))
+  .sort((x, y) => (x.b - y.b) || (x.f < y.f ? -1 : 1))
+  .map(x => x.f);
+
+function showFailure(r) {
+  console.log(`\n\x1b[31m─── ${r.file} ───\x1b[0m`);
+  const lines = r.out.split('\n').filter(l => /\[FAIL\]|Error|RESULT: FAIL/.test(l));
+  console.log((lines.length ? lines : r.out.split('\n').slice(-15)).slice(0, 20).join('\n'));
+}
 
 function runSuite(file) {
   return new Promise((resolve) => {
@@ -47,6 +63,11 @@ for (const file of suites) {
   results.push(r);
   const label = r.ok ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m';
   console.log(`${label}  ${file.padEnd(36)} ${String(r.ms + 'ms').padStart(8)}  ${r.counts}`);
+  if (!r.ok && bail && !/Cannot find package 'playwright-core'/.test(r.out)) {
+    showFailure(r);
+    console.log(`\nstopped at the first failure (--bail): ${results.length - 1}/${suites.length} suites passed before it`);
+    process.exit(1);
+  }
 }
 
 const failed = results.filter(r => !r.ok);
@@ -58,11 +79,7 @@ if (failed.length) {
     console.log('  npm install --no-save playwright-core');
     console.log('  export PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers');
   }
-  for (const r of failed.filter(r => !/Cannot find package 'playwright-core'/.test(r.out))) {
-    console.log(`\n\x1b[31m─── ${r.file} ───\x1b[0m`);
-    const lines = r.out.split('\n').filter(l => /\[FAIL\]|Error|RESULT: FAIL/.test(l));
-    console.log((lines.length ? lines : r.out.split('\n').slice(-15)).slice(0, 20).join('\n'));
-  }
+  for (const r of failed.filter(r => !/Cannot find package 'playwright-core'/.test(r.out))) showFailure(r);
 }
 
 console.log(`\n${results.length - failed.length}/${results.length} suites passed`);
