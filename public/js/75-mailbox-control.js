@@ -172,7 +172,8 @@
       (tips?'<ul class="mbc-tips fs-13">'+tips+'</ul>':'')+
       '<div class="mbc-acts">'+actionButtons(d)+'</div>'+
       '<div class="mbc-sec"><div class="mbc-h">Last '+d.window_days+' days</div>'+UI.strip(stripItems)+
-        '<div class="fs-12 c-text3 mbc-fine">Rates count people, not emails. A rate with nothing under it shows “—”, not 0%. Open tracking covers only the emails that carry it.</div></div>'+
+        '<div class="fs-12 c-text3 mbc-fine">Rates count people, not emails. A rate with nothing under it shows “—”, not 0%. Open tracking covers only the emails that carry it.'+
+          (s.tracked>0?' <b>Opens are undercounted</b> — Apple Mail, Gmail and company mail filters often block the tracking image, so read the open rate as a minimum, not the true figure.':'')+'</div></div>'+
       '<div class="mbc-sec"><div class="mbc-h">Sending today</div><div class="mbc-line"><span class="fs-13">'+d.limit.sent_today+' of '+(d.limit.daily||'—')+' a day</span><span class="mbc-meter"><i class="mbc-meter-fill" style="width:'+capPct+'%"></i></span><span class="mbc-week" title="Emails sent per day, last 7 days">'+week+'</span></div></div>'+
       warmupBlock(d)+
       (lf?'<div class="mbc-sec"><div class="mbc-h">Last failure</div><div class="fs-13">'+esc(lf.reason||'No reason recorded')+' <span class="c-text3">· '+esc(lf.kind||'')+' · '+esc(String(lf.at||'').slice(0,10))+'</span></div></div>':'')+

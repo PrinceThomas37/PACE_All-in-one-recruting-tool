@@ -87,6 +87,7 @@ try{
   t=await txt();
   step('its card names the mailbox, its owner, its state and its health', /neil\.patrick@acme\.com/.test(t) && /Neil Patrick/.test(t) && /Active/.test(t) && /Healthy/.test(t));
   step('the numbers are there: bounce 50%, open 25%, reply 12%', /50%\s*Bounce rate/i.test(t) && /25%\s*Open rate/i.test(t) && /12%\s*Reply rate/i.test(t), t.slice(t.indexOf('Last 30'),t.indexOf('Last 30')+260));
+  step('R-360: with tracked emails the open rate carries the note "Opens are undercounted"', /Opens are undercounted/.test(t) && /minimum/.test(t), '');
   step('…and the last failure and today\'s sending are shown', /mailbox full/.test(t) && /60 of 300/.test(t));
   step('the buttons are exactly the allowed ones: Pause, Block, Deactivate, Delete', (await btns()).join()==='Pause,Block,Deactivate,Delete', (await btns()).join());
 
@@ -115,6 +116,7 @@ try{
   await page.fill('#mbc-q',''); await ev(()=>mbcType('fresh')); await page.waitForFunction(()=>{ const r=[...document.querySelectorAll('.mbc-row')]; return r.length===1&&/fresh\.one/.test(r[0].textContent); },null,{timeout:4000}); await page.click('.mbc-row'); await page.waitForFunction(()=>/fresh\.one@acme\.com/.test((document.querySelector('.mbc-detail .mbc-title')||{}).textContent||''),null,{timeout:4000}); await page.waitForTimeout(200);
   t=await txt();
   step('a mailbox that has sent nothing shows "—" for every rate, not 0%', /—\s*Bounce rate/i.test(t) && /—\s*Open rate/i.test(t) && /—\s*Reply rate/i.test(t) && !/\b0%\s*(Bounce|Open|Reply)/i.test(t), t.slice(t.indexOf('Last 30'),t.indexOf('Last 30')+220));
+  step('R-360: ...and with nothing tracked there is no undercount note (nothing to qualify)', !/undercounted/.test(t), '');
   await page.click('.mbc-acts button:has-text("Delete")'); await page.waitForSelector('#mbc-del');
   await ev(()=>{ window.__calls.length=0; }); await page.fill('#mbc-del','FRESH.ONE@acme.com'); await page.click('.modal button:has-text("Delete forever")'); await page.waitForTimeout(500);
   const dp=(await calls()).find(c=>c[0]==='POST'&&c[2].action==='delete');

@@ -138,6 +138,10 @@ const memoryWatch = require('./services/memory-watch').createMemoryWatch({ jobs:
 app.use(memoryWatch.middleware);
 memoryWatch.start();
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization','If-None-Match'], exposedHeaders: ['ETag'] }));   // If-None-Match / ETag: the lead list's "not changed" answer (R-302)
+// Two headers every response carries (R-371, the low-risk half): a browser must not guess a file's type (nosniff), and says how much of a
+// page's address it may pass on. The public /i/ and /apply/ pages set their own stricter `no-referrer` later, which replaces this one.
+// Not done here, on purpose: a content-security policy and a narrower CORS — either can break a working screen and needs the owner's go.
+app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'strict-origin-when-cross-origin'); next(); });
 // `verify` keeps the raw bytes on the request. Stripe signs the exact body it
 // sent, so a re-serialised object cannot be verified — see routes/plans.js.
 app.use(express.json({ limit: '8mb',   // 5 MB of attachments, base64 (services/mailbox-send.js)
@@ -811,6 +815,12 @@ app.use(function(req, res, next) {
 });
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.get('/health', (req, res) => res.json({ ok: true }));
+// The database question, on its own path and with its own small limit (R-373). A failed database answers 503 so a monitor can tell.
+app.use('/health/deep', createRateLimiter({ name: 'health-deep', windowMs: 60 * 1000, max: 30 }));
+app.get('/health/deep', async (req, res) => {
+  const r = await require('./services/deep-health').check({ ping: async () => { const { error } = await supabase.from('app_settings').select('key').limit(1); if (error) throw error; } });
+  res.status(r.ok ? 200 : 503).json(r);
+});
 app.get('/api/version', (req, res) => res.json({
   ok: true,
   version: '3.0.0',

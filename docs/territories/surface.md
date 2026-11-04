@@ -320,3 +320,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 - 3 Nov 2026 (R-306): import preview shows hidden rows and imports only visible by default (public/js/78-import-visible.js, 14-mailmerge-engine.js); SheetJS must be read with cellStyles:true.
 
 - **Mailbox card, warm-up line (4 Nov 2026, R-376):** when a mailbox is paused or auto-paused and its warm-up status is "warming", the card adds "(on hold while the mailbox is paused — start it to carry on)" — it must not read as actively warming. `public/js/75-mailbox-control.js` `warmupBlock()`.
+
+- **Open-rate note on the mailbox card (R-360, 4 Nov 2026):** `public/js/75-mailbox-control.js` appends "Opens are undercounted — … read the open rate as a minimum" under the numbers ONLY when `stats.tracked > 0`. Pinned in `test/mailbox-control-ui-smoke.mjs`.
