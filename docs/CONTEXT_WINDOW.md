@@ -2,13 +2,13 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 4 Nov 2026 (Session 62). **Highest ids:** decision **D-0209** · roadmap **R-393** · next migration **075** (nothing applied). Main = `721c0a2` (#399). **Draft PR #401** (branch `claude/wizardly-bell-zbpl0q`) carries everything below, built and tested but NOT merged until the owner has seen it and a full clean run on Node 22 AND Node 26 is in.
+**Updated**: 4 Nov 2026 (Session 62). **Highest ids:** decision **D-0209** · roadmap **R-393** · next migration **075** (nothing applied). Main = `b6520ae` (**#401, merged 4 Nov**, owner's go, after a clean 358/358 on Node 22 and Node 26.11.1) plus the docs-only PR that carries this file. Render deploys main automatically; the deploy could not be confirmed from the sandbox (its proxy blocks the live host), so the owner's look at the live app is the first confirmation.
 
 ## START HERE
 **Who the owner is:** product owner and end user, NOT an engineer. Does not read code or use git. Evaluates by using the app, screenshots and short plain answers. "Ask me if you have any doubt, do not assume." "No shortcuts — we are building for the future." Wants the uncomfortable answer first, confidence tagged ([Certain]/[Likely]/[Guessing]), no agreement openers. Every reply ends with one line: what was skipped or not checked. Prefers FEWER, BIGGER merges (one full two-version run per batch).
 
-### In PR #401 (built, tested, not merged)
-- **R-387** `node test/run-all.mjs --bail` + quick suites first. **R-390** First-emails table off Outreach Insights (numbers stay on the server; the 17 Nov reminder `trig_01Gq1Nxdb5Eyc2aZspRnrzN8` STILL needs its text changed to read from the server — do it after the merge). **R-388** Email-client window lists the client's contacts from any entry point; add a new contact (name + email): sent first, then saved on the client's newest visible lead; only the owner can email.
+### Merged in #401 (live once Render finishes)
+- **R-387** `node test/run-all.mjs --bail` + quick suites first. **R-390** First-emails table off Outreach Insights (numbers stay on the server; the 17 Nov reminder `trig_01Gq1Nxdb5Eyc2aZspRnrzN8` text STILL says to read the removed table; it can only be edited from the old conversation it posts into (`session_013H7CqTHYeFjx2TbU2bsmTc`). The numbers: DB, SENT first emails (`emails.status='sent'`, `followup_type` null), by week, AI vs template, a reply counted only AFTER the email — `services/first-email-replies.js`, or `GET /insights/first-email-replies?days=90`. Whoever runs R-353 on 17 Nov reads them there, not on the screen). **R-388** Email-client window lists the client's contacts from any entry point; add a new contact (name + email): sent first, then saved on the client's newest visible lead; only the owner can email.
 - **R-392** Show everything now lifts finished rows too (kit + server twin). **R-391** an open client drawer no longer replays its open animation on each server answer. **R-393** Outreach Insights reads 6 at a time (was ~55 in a row) — counted and tested, NOT timed live.
 - Records: D-0209 (owner's answers: only the owner emails a client; the 129 old leads are left alone; Stop all keeps already-queued emails; deleting a sequence keeps past numbers).
 
