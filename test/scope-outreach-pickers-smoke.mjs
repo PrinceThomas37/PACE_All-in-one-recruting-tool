@@ -42,7 +42,9 @@ const tracking = [
   { id: 't1', token: 'tokB1', sent_by: 'B1', to_email: 'new@p.com', subject: 's', lead_id: null, org_id: O },
   { id: 't2', token: 'tokB2', sent_by: 'B2', to_email: 'new2@p.com', subject: 's', lead_id: null, org_id: O },
 ];
-const DB = { users, jobs, contacts, companies, email_tracking: tracking, email_send_log: [], organizations: [{ id: O, name: 'Acme' }], app_settings: [] };
+// R-395: a send into a sequence now checks the sequence is one the sender may use, so `wf1` is a real sequence that B1 made.
+const DB = { users, jobs, contacts, companies, email_tracking: tracking, email_send_log: [], organizations: [{ id: O, name: 'Acme' }], app_settings: [],
+  workflow_definitions: [{ id: 'wf1', org_id: O, created_by: 'B1', status: 'active', entity_type: 'contact' }] };
 const inserts = [];
 let nextId = 1;
 

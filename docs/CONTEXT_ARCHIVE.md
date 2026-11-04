@@ -7528,3 +7528,5 @@ While taking the owner's screenshots (Session 62) the Show-everything bar was fo
 #401 squash-merged as b6520ae on 4 Nov 2026 (owner: "Merge it, let me see it live") after a clean 358/358 on Node 22 and Node 26.11.1. The 17 Nov R-353 reminder could not be edited from this conversation; its new reading instructions are in CONTEXT_WINDOW.md.
 
 R-394 (Session 62, owner's Ash Sayyad screenshot): rejected sign-in as default sender; fixed in the branch with D-0211, guards mutant-proved. Full gate on the final head before merge.
+
+Session 62 (later): R-395 (own sequences only, all enrol doors), R-396 (lead by default + signature preview/edit in the Compose batch), R-394 (rejected sign-in never the default). One full gate on the final head, then merge (owner: "run the full test on all and then merge it").
