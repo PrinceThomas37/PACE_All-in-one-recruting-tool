@@ -650,31 +650,11 @@ function renderOutreachInsights(toggle){
   var table='<div class="card oi-card" data-oi-table><div class="td-h">BY SEQUENCE</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>Sequence</th><th>People</th><th>Emailed</th><th>Opened</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     :'<div class="fs-13 c-text3">'+(d?'No sequence sent anything in these dates.':'Loading…')+'</div>')+'</div>';
   var splits=d?'<div class="oi-splits">'+oiSplitCard('BY INDUSTRY',d.by_industry)+oiSplitCard('BY TIME ZONE',d.by_timezone)+'</div>':'';
-  return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+oiDrillCard()+chart+table+splits+firstReplyCard()+'</div>';
+  return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+oiDrillCard()+chart+table+splits+'</div>';
 }
 
-// R-343 step C (owner, 3 Nov 2026): did first-email replies drop after the switch from AI-written first emails to templates +
-// versions? Week by week, AI-written vs template, and the before/after totals once the switch date is recorded.
-function firstReplyCard(){
-  var f=STATE.firstReplies;
-  if(!f){ STATE.firstReplies={loading:true}; apiGet('/insights/first-email-replies?days=90'+(insightsTzQ()||'').replace(/^\?/,'&')).then(function(r){ STATE.firstReplies=r||{}; if(STATE.page==='bdinsights') render(); })
-    .catch(function(e){ STATE.firstReplies={err:(e&&e.message)||'Could not load'}; if(STATE.page==='bdinsights') render(); }); f=STATE.firstReplies; }
-  var head='<div class="td-h">FIRST EMAILS: REPLY RATE, AI-WRITTEN vs YOUR TEMPLATE (last 90 days, '+(f.whose==='company'?'the whole company':'you and your team')+')</div>';
-  if(f.loading) return '<div class="card oi-card">'+head+'<div class="fs-13 c-text3">Loading…</div></div>';
-  if(f.err) return '<div class="card oi-card">'+head+'<div class="fs-13 c-red">Could not load: '+htmlEsc(f.err)+'</div></div>';
-  var r=function(x){ return x==null?'—':x+'%'; };
-  var cell=function(n,rt){ return n?n.toLocaleString()+' · '+r(rt):'—'; };
-  var ba=f.before&&f.after?'<div class="fs-13" style="margin-bottom:8px"><b>Before the switch</b> ('+htmlEsc(f.switched_on)+'): '+r(f.before.rate)+' replied of '+f.before.sent.toLocaleString()+' · <b>After</b>: '+r(f.after.rate)+' of '+f.after.sent.toLocaleString()+
-      (f.after.sent<300?' <span class="c-text3">— too few sent since the switch to judge yet</span>':'')+'</div>'
-    :'<div class="fs-12 c-text3" style="margin-bottom:8px">The before/after line appears once the switch date is recorded.</div>';
-  var rows=(f.weeks||[]).slice().reverse().map(function(w){
-    return '<tr><td>'+htmlEsc(w.week)+(w.after_switch?' <span class="c-text3">(after)</span>':'')+'</td><td>'+w.sent.toLocaleString()+'</td><td>'+r(w.rate)+'</td><td>'+cell(w.ai_sent,w.ai_rate)+'</td><td>'+cell(w.tpl_sent,w.tpl_rate)+'</td></tr>';
-  }).join('');
-  return '<div class="card oi-card" data-oi-first-replies>'+head+ba+
-    (rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>Week of</th><th>First emails</th><th>Replied</th><th>AI-written · replied</th><th>Template · replied</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-      :'<div class="fs-13 c-text3">No first emails sent in the last 90 days.</div>')+
-    '<div class="fs-12 c-text3" style="margin-top:6px">Replied = the person wrote back after that first email (the same count as above). A rate with nothing under it shows —.</div></div>';
-}
+// R-390 (owner, 4 Nov 2026): the "First emails: reply rate, AI-written vs template" table is gone from this screen; the numbers
+// are still served by the server (see routes/workflows.js) for the R-353 before/after read.
 
 // ── THE TEAM'S OUTREACH (owner, 29 Oct: "connect ratio, block ratio … by total leads, per user and per email ID") ──
 // GET /insights/outreach-team counts (services/team-outreach.js); this draws. Last 30 days.

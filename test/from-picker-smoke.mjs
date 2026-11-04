@@ -56,6 +56,8 @@ async function api(route){
     mailbox: u.searchParams.get('mailbox_id')==='mb2' ? TWO.mailboxes[1] : TWO.mailboxes[0], sender:{ name:u.searchParams.get('mailbox_id')==='mb2'?'Me Two':'Me One' }, signature_html:'' });
   if (m==='POST' && p==='/submissions/s1/interview-invite') return reply(route, { sent:1 });
   if (m==='PATCH' && /\/stage$/.test(p)) return reply(route, { id:'s1', stage:'Interview Scheduled' });
+  // R-388: the email window asks the server for THIS client's contacts (it no longer reads the open record's list)
+  if (m==='GET' && p==='/companies/co1/email-contacts') return reply(route, { contacts:[{ name:'Sam', email:'sam@griffith.test', designation:'Buyer' }], attach_job_id:'j1' });
   if (m==='POST' && p==='/companies/co1/email') return reply(route, { sent:true });
   return reply(route, m==='GET' ? [] : {});
 }
@@ -76,11 +78,12 @@ try{
   const resetFrom = async (answer) => { mailboxAnswer=answer; await ev(()=>{ STATE.sendingMailboxes={ loaded:false, loading:false, list:[], default_id:null, error:false }; FromPick.refresh(); }); };
 
   // ═══ 1. the client email window ═════════════════════════════════════════
-  await ev(()=>{ STATE.clients=STATE.clients||{}; STATE.clients.list=[{ id:'co1', name:'Griffith Energy' }]; STATE.clients.contacts=[{ name:'Sam', email:'sam@griffith.test' }]; goPage('clients'); });
+  await ev(()=>{ STATE.clients=STATE.clients||{}; STATE.clients.list=[{ id:'co1', name:'Griffith Energy' }]; STATE.clients.contacts=null; goPage('clients'); });
   await page.waitForTimeout(500);
   await ev(()=>clientsOpenEmail('co1'));
   await page.waitForSelector('#client-em-from-sel',{timeout:5000}).catch(()=>{});
   const opts = await ev(()=>[...document.querySelectorAll('#client-em-from-sel option')].map(o=>({ v:o.value, sel:o.selected, t:o.textContent })));
+  step('Client email: the To picker lists the client\'s contacts from the server, even with no record open', await ev(()=>[...document.querySelectorAll('#client-em-poc option')].some(o=>o.value==='sam@griffith.test')) && await ev(()=>document.getElementById('client-em-to').value)==='sam@griffith.test');
   step('Client email: a From picker lists my two mailboxes, the default selected', opts.length===2 && opts[0].v==='mb1' && opts[0].sel && /Me Two/.test(opts[1].t) && /Gmail/.test(opts[1].t), JSON.stringify(opts.map(o=>o.v)));
   await page.selectOption('#client-em-from-sel','mb2');
   await ev(()=>clientsSendEmail());
@@ -93,6 +96,18 @@ try{
   // Owner, 2 Nov 2026: interview mail went "from a random email ID". Sending nothing for the shown default let the server
   // choose again (with no primary, in the database's own order) — so what is SHOWN is now what is SENT.
   step('Client email: leaving the default sends THAT mailbox\'s id (what is shown is what sends)', !!sent && sent.body.mailbox_id==='mb1', JSON.stringify(sent&&sent.body));
+  // R-388: a person who is not in the list — the email goes to the typed address, THEN they are saved on the client's lead
+  await ev(()=>clientsOpenEmail('co1')); await page.waitForSelector('#client-em-newname',{timeout:5000}).catch(()=>{});
+  const nc0 = calls.length;
+  await page.fill('#client-em-newname','Pat Quinn'); await page.fill('#client-em-newemail','pat@griffith.test');
+  await ev(()=>clientsSendEmail()); await page.waitForTimeout(500);
+  const after = calls.slice(nc0);
+  const iMail = after.findIndex(c=>c.m==='POST'&&c.p==='/companies/co1/email'), iSave = after.findIndex(c=>c.m==='POST'&&c.p==='/contacts');
+  step('Client email: a new contact is emailed at the typed address and then saved on the client\'s lead', iMail>=0 && after[iMail].body.to==='pat@griffith.test' && iSave>iMail && after[iSave].body.job_id==='j1' && after[iSave].body.first_name==='Pat' && after[iSave].body.last_name==='Quinn' && after[iSave].body.email==='pat@griffith.test', JSON.stringify(after.map(c=>c.m+' '+c.p)));
+  await ev(()=>clientsOpenEmail('co1')); await page.waitForSelector('#client-em-newname',{timeout:5000}).catch(()=>{});
+  const nc1 = calls.length;
+  await page.fill('#client-em-newemail','x@griffith.test'); await ev(()=>clientsSendEmail()); await page.waitForTimeout(300);
+  step('Client email: a new email without a name is refused, nothing is sent', !calls.slice(nc1).some(c=>c.m==='POST'));
 
   // one mailbox, none
   await resetFrom({ mailboxes:[TWO.mailboxes[0]], default_id:'mb1' });

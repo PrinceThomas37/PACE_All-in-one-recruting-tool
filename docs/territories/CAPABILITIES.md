@@ -152,7 +152,7 @@ routers compose mail; it is not an outreach path and must not become one.
 
 ### Emailing a client company
 **Status:** LIVE · owner `guild`
-Clients page → "✉ Email this client", with document attachment.
+Clients page → "✉ Email this client", with document attachment. Pick from the client's contacts, or add a new one (name + email) — it is sent, then saved as a contact. Only the client's owner can email it.
 `POST /companies/:id/email`.
 
 ### Reading and replying to your own mail

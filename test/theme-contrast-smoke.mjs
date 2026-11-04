@@ -92,8 +92,12 @@ const ROLES = ['admin','bd','recruiter','ra'];
 const SEED = () => {
   const S = window.STATE, now = new Date().toISOString();
   S.bd = S.bd || {}; S.bd.view = Object.assign({}, S.bd.view, { joId:'jo-1', pipelineJoId:'jo-1', kanbanJoId:'jo-1' });
-  S.bd.jobOrders = [1,2,3].map(i => ({ id:'jo-'+i, job_code:'JO-'+i, job_title:['HVAC Technician','Estimator','Project Manager'][i-1],
-    client:'Northwind '+i, status:i===3?'On Hold':'Open', city:'Hartford', state:'CT', job_type:'Full-time', pay_rate:'$80/hr',
+  // R-392 follow-up: a FINISHED job (the 4th), so the Jobs table and My Jobs draw their "N of M — 1 finished hidden · Show everything" bar
+  // (it sat straight on the dark canvas in unreadable ink and no screen here ever showed it), and the people's own view is "all".
+  S.bd.jobsView = 'all';
+  S.bd.jobOrders = [1,2,3,4].map(i => ({ id:'jo-'+i, job_code:'JO-'+i, job_title:['HVAC Technician','Estimator','Project Manager','Superintendent'][i-1],
+    bd_manager:{ id:S.user&&S.user.id, name:S.user&&S.user.name },
+    client:'Northwind '+i, status:i===4?'Closed':i===3?'On Hold':'Open', city:'Hartford', state:'CT', job_type:'Full-time', pay_rate:'$80/hr',
     primary_skills:'Procore, Bluebeam', job_description:'Service and repair.', created_at:now, apply_enabled:i===1, apply_token:'a'.repeat(32), apply_count:3 }));
   const cands = [['Jason Palencia','Project Manager'],['Taylor Ray','Estimator'],['Kevin Back','Superintendent'],['Charles Hudson','Core Proficiencies']]
     .map((q,i) => ({ id:'c'+i, candidate_code:'CN-0'+i, full_name:q[0], current_title:q[1], email:'p'+i+'@mail.test', phone:'864-555-010'+i,

@@ -28,7 +28,8 @@ const route = src.slice(src.indexOf("router.get('/insights/first-email-replies'"
 step('the route counts only SENT FIRST emails, every page, in this company', /eq\('status', 'sent'\)\.is\('followup_type', null\)/.test(route) && /fetchAll\(/.test(route) && /eq\('org_id', req\.orgId\)/.test(route));
 step('…an admin sees the company, anyone else their own and their team\'s (D-0034)', /hasRole\(req, 'admin'\) \? null : \[req\.user\.id\]\.concat\(await reportingChainIds/.test(route) && /in\('sent_by', who\)/.test(route));
 const ui = fs.readFileSync(new URL('../public/js/16-insights.js', import.meta.url), 'utf8');
-step('the card is on Outreach Insights', /firstReplyCard\(\)\+'<\/div>';/.test(ui) && /first-email-replies\?days=90/.test(ui));
+// R-390 (owner, 4 Nov 2026): the table is OFF the screen, the numbers stay on the server for the R-353 before/after read.
+step('the table is gone from Outreach Insights and the screen no longer asks for it', !/firstReplyCard|data-oi-first-replies|first-email-replies/.test(ui) && /router\.get\('\/insights\/first-email-replies'/.test(src));
 
 const pass = results.filter(Boolean).length;
 console.log(`\nSUMMARY: ${pass}/${results.length}`);

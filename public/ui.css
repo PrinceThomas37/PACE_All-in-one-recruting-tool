@@ -370,6 +370,8 @@ table.dt .tight{white-space:nowrap}
   animation:dwrIn .18s cubic-bezier(.4,0,.2,1);
 }
 @keyframes dwrIn{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+/* R-391: a drawer that is repainted while open (its data arriving) starts at rest — opening animations are for opening. */
+.dwr-still,.dwr-still .dwr{animation:none}
 .dwr-nav{
   display:flex;flex-direction:column;gap:6px;padding:0 12px;justify-content:flex-start;
 }

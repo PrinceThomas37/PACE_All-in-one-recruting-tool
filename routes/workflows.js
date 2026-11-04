@@ -198,16 +198,24 @@ async function loadOutreach(req) {
   const readTo = new Date(Date.parse(to + 'T00:00:00Z') + 60 * 3600e3).toISOString();
   const org = (qq) => (req.orgId ? qq.eq('org_id', req.orgId) : qq);
   const chunks = (ids, n = 150) => { const out = []; for (let i = 0; i < ids.length; i += n) out.push(ids.slice(i, i + n)); return out; };
+  // R-393 (owner 4 Nov: the cards took about a minute): the chunked reads below used to go ONE AFTER ANOTHER — about 55 database
+  // round trips for a person with 3,400 sent emails. They are independent, so a few at a time (`mapParts`); the answer is the same,
+  // the waiting is divided. shortcut: a fixed width of 6 (a technical limit on parallel reads, not a business limit) — raise it
+  // only if the database pool allows.
+  const mapParts = async (parts, fn, width = 6) => {
+    const out = new Array(parts.length); let next = 0;
+    await Promise.all(Array.from({ length: Math.min(width, parts.length) }, async () => {
+      while (next < parts.length) { const i = next++; out[i] = await fn(parts[i]); }
+    }));
+    return out;
+  };
 
   // my sequences in this organisation, and their steps' records of what they sent
   const defs = await fetchAll(() => org(supabase.from('workflow_definitions').select('id,name,created_by')).order('id'));
   const seqNames = {}; defs.forEach((d) => { seqNames[d.id] = d.name; });
   const defIds = defs.map((d) => d.id);
-  const runs = [];
-  for (const part of chunks(defIds, 100)) {
-    runs.push(...await fetchAll(() => supabase.from('workflow_step_runs').select('workflow_id,detail,run_at').in('workflow_id', part)
-      .eq('outcome', 'done').gte('run_at', readFrom).lte('run_at', readTo).order('id')));
-  }
+  const runs = (await mapParts(chunks(defIds, 100), (part) => fetchAll(() => supabase.from('workflow_step_runs').select('workflow_id,detail,run_at').in('workflow_id', part)
+    .eq('outcome', 'done').gte('run_at', readFrom).lte('run_at', readTo).order('id')))).flat();
   const seqOfEmail = {}, seqOfToken = {};
   runs.forEach((r) => { const d = r.detail || {}; if (d.email_id) seqOfEmail[d.email_id] = r.workflow_id; if (d.token) seqOfToken[d.token] = r.workflow_id; });
 
@@ -215,19 +223,15 @@ async function loadOutreach(req) {
   const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id').eq('sent_by', me).eq('status', 'sent')
     .gte('sent_at', new Date(Date.parse(from) - 864e5).toISOString().slice(0, 10)).lte('sent_at', new Date(Date.parse(to) + 864e5).toISOString().slice(0, 10))).order('id'));
   const leadSends = emails.map((e) => ({ id: e.id, day: String(e.sent_at || '').slice(0, 10), contact_id: e.contact_id, seq: seqOfEmail[e.id] || null }));
-  const tracking = [], contacts = {};
-  for (const part of chunks(emails.map((e) => e.id))) tracking.push(...await fetchAll(() => org(supabase.from('email_tracking').select('email_id,open_count').in('email_id', part)).order('id')));
+  const contacts = {};
+  const tracking = (await mapParts(chunks(emails.map((e) => e.id)), (part) => fetchAll(() => org(supabase.from('email_tracking').select('email_id,open_count').in('email_id', part)).order('id')))).flat();
   const cids = [...new Set(emails.map((e) => e.contact_id).filter(Boolean))], jobOf = {};
-  for (const part of chunks(cids)) {
-    (await fetchAll(() => org(supabase.from('contacts').select('id,first_name,last_name,email,email_status,replied_at,job_id').in('id', part)).order('id'))).forEach((c) => {
-      contacts[c.id] = { email_status: c.email_status, replied_day: c.replied_at ? dayIn(c.replied_at) : null, job_id: c.job_id,
-        name: [c.first_name, c.last_name].filter(Boolean).join(' '), email: c.email || '' };
-    });
-  }
+  (await mapParts(chunks(cids), (part) => fetchAll(() => org(supabase.from('contacts').select('id,first_name,last_name,email,email_status,replied_at,job_id').in('id', part)).order('id')))).flat().forEach((c) => {
+    contacts[c.id] = { email_status: c.email_status, replied_day: c.replied_at ? dayIn(c.replied_at) : null, job_id: c.job_id,
+      name: [c.first_name, c.last_name].filter(Boolean).join(' '), email: c.email || '' };
+  });
   const jids = [...new Set(Object.values(contacts).map((c) => c.job_id).filter(Boolean))];
-  for (const part of chunks(jids)) {
-    (await fetchAll(() => org(supabase.from('jobs').select('id,stage,position,industry,timezone,company:companies(name,industry)').in('id', part)).order('id'))).forEach((j) => { jobOf[j.id] = j; });
-  }
+  (await mapParts(chunks(jids), (part) => fetchAll(() => org(supabase.from('jobs').select('id,stage,position,industry,timezone,company:companies(name,industry)').in('id', part)).order('id')))).flat().forEach((j) => { jobOf[j.id] = j; });
   Object.values(contacts).forEach((c) => {
     const j = jobOf[c.job_id] || {};
     c.stage = j.stage || null; c.position = j.position || ''; c.company = (j.company && j.company.name) || '';
