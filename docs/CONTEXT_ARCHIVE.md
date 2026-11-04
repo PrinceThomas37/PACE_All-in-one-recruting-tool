@@ -7526,3 +7526,5 @@ Full gate for PR #401 (Session 62): 358/358 suites on Node 22 and on Node 26.11.
 While taking the owner's screenshots (Session 62) the Show-everything bar was found nearly invisible in the dark palette; fixed in `retro.css` and the contrast guard now draws the bar. Full gate must be re-run on the final head.
 
 #401 squash-merged as b6520ae on 4 Nov 2026 (owner: "Merge it, let me see it live") after a clean 358/358 on Node 22 and Node 26.11.1. The 17 Nov R-353 reminder could not be edited from this conversation; its new reading instructions are in CONTEXT_WINDOW.md.
+
+R-394 (Session 62, owner's Ash Sayyad screenshot): rejected sign-in as default sender; fixed in the branch with D-0211, guards mutant-proved. Full gate on the final head before merge.

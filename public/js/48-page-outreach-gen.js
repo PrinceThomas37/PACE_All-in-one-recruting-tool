@@ -131,8 +131,9 @@
   // the sender's name and its signature is theirs, so the draft is cleared rather
   // than left saying one person over another's From line (the Session 14 bug).
   window.outreachGenFrom=function(v){
-    var g=collectDom(), had=!!g.draft;
+    var g=collectDom(), had=!!g.draft || !!(g.batch&&g.batch.some(function(r){ return r.status==='ready'||r.status==='error'; }));
     g.form.mailbox_id=v||''; g.draft=null; g.edits={}; g.variantId=null; g.sentOk=null;
+    if(g.batch&&!g.batchWriting&&!g.batchSending) g.batch=null;      // R-394: each batch email names its sender too — written again for the new one
     g.error=had?'You changed who this sends as, so the draft was cleared — the wording carries the sender\'s name. Generate it again.':null;
     g.sender=null; loadOutreachSender(); render();
   };
@@ -480,7 +481,9 @@
       ((s.mailboxes&&s.mailboxes.length>1)
         ?'<select id="og-from" class="sel" aria-label="Send from which mailbox" style="max-width:280px" onchange="outreachGenFrom(this.value)">'+
             s.mailboxes.map(function(m){ var on=(G().form.mailbox_id||'')===m.id||(!G().form.mailbox_id&&s.mailbox&&s.mailbox.id===m.id);
-              return '<option value="'+esc(m.id)+'"'+(on?' selected':'')+'>'+esc((m.display_name?m.display_name+' <'+m.email+'>':m.email))+'</option>'; }).join('')+
+              // R-394: a mailbox whose sign-in was rejected is shown, marked, and cannot be picked (it can only fail)
+              var bad=!!m.needs_reconnect;
+              return '<option value="'+esc(m.id)+'"'+(on?' selected':'')+(bad&&!on?' disabled':'')+'>'+esc((m.display_name?m.display_name+' <'+m.email+'>':m.email))+(bad?' — sign-in expired, reconnect it':'')+'</option>'; }).join('')+
           '</select>':'')+
     '</div>';
   }
@@ -973,7 +976,8 @@
         outreach_type:f.outreach_type, contact_first_name:p.first_name, contact_title:p.title,
         company:f.company||co.name||'', location:C().location||[co.city,co.state].filter(Boolean).join(', '),
         no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text, notes:f.notes,
-        job_title:f.job_title, job_description:f.job_description, sender:{title:f.sender_title}
+        job_title:f.job_title, job_description:f.job_description, sender:{title:f.sender_title},
+        mailbox_id:f.mailbox_id||undefined      // R-394: the batch writes AND sends as the mailbox chosen in the From picker
       }).then(function(r){
         var v=(r&&r.variants&&r.variants[0])||r||{};
         row.subject=v.subject||r.subject||''; row.email=v.email||r.email||''; row.status='ready';
@@ -989,7 +993,8 @@
     return apiPost('/outreach/send',{
       to:row.person.email, subject:row.subject, body:row.email, sequence_id:g.sequenceId||'',
       company:f.company||co.name||'', location:C().location||'', name:row.person.first_name,
-      title:row.person.title, position:f.job_title
+      title:row.person.title, position:f.job_title,
+      mailbox_id:f.mailbox_id||undefined      // R-394: it used to name none, so the server chose — and chose a mailbox whose sign-in Google had rejected
     }).then(function(r){
       row.status='sent'; row.sequence=r&&r.sequence;
       if(r&&r.sequence&&r.sequence.error) row.error='Sent, but not added to the sequence: '+r.sequence.error;
@@ -1043,7 +1048,7 @@
       '<div class="ogc-draft-h"><b>'+b.length+' email'+(b.length===1?'':'s')+'</b>'+
         '<button type="button" class="btn btn-primary btn-sm" onclick="ogcSendAll()" '+((ready&&!g.batchSending)?'':'disabled')+'>'+(g.batchSending?'Sending…':'Send all ('+ready+')')+'</button></div>'+
       batchSeqHtml()+
-      '<div class="fs-11_5 c-text3 ogc-sig">Each goes from your outreach mailbox, with its signature added when it is sent.</div>'+
+      '<div class="fs-11_5 c-text3 ogc-sig">Each goes from the mailbox chosen in the From box above, with that mailbox\'s signature added when it is sent.</div>'+
       rows+'</div>';
   }
 

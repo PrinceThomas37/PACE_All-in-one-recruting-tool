@@ -153,7 +153,7 @@ module.exports = (ctx) => {
       res.json({
         // Every mailbox this person may send from — the "From" picker.
         mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
-          platform: m.platform || 'Microsoft', is_primary: !!m.is_primary })),
+          platform: m.platform || 'Microsoft', is_primary: !!m.is_primary, needs_reconnect: !!m.needs_reconnect })),
         company_name: companyName,
         // Whether an AI writer is configured is the provider's question now, not
         // this file's. Two branches merged cleanly into a break here: #159

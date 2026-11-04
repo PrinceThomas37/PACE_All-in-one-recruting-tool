@@ -44,6 +44,7 @@ function findChromium(){
 }
 const TWO = { mailboxes:[{ id:'mb1', email:'me@ours.com', display_name:'Me One', platform:'Microsoft', is_primary:true }, { id:'mb2', email:'me@gmail.test', display_name:'Me Two', platform:'Gmail', is_primary:false }], default_id:'mb1' };
 let mailboxAnswer = TWO;
+let badSenderId = null;      // R-394: which mailbox the server says has an expired sign-in
 const calls=[];
 function reply(route, body, status=200){ return route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) }); }
 async function api(route){
@@ -52,7 +53,7 @@ async function api(route){
   calls.push({ m, p, q:u.search, body });
   if (m==='GET' && p==='/me/sending-mailboxes') return reply(route, mailboxAnswer);
   if (m==='GET' && p==='/clients') return reply(route, [{ id:'co1', name:'Griffith Energy', industry:'Construction', job_order_count:1, open_job_order_count:1, can_edit:true }]);
-  if (m==='GET' && p==='/outreach/sender') return reply(route, { mailboxes:TWO.mailboxes, company_name:'Acme Staffing', ai:false,
+  if (m==='GET' && p==='/outreach/sender') return reply(route, { mailboxes:TWO.mailboxes.map(x=>Object.assign({}, x, { needs_reconnect: x.id===badSenderId })), company_name:'Acme Staffing', ai:false,
     mailbox: u.searchParams.get('mailbox_id')==='mb2' ? TWO.mailboxes[1] : TWO.mailboxes[0], sender:{ name:u.searchParams.get('mailbox_id')==='mb2'?'Me Two':'Me One' }, signature_html:'' });
   if (m==='POST' && p==='/submissions/s1/interview-invite') return reply(route, { sent:1 });
   if (m==='PATCH' && /\/stage$/.test(p)) return reply(route, { id:'s1', stage:'Interview Scheduled' });
@@ -155,6 +156,23 @@ try{
   const og1 = await ev(()=>({ draft:!!STATE.outreachGen.draft, err:STATE.outreachGen.error, mb:STATE.outreachGen.form.mailbox_id, name:(STATE.outreachGen.sender&&STATE.outreachGen.sender.sender&&STATE.outreachGen.sender.sender.name)||'' }));
   step('Generator: changing who it sends as clears the draft (its wording names the sender) and says why', !og1.draft && /cleared/.test(og1.err||'') && og1.mb==='mb2', JSON.stringify(og1));
   step('Generator: the sender identity is re-read for THAT mailbox', !!calls.find(c=>c.m==='GET'&&c.p==='/outreach/sender'&&/mailbox_id=mb2/.test(c.q)) && og1.name==='Me Two');
+  // ── R-394: the BATCH ("N emails / Send all") used to name no mailbox, so the server chose — and chose one Google had rejected ──
+  await ev(()=>{ window.__batch = () => { const g=STATE.outreachGen; g.batch=[{ person:{ email:'kev@x.test', first_name:'Kev', title:'TA' }, status:'ready', subject:'Hi Kev', email:'Hello', error:null }]; render(); }; });
+  await ev(()=>{ STATE.outreachGen.form.mailbox_id='mb2'; window.__batch(); });
+  const nb0 = calls.length; await ev(()=>ogcSend(0)); await page.waitForTimeout(500);
+  const bsend = calls.slice(nb0).find(c=>c.m==='POST'&&c.p==='/outreach/send');
+  step('Batch: Send names the mailbox chosen in the From box (it used to name none)', !!bsend && bsend.body.mailbox_id==='mb2', JSON.stringify(bsend&&bsend.body));
+  await ev(()=>{ window.__batch(); });
+  await page.selectOption('#og-from','mb1'); await page.waitForTimeout(500);
+  const bclr = await ev(()=>({ batch:STATE.outreachGen.batch, err:STATE.outreachGen.error }));
+  step('Batch: changing who it sends as clears the written emails (each names its sender) and says why', bclr.batch===null && /cleared/.test(bclr.err||''), JSON.stringify(bclr));
+  // an expired sign-in is shown, marked, and cannot be picked
+  badSenderId = 'mb2';
+  await ev(()=>{ STATE.outreachGen=null; STATE.composeSide='clients'; STATE.emailTab='compose'; STATE.page='email'; render(); });
+  await page.waitForSelector('#og-from',{timeout:6000}).catch(()=>{});
+  const exp = await ev(()=>[...document.querySelectorAll('#og-from option')].map(o=>({ v:o.value, t:o.textContent, d:o.disabled, s:o.selected })));
+  step('Expired mailbox: shown with "sign-in expired", disabled, and the default is the working one', exp.length===2 && exp.find(o=>o.v==='mb2').d===true && /sign-in expired/.test(exp.find(o=>o.v==='mb2').t) && exp.find(o=>o.v==='mb1').s===true && !exp.find(o=>o.v==='mb1').d, JSON.stringify(exp));
+  badSenderId = null;
 
   step('No page errors', pageErrors.length===0, pageErrors.slice(0,2).join(' | '));
 }catch(e){
