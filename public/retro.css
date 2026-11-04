@@ -422,6 +422,11 @@ body.ui-kit .user-row{border-radius:0}
 body.ui-kit .sb-lbl{color:var(--on-canvas-strong)}
 body.ui-kit .sb-footer .nav-item,body.ui-kit .u-name{color:var(--on-canvas-strong)}
 body.ui-kit .u-role{color:var(--on-canvas)}
+/* R-392 follow-up: the "N of M hidden — Show everything" bar sits straight on the canvas (its ground is a near-transparent tint), so at night
+   its --text2 ink (dark purple) was ~1.4:1 on the dark page — the bar that says rows are hidden could not be read. */
+body.ui-kit .hz-bar .hz-txt{color:var(--on-canvas)}
+body.ui-kit .hz-bar .hz-txt b{color:var(--on-canvas-strong)}
+body.ui-kit .hz-bar .hz-btn{color:var(--on-canvas-strong)}
 
 /* ══ THE SIDEBAR AS DESIGNED (owner's sidebar mockup, R-122) ══════════════ */
 /* The logo tile: a taller slice of sky with the big pixel PACE. */

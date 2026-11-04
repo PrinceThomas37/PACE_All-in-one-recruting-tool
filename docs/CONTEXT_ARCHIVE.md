@@ -7522,3 +7522,5 @@ R-392 and R-391 fixed (Session 62). Both were reproduced in a real browser first
 R-393 (Outreach Insights reads in parallel) and R-381 (follow-up time: a free-tier sleep, by design) worked in Session 62. R-393 is counted and tested, not timed on the live server.
 
 Full gate for PR #401 (Session 62): 358/358 suites on Node 22 and on Node 26.11.1. Owner chose (c) for R-381 (D-0210).
+
+While taking the owner's screenshots (Session 62) the Show-everything bar was found nearly invisible in the dark palette; fixed in `retro.css` and the contrast guard now draws the bar. Full gate must be re-run on the final head.
