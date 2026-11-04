@@ -59,15 +59,13 @@ function itemKey(item) {
 }
 
 // The fact being dismissed. Anything that would make this action NEW again
-// belongs in here. Currently: the last thing that happened on the thread.
+// belongs in here. Currently: the last thing that happened on the thread, and its state.
+// NOT the day counter (R-377, owner 4 Nov): "34 days overdue" becomes "35" every morning by itself, so a fingerprint that held it made every
+// snooze and every Drop come back the next day. Only something that actually HAPPENED belongs here: a new message (last_activity_at) or a change
+// of state. A step change on a submission is a different item key (itemKey), so it returns as its own item.
 function fingerprintOf(item) {
   if (!item) return '';
-  const parts = [
-    item.last_activity_at || '',
-    item.overdue_days === null || item.overdue_days === undefined ? '' : Math.floor(item.overdue_days),
-    item.state || '',
-  ];
-  return parts.join('|');
+  return [item.last_activity_at || '', item.state || ''].join('|');
 }
 
 function horizonFor(scope, now = Date.now()) {

@@ -25,7 +25,7 @@ function reasonSentence(platform, error) {
   if (/aadsts65001|consent/.test(e)) return `${who} withdrew PACE's permission to use this mailbox — reconnect it and accept the permission again.`;
   if (/aadsts7000215|aadsts7000222|invalid_client|client secret/.test(e)) return `PACE's own ${who} connection needs renewing — this affects every ${who} mailbox; an admin should look at Admin → Integrations.`;
   if (/aadsts50173|aadsts700082|aadsts50076|password|mfa|multi-factor/.test(e)) return `The sign-in was ended by a password or security change — reconnect it.`;
-  if (platform === 'gmail' && /invalid_grant|expired or revoked|token has been expired/.test(e)) return `Google ended the sign-in (it does this after 7 days while PACE's Google app is in testing, or after a password change) — reconnect it.`;
+  if (platform === 'gmail' && /invalid_grant|expired or revoked|token has been expired/.test(e)) return `Google ended the sign-in (this happens to a sign-in made before PACE's Google app was published, or after a password change) — reconnect it once.`;
   if (/invalid_grant|revoked|expired/.test(e)) return `The sign-in expired — reconnect it.`;
   return `The sign-in stopped working — reconnect it.`;
 }

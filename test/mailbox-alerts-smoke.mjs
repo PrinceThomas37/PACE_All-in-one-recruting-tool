@@ -20,7 +20,8 @@ const LIVE = "invalid_grant: AADSTS65001: The user or administrator has not cons
 let s = ma.reasonSentence('microsoft', LIVE);
 step('the live Microsoft error becomes a plain sentence', /Microsoft withdrew PACE's permission/.test(s) && !/AADSTS/.test(s), s);
 s = ma.reasonSentence('gmail', 'invalid_grant: Token has been expired or revoked.');
-step('Google\'s 7-day testing expiry is named', /7 days/.test(s) && /Google/.test(s), s);
+// R-378 (owner 4 Nov: the Google app IS published): the sentence must not claim the app is "in testing"; it names the likely causes and says to reconnect.
+step('Google\'s expired sign-in names its causes without claiming the app is in testing', /Google/.test(s) && /published/.test(s) && /password/.test(s) && /reconnect/.test(s) && !/in testing/.test(s), s);
 step('an unknown error still reads as an instruction', /reconnect/.test(ma.reasonSentence('gmail', 'something odd')));
 
 const mb = { id: 'm1', email_address: 'a@x.com', is_active: true, platform: 'Microsoft' };

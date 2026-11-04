@@ -759,3 +759,6 @@ No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read rec
 - **3 Nov 2026 (R-343 step C):** `services/first-email-replies.js` (pure) + `GET /insights/first-email-replies` + Outreach Insights card. Before/after needs app_settings `templates_switched_on` (set the day the switch goes live).
 
 - **3 Nov 2026 (R-340):** `routes/outreach-generator.js` (the generator's lead) records `assigned_by` = the sender. No prompt, budget or writer change.
+
+
+- **"Needs you today" dismissals (R-377, 4 Nov 2026):** `services/next-action-dismissals.js` `fingerprintOf()` is the last message time + state ONLY. The day counter (`overdue_days`) must never be in it: it rises every morning, which made every snooze and Drop return the next day. A step change on a submission is a different item key. `test/next-action-dismiss-smoke.mjs` pins it.
