@@ -188,12 +188,36 @@ router.get('/insights/bd-team', auth, async (req, res) => {
 
 // R-316: the summary and the people behind each number read the SAME rows (loadOutreach) and count with the SAME rules
 // (services/outreach-insights.js summarise / peopleBehind / breakdown), so a list can never disagree with the tile it opened from.
+// R-398 (owner, 5 Nov 2026): Outreach Insights reads "Me", "My team" (the whole reporting line, D-0034/D-0216) or one person on it.
+// ?who=me (default) | team | <user id>. An admin's team is the company. A person outside the caller's line answers 404 (same
+// shape as a foreign id — never confirms it exists). Returns the user ids whose sends are counted and the people the switch offers.
+async function outreachScope(req) {
+  const me = req.user.id, want = String((req.query || {}).who || 'me');
+  const admin = hasRole(req, 'admin');
+  const users = await fetchAll(() => {
+    let uq = supabase.from('users').select('id,name').is('deleted_at', null).order('id');
+    if (req.orgId) uq = uq.eq('org_id', req.orgId);
+    return uq;
+  });
+  const nameOf = {}; users.forEach((u) => { nameOf[u.id] = u.name; });
+  const chain = admin ? users.map((u) => u.id) : Array.from(await reportingChainIds(me, req.orgId || null));
+  const line = chain.filter((id) => nameOf[id] !== undefined);
+  const people = line.filter((id) => id !== me).map((id) => ({ id, name: nameOf[id] || 'Someone' }))
+    .sort((x, y) => String(x.name).localeCompare(String(y.name))).slice(0, 200);
+  let ids, who;
+  if (want === 'team') { ids = line.length ? line : [me]; who = 'team'; }
+  else if (want === 'me' || want === me) { ids = [me]; who = 'me'; }
+  else if (line.includes(want)) { ids = [want]; who = want; }
+  else { const e = new Error('Not found'); e.status = 404; throw e; }
+  return { ids, who, people, nameOf, line };
+}
 async function loadOutreach(req) {
   const me = req.user.id, q = req.query || {}, tz = bdInsights.validZone(q.tz), w = bdInsights.windows(new Date(), tz);
   const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
   let from = isDay(q.from) ? q.from : w.monthFrom, to = isDay(q.to) ? q.to : w.today;
   if (from > to) [from, to] = [to, from];
   if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) from = new Date(Date.parse(to) - 366 * 864e5).toISOString().slice(0, 10);
+  const scope = await outreachScope(req);
   const dayIn = (ts) => bdInsights.dayOf(ts, tz);
   const readFrom = new Date(Date.parse(from + 'T00:00:00Z') - 36 * 3600e3).toISOString();      // a zone ahead of UTC starts its day early
   const readTo = new Date(Date.parse(to + 'T00:00:00Z') + 60 * 3600e3).toISOString();
@@ -212,7 +236,7 @@ async function loadOutreach(req) {
   };
 
   // my sequences in this organisation, and their steps' records of what they sent
-  const defs = await fetchAll(() => org(supabase.from('workflow_definitions').select('id,name,created_by')).order('id'));
+  const defs = await fetchAll(() => org(supabase.from('workflow_definitions').select('id,name,created_by,status')).order('id'));
   const seqNames = {}; defs.forEach((d) => { seqNames[d.id] = d.name; });
   const defIds = defs.map((d) => d.id);
   const runs = (await mapParts(chunks(defIds, 100), (part) => fetchAll(() => supabase.from('workflow_step_runs').select('workflow_id,detail,run_at').in('workflow_id', part)
@@ -221,7 +245,7 @@ async function loadOutreach(req) {
   runs.forEach((r) => { const d = r.detail || {}; if (d.email_id) seqOfEmail[d.email_id] = r.workflow_id; if (d.token) seqOfToken[d.token] = r.workflow_id; });
 
   // the lead emails I sent (emails.sent_at is the UTC DAY of the send)
-  const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id').eq('sent_by', me).eq('status', 'sent')
+  const emails = await fetchAll(() => org(supabase.from('emails').select('id,sent_at,contact_id').in('sent_by', scope.ids).eq('status', 'sent')
     .gte('sent_at', new Date(Date.parse(from) - 864e5).toISOString().slice(0, 10)).lte('sent_at', new Date(Date.parse(to) + 864e5).toISOString().slice(0, 10))).order('id'));
   const leadSends = emails.map((e) => ({ id: e.id, day: String(e.sent_at || '').slice(0, 10), contact_id: e.contact_id, seq: seqOfEmail[e.id] || null }));
   const contacts = {};
@@ -241,11 +265,11 @@ async function loadOutreach(req) {
 
   // the candidate sequence emails I sent (tracked rows)
   const cand = await fetchAll(() => org(supabase.from('email_tracking').select('id,token,candidate_id,open_count,replied_at,sent_at')
-    .eq('sent_by', me).eq('channel', 'candidate_sequence').gte('sent_at', readFrom).lte('sent_at', readTo)).order('id'));
+    .in('sent_by', scope.ids).eq('channel', 'candidate_sequence').gte('sent_at', readFrom).lte('sent_at', readTo)).order('id'));
   const candSends = cand.map((t) => ({ id: t.id, day: dayIn(t.sent_at), candidate_id: t.candidate_id, open_count: t.open_count,
     replied_day: t.replied_at ? dayIn(t.replied_at) : null, seq: seqOfToken[t.token] || null }));
 
-  return { me, q, tz, from, to, defs, seqNames, leadSends, tracking, contacts, candSends, chunks, org };
+  return { me, scope, q, tz, from, to, defs, seqNames, leadSends, tracking, contacts, candSends, chunks, org };
 }
 
 // OUTREACH INSIGHTS — the caller's own sequences, each number once (R-278, D-0160). services/outreach-insights.js counts; this reads.
@@ -260,11 +284,18 @@ router.get('/insights/outreach', auth, async (req, res) => {
     out.by_industry = outreachInsights.breakdown(inputs, 'industry');
     out.by_timezone = outreachInsights.breakdown(inputs, 'timezone');
     // the picker: Your outreach + every sequence of this person (a lead/admin sees the ones they made)
-    out.choices = [{ id: 'all', name: 'All sequences' }, { id: outreachInsights.OUTREACH, name: 'Your outreach' }]
-      .concat(L.defs.filter((d) => d.created_by === L.me).map((d) => ({ id: d.id, name: d.name })));
+    const mine = new Set(L.scope.ids), team = L.scope.who !== 'me';
+    out.choices = [{ id: 'all', name: 'All sequences' }, { id: outreachInsights.OUTREACH, name: team ? 'Outreach without a sequence' : 'Your outreach' }]
+      .concat(L.defs.filter((d) => mine.has(d.created_by)).map((d) => ({ id: d.id, name: d.name + (d.status === 'deleted' ? ' (deleted)' : '') })));
+    // who is shown, who the switch offers, and which sequence rows can be switched off from here (its owner is on the caller's line)
+    const defOf = {}; L.defs.forEach((d) => { defOf[d.id] = d; });
+    const line = new Set(L.scope.line);
+    out.sequences = (out.sequences || []).map((r) => { const d = defOf[r.id];
+      return Object.assign(r, d ? { owner_id: d.created_by, owner_name: L.scope.nameOf[d.created_by] || '', status: d.status, can_switch_off: d.status === 'active' && line.has(d.created_by) } : {}); });
+    out.scope = { who: L.scope.who, me: L.me, people: L.scope.people };
     out.tz = L.tz;
     res.json(out);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
 });
 
 // R-343 step C (owner, 3 Nov 2026): first-email reply rate by week, AI-written vs template, and before/after the switch to
@@ -305,6 +336,22 @@ router.get('/insights/outreach/people', auth, async (req, res) => {
     const rows = outreachInsights.peopleBehind({ from: L.from, to: L.to, leadSends: L.leadSends, tracking: L.tracking, contacts: L.contacts,
       candSends: L.candSends, candidates, seqNames: L.seqNames, only: L.q.seq }, kind);
     res.json({ from: L.from, to: L.to, kind, count: rows.length, people: rows });
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// R-398 (owner, 5 Nov 2026): a manager switches off a team member's sequence FROM Outreach Insights = no new people AND everyone
+// inside stops (D-0216; emails already queued still go out). The owner of the sequence must be on the caller's reporting line
+// (admin: anyone in the company). Anyone else, or a sequence in another company, answers 404. Names the number it stopped.
+const sequenceControl = require('../services/sequence-control');
+router.post('/insights/outreach/sequence/:id/switch-off', auth, async (req, res) => {
+  try {
+    const { data: def } = await withOrgLocal(supabase.from('workflow_definitions').select('id,name,created_by,status').eq('id', req.params.id), req).maybeSingle();
+    if (!def || !(await inCallerScope(req, def.created_by))) return res.status(404).json({ error: 'Sequence not found' });
+    if (def.status === 'deleted') return res.status(409).json({ error: 'This sequence is already deleted.' });
+    const { error } = await withOrgLocal(supabase.from('workflow_definitions').update({ status: 'archived', updated_at: new Date().toISOString() }), req).eq('id', def.id);
+    if (error) throw error;
+    const stopped = await sequenceControl.stopEveryone(supabase, { workflowId: def.id, orgId: req.orgId || null });
+    res.json({ ok: true, name: def.name, stopped });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
