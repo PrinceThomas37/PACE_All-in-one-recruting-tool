@@ -37,6 +37,7 @@ module.exports = (ctx) => {
 // services/ra-insights.js holds the definitions. The personal report below and the team table
 // (`/insights/ra-team`) both call it; the browser no longer adds up leads.
 const raInsights = require('../services/ra-insights');
+const workingMailbox = require('../services/working-mailbox');   // R-399: which mailboxes can actually send
 const viewerTime = require('../services/viewer-time');
 router.get('/insights/ra-team', auth, async (req, res) => {
   try {
@@ -465,12 +466,15 @@ router.post('/jobs/bulk-assign', auth, async (req, res) => {
     }
 
     // Get BD's primary active email ID for sending
+    // R-399: the mailbox SAVED onto each assigned lead must be one that can send — the first whose sign-in works, never one Google rejected
+    // (services/working-mailbox.js). None working → nothing is saved (the lead is not tied to a dead mailbox). Leads already assigned are not touched.
     const { data: bdEmails } = await supabase.from('user_emails')
-      .select('id,email_address,is_primary')
+      .select('id,email_address,is_primary,is_active,created_at')
       .eq('user_id', assigned_to_bd)
       .eq('is_active', true)
-      .order('is_primary', { ascending: false });
-    const sendingEmailId = (bdEmails && bdEmails.length) ? bdEmails[0].id : null;
+      .order('is_primary', { ascending: false }).order('created_at', { ascending: true });
+    const bdPick = workingMailbox.pickWorkingMailbox(bdEmails || [], await workingMailbox.loadMailboxHealth(supabase, (bdEmails || []).map(m => m.id)));
+    const sendingEmailId = bdPick ? bdPick.id : null;
 
     const now = new Date();
     const updatePayload = { assigned_to_bd, assigned_at: now, stage: 'Assigned', updated_at: now };

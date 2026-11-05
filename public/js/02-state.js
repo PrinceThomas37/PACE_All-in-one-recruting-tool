@@ -30,6 +30,15 @@ function getMyJobs(u){
   if (!u) return [];
   return STATE.jobs.slice();
 }
+// R-399 (owner 5 Nov): a mailbox whose sign-in was REJECTED (connection.status 'expired') is still SHOWN, but never PRE-SELECTED while a
+// working one exists. The server's default (services/working-mailbox.js) follows the same rule for the sends it decides.
+window.mailboxExpired=function(e){ return !!(e&&e.connection&&e.connection.status==='expired'); };
+window.mailboxExpiredNote=function(e){ return window.mailboxExpired(e)?' — sign-in expired, reconnect it':''; };
+window.firstWorkingMailbox=function(list){
+  list=(list||[]).filter(Boolean);
+  var ok=list.filter(function(e){ return !window.mailboxExpired(e); });
+  return ok.find(function(e){ return e.is_primary; })||ok[0]||list.find(function(e){ return e.is_primary; })||list[0]||null;
+};
 function jobContacts(jid){
   return STATE.contacts.filter(function(c){return c.job_id===jid;})
     .sort(function(a,b){return (b.is_primary?1:0)-(a.is_primary?1:0);});

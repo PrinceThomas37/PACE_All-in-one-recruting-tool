@@ -340,7 +340,7 @@ function wfUnknownVars(text){
 function wfPreviewMailboxes(){ var u=STATE.user||{}; return ((STATE.userEmailsCache&&STATE.userEmailsCache[u.id])||[]).filter(function(e){return e.is_active;}); }
 function wfPreviewMailbox(){
   var list=wfPreviewMailboxes();
-  return list.filter(function(e){return e.id===STATE.wfPrevMbId;})[0]||list.filter(function(e){return e.is_primary;})[0]||list[0]||null;
+  return list.filter(function(e){return e.id===STATE.wfPrevMbId;})[0]||firstWorkingMailbox(list)||null;      // R-399
 }
 window.wfPreviewAs=function(id){
   STATE.wfPrevMbId=id;

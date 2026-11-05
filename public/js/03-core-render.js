@@ -936,9 +936,9 @@ function renderSendingEmailCard(userId,myEmails,selectedId,onSelectFn){
     return '<div class="card cp mb3"><div class="fw6 mb2 fs-13">Sending from</div>'+
       '<div class="fs-12 c-amber" style="padding:4px 0">No active email IDs yet. Ask your admin to add one under your profile.</div></div>';
   }
-  var selId=selectedId||(myEmails.find(function(e){return e.is_primary;})||myEmails[0]).id;
+  var selId=selectedId||firstWorkingMailbox(myEmails).id;      // R-399: never pre-select a mailbox whose sign-in expired
   var opts=myEmails.map(function(e){
-    return '<option value="'+e.id+'"'+(e.id===selId?' selected':'')+'>'+htmlEsc(e.display_name||e.email_address)+' &lt;'+htmlEsc(e.email_address)+'&gt;</option>';
+    return '<option value="'+e.id+'"'+(e.id===selId?' selected':'')+'>'+htmlEsc(e.display_name||e.email_address)+' &lt;'+htmlEsc(e.email_address)+'&gt;'+htmlEsc(mailboxExpiredNote(e))+'</option>';
   }).join('');
   return '<div class="card cp mb3">'+
     '<div class="fw6 mb1 fs-13">Sending from</div>'+
