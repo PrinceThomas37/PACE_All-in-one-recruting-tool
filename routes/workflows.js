@@ -14,6 +14,7 @@ module.exports = (ctx) => {
   // ctx.withOrg already exists on routeCtx, but fall back to a local
   // equivalent so this file degrades safely if ever mounted more narrowly.
   const withOrgLocal = ctx.withOrg || ((q, req) => (req && req.orgId ? q.eq('org_id', req.orgId) : q));
+  const withOrg = withOrgLocal;
   // `reportingChainIds` also arrives on ctx (gateway added it to routeCtx),
   // but fall back to requiring it directly so this file still works if it's
   // ever mounted with a narrower ctx, the way routes/wf.js is.
@@ -349,10 +350,10 @@ router.get('/insights/outreach/people', auth, async (req, res) => {
 const sequenceControl = require('../services/sequence-control');
 router.post('/insights/outreach/sequence/:id/switch-off', auth, async (req, res) => {
   try {
-    const { data: def } = await withOrgLocal(supabase.from('workflow_definitions').select('id,name,created_by,status').eq('id', req.params.id), req).maybeSingle();
+    const { data: def } = await withOrg(supabase.from('workflow_definitions').select('id,name,created_by,status').eq('id', req.params.id), req).maybeSingle();
     if (!def || !(await inCallerScope(req, def.created_by))) return res.status(404).json({ error: 'Sequence not found' });
     if (def.status === 'deleted') return res.status(409).json({ error: 'This sequence is already deleted.' });
-    const { error } = await withOrgLocal(supabase.from('workflow_definitions').update({ status: 'archived', updated_at: new Date().toISOString() }), req).eq('id', def.id);
+    const { error } = await withOrg(supabase.from('workflow_definitions').update({ status: 'archived', updated_at: new Date().toISOString() }), req).eq('id', def.id);
     if (error) throw error;
     const stopped = await sequenceControl.stopEveryone(supabase, { workflowId: def.id, orgId: req.orgId || null });
     res.json({ ok: true, name: def.name, stopped });
