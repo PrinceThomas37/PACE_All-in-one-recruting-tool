@@ -84,7 +84,7 @@ step('no queue path bakes a sender name into emails.body',
 step('deliverOutboundEmail resolves one identity for body, subject and signature',
   /senderIdentityFor\(sendingEmail, email\.from_email\)[\s\S]{0,200}?fillSignatureHtml\(signatureHtml, senderIdentity\)[\s\S]{0,200}?renderStoredEmail\(email, sendingEmail\)/.test(indexSrc));
 step('the queue-time fallback mailbox excludes deactivated mailboxes',
-  (indexSrc.match(/\.eq\('is_active', true\)\s*\.order\('is_primary', \{ ascending: false \}\)\s*\.order\('created_at'/gs) || []).length === 2);
+  (indexSrc.match(/\.eq\('is_active', true\)\s*\.order\('is_primary', \{ ascending: false \}\)\s*\.order\('created_at'/gs) || []).length >= 2);   // R-399 added a third place (the reminder send) that uses the same filter+order; fewer than the original two is the failure
 
 // ── every reader of a stored body renders it ─────────────────────────────────
 // The token lives in the database, so ANY code that pulls emails.body and shows
