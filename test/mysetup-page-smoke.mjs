@@ -74,6 +74,14 @@ try{
   step('the sequence step opens "Write my sequence" — no starter in someone else\'s words', /Write my sequence/.test(t) && !/Use the starter/.test(t));
   step('each mailbox is listed with its state, its sender details (just "not set" when empty — no explanation), ONE edit button, and the daily limit as the admin\'s', /bd@fute\.test/.test(t) && /Connected/.test(t) && /Sender & signature: not set/.test(t) && !/standard name, title and signature/.test(t) && !/Say who it writes for/.test(t) && (await ev(()=>[...document.querySelectorAll('#content button')].filter(b=>/sender & signature/i.test(b.textContent)).length))===1 && /set by an admin/.test(t));
   step('sending days and hours are on the page, with the organisation\'s window and the line that the daily number stays with the admin', /Sending days and hours/.test(t) && /8 AM – 4 PM/.test(t) && /narrow that, not widen it/.test(t) && /stays with your admin/.test(t));
+  // R-397 (owner 5 Nov: "there is no time before 8 am or after 4 pm"): a person cannot widen the company's hours, so the card says WHO can
+  step('hours card, a BD: says to ask the admin to widen it — and offers no button that would do nothing', /To widen it, ask your admin/.test(t) && !/Change the company's hours/.test(t));
+  await ev(()=>{ STATE.user=Object.assign({}, STATE.user, { role:'admin', roles:['admin'] }); render(); }); await page.waitForTimeout(400);
+  const hc = await ev(()=>({ btn:!!document.querySelector('button[onclick="openEmailEngineModal()"]'), txt:document.getElementById('content').textContent }));
+  step('hours card, an admin: a "Change the company\'s hours" button instead', hc.btn && /Change the company's hours/.test(hc.txt) && !/ask your admin/.test(hc.txt), JSON.stringify({ btn:hc.btn }));
+  await page.click('button[onclick="openEmailEngineModal()"]'); await page.waitForTimeout(600);
+  step('…and it opens the Email Engine Schedule window where the company hours are set', await ev(()=>/Email Engine Schedule/.test(String(STATE.modal||''))));
+  await ev(()=>{ STATE.modal=null; STATE.user=Object.assign({}, STATE.user, { role:'bd', roles:['bd'] }); render(); }); await page.waitForTimeout(300);
   step('the AI writing-style note is one click away', /How the AI writes for you/.test(t) && /Open my writing style/.test(t));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS,'mysetup-page.png'), fullPage:true });
 
