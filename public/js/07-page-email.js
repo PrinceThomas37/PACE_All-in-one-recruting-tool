@@ -709,7 +709,7 @@ function renderEmail(){
   var activeTmpl=tmplDefs.find(function(t){return t.key===STATE.activeTmpl;})||tmplDefs[0];
   STATE.activeTmpl=activeTmpl.key;                     // fewer follow-ups than the tab that was open: back to the first email
   var planEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
-  var planFromId=STATE.planFromEmailId||(planEmails.find(function(e){return e.is_primary;})||planEmails[0]||{}).id;
+  var planFromId=STATE.planFromEmailId||(firstWorkingMailbox(planEmails)||{}).id;      // R-399
   if(planFromId&&!STATE.planFromEmailId)STATE.planFromEmailId=planFromId;
   if(planFromId&&STATE.sigEmailId!==planFromId)STATE.sigEmailId=planFromId;
   var styleBtns=Object.keys(OUTREACH_STYLE_PRESETS).map(function(pk){
@@ -806,7 +806,7 @@ function renderEmail(){
       // ── SIGNATURE EDITOR (per sending email ID) ───────────────
       (function(){
         var myEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
-        var sigEmailId=STATE.sigEmailId||(myEmails.find(function(e){return e.is_primary;})||myEmails[0]||{}).id;
+        var sigEmailId=STATE.sigEmailId||(firstWorkingMailbox(myEmails)||{}).id;      // R-399
         if(sigEmailId&&!STATE.sigEmailId)STATE.sigEmailId=sigEmailId;
         var sigEmail=myEmails.find(function(e){return e.id===sigEmailId;});
         var sig='';
@@ -928,7 +928,7 @@ function renderEmail(){
     var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail||STATE.composeReminderTo);
 
     var composeEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
-    var composeFromId=STATE.composeFromEmailId||(composeEmails.find(function(e){return e.is_primary;})||composeEmails[0]||{}).id;
+    var composeFromId=STATE.composeFromEmailId||(firstWorkingMailbox(composeEmails)||{}).id;      // R-399: this one SENDS — never pre-select a mailbox whose sign-in expired
     if(composeFromId&&!STATE.composeFromEmailId)STATE.composeFromEmailId=composeFromId;
 
     // Who is this going to? Either a contact on a lead, a typed address, or —
@@ -1019,8 +1019,9 @@ function renderEmail(){
 
     // ── the preview ──────────────────────────────────────────────────────
     var fromOpts=composeEmails.map(function(e){
-      return '<option value="'+e.id+'"'+(e.id===composeFromId?' selected':'')+'>'+
-        htmlEsc((e.display_name||e.email_address)+' <'+e.email_address+'>')+'</option>';
+      // R-399: a mailbox whose sign-in expired is shown, marked, and cannot be picked here (it could only fail to send)
+      return '<option value="'+e.id+'"'+(e.id===composeFromId?' selected':(mailboxExpired(e)?' disabled':''))+'>'+
+        htmlEsc((e.display_name||e.email_address)+' <'+e.email_address+'>'+mailboxExpiredNote(e))+'</option>';
     }).join('');
 
     // Ask for the signature of whichever mailbox is selected, so the preview

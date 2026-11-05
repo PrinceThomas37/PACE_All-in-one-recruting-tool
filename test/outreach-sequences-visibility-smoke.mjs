@@ -14,8 +14,9 @@ const ASH = { id: 'ash', role: 'bd', roles: ['bd'] }, BOSS = { id: 'boss', role:
 const STD = { id: 'std', created_by: null }, BOSS_SEQ = { id: 'b1', created_by: 'boss' }, ASH_SEQ = { id: 'a1', created_by: 'ash' };
 step('rule: a plain BD may use only their own', V.mayUseSequence(ASH_SEQ, ASH) && !V.mayUseSequence(BOSS_SEQ, ASH) && !V.mayUseSequence(STD, ASH));
 step('rule: the built-in (ownerless) sequence is nobody\'s own — not even a stray "undefined === undefined"', !V.mayUseSequence({ id: 'x' }, { id: undefined, roles: ['bd'] }) && !V.mayUseSequence(STD, { id: null, roles: ['bd'] }));
-step('rule: a BD lead and an admin may use any', V.mayUseSequence(STD, BOSS) && V.mayUseSequence(ASH_SEQ, BOSS) && V.mayUseSequence(BOSS_SEQ, ADM));
-step('rule: a role that does not design sequences (RA) sees only their own — i.e. none of these', V.visibleSequences([STD, BOSS_SEQ, ASH_SEQ], RA).length === 0);
+// D-0214 (owner 5 Nov): managers too — what a manager sees across the team is analytics, not this list
+step('rule: a BD lead and an admin may use only their OWN too — not the built-in, not a BD\'s, not each other\'s', V.mayUseSequence(BOSS_SEQ, BOSS) && !V.mayUseSequence(STD, BOSS) && !V.mayUseSequence(ASH_SEQ, BOSS) && !V.mayUseSequence(BOSS_SEQ, ADM) && !V.mayUseSequence(STD, ADM));
+step('rule: any role sees only its own (an RA owns none of these)', V.visibleSequences([STD, BOSS_SEQ, ASH_SEQ], RA).length === 0 && V.visibleSequences([STD, BOSS_SEQ, ASH_SEQ], BOSS).length === 1);
 step('rule: no sequence, or no user, is never usable', !V.mayUseSequence(null, ADM) && !V.mayUseSequence(ASH_SEQ, null));
 
 // ── the real generator router against a small fake database ──
@@ -59,9 +60,9 @@ DEFS.push({ id: 'a1', org_id: ORG, name: 'Ash own', domain: 'sales', entity_type
 r = await call('/outreach/sequences', 'get', ASH);
 step('…once he makes one, he sees exactly that one', r.out.length === 1 && r.out[0].id === 'a1' && r.out[0].steps === 3, JSON.stringify(r.out.map((x) => x.name)));
 r = await call('/outreach/sequences', 'get', BOSS);
-step('a BD lead sees every active sequence, as on the Sequences page', r.out.length === 3, JSON.stringify(r.out.map((x) => x.name)));
+step('a BD lead sees only THEIR OWN sequence in the dropdown (D-0214)', r.out.length === 1 && r.out[0].id === 'b1', JSON.stringify(r.out.map((x) => x.name)));
 r = await call('/outreach/sequences', 'get', ADM);
-step('an admin too', r.out.length === 3);
+step('an admin too: only their own (they made none → the list is empty)', r.out.length === 0, JSON.stringify(r.out.map((x) => x.name)));
 
 const SEND = (seq) => ({ to: 'kev@x.test', subject: 'Hi', body: 'Hello', sequence_id: seq });
 calls.mailbox = 0; calls.sent = 0;
@@ -74,9 +75,12 @@ step('…a sequence that does not exist answers the same (nothing says which one
 calls.mailbox = 0;
 r = await call('/outreach/send', 'post', ASH, SEND('a1'));
 step('SEND into his OWN sequence gets past the check (it goes on to choose the mailbox)', calls.mailbox === 1, JSON.stringify(r));
-calls.mailbox = 0;
+calls.mailbox = 0; calls.sent = 0;
 r = await call('/outreach/send', 'post', BOSS, SEND('a1'));
-step('a BD lead may still use any', calls.mailbox === 1);
+step('a BD lead cannot send into a BD\'s sequence either — refused, nothing sent', r.code === 404 && calls.mailbox === 0 && calls.sent === 0, JSON.stringify(r));
+calls.mailbox = 0;
+r = await call('/outreach/send', 'post', BOSS, SEND('b1'));
+step('…their OWN is accepted', calls.mailbox === 1);
 calls.mailbox = 0;
 r = await call('/outreach/send', 'post', ASH, SEND(''));
 step('sending with NO sequence is unchanged', calls.mailbox === 1);

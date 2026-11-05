@@ -23,10 +23,13 @@ function loadWorkflows(){
     apiGet('/wf/enrollments').catch(function(){return [];}),
     apiGet('/wf/stats').catch(function(){return {by_workflow:{},total:0};}),
     apiGet('/wf/channels').catch(function(){return {channels:['email','bd_touch','reminder','stage_move'],catalogue:[]};}),
-    apiGet('/wf/primary').catch(function(){return {};})
+    apiGet('/wf/primary').catch(function(){return {};}),
+    apiGet('/wf/definitions/deleted').catch(function(){return {days:14,deleted:[]};}),      // R-384: your deleted sequences that can still come back
+    apiGet('/wf/limits').catch(function(){return {versions_max:20,undo_days:14};})           // the admin's numbers, so the screens word themselves truthfully
   ]).then(function(r){
     STATE.wfPrimary=r[4]||{};
-    STATE.wf={defs:r[0]||[],enrollments:r[1]||[],stats:r[2]||{by_workflow:{}},channels:(r[3]&&r[3].channels)||[],catalogue:(r[3]&&r[3].catalogue)||[]};
+    STATE.wf={defs:r[0]||[],enrollments:r[1]||[],stats:r[2]||{by_workflow:{}},channels:(r[3]&&r[3].channels)||[],catalogue:(r[3]&&r[3].catalogue)||[],
+      deleted:(r[5]&&r[5].deleted)||[],undoDays:(r[5]&&r[5].days)||14,versionsMax:(r[6]&&r[6].versions_max)||20};
     STATE.wfDefs=r[0]||[];
     STATE._wfLoading=false; scheduleRender();
   });
@@ -41,6 +44,42 @@ window.wfPrimaryToggle=function(id,on,ev){
   }).catch(function(e){ showToast('Could not change it: '+((e&&e.message)||e),'error'); });
 };
 window.wfSetStatus=function(id,status){ apiPost('/wf/definitions/'+id+'/status',{status:status}).then(function(){ showToast('Workflow '+status,'success'); loadWorkflows(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
+// ── STOP ALL / DELETE / RESTORE (R-384, R-385; D-0216) ──
+// Each asks first and names the number, because it stops real people. Emails already waiting to go still go out; nothing is erased.
+function wfAsk(title,bodyHtml,okLabel,okCall){
+  STATE.modal='<div class="modal modal-w480" data-wf-confirm><div class="mh"><div class="mt">'+title+'</div></div>'+
+    '<div class="mb_"><div class="fs-13 c-ink2" style="line-height:1.55">'+bodyHtml+'</div></div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-wf-confirm-go onclick="'+okCall+'">'+okLabel+'</button></div></div>';
+  render();
+}
+function wfDefById(id){ return ((STATE.wf&&STATE.wf.defs)||[]).find(function(d){ return d.id===id; }); }
+window.wfStopAllAsk=function(id){
+  var d=wfDefById(id); if(!d)return; var n=d.people_now||0;
+  wfAsk('Stop everyone in “'+htmlEsc(d.name)+'”?',
+    '<b>'+n+' '+(n===1?'person is':'people are')+'</b> in it now. If you stop them, nobody gets another step. '+
+    'Emails already waiting to go still go out. People who already finished are not affected, and the sequence itself stays as it is.',
+    'Stop all '+n,'wfStopAllDo(\''+id+'\')');
+};
+window.wfStopAllDo=function(id){
+  apiPost('/wf/definitions/'+id+'/stop-all',{}).then(function(r){ closeModal(); showToast('Stopped '+(r.stopped||0)+' '+((r.stopped||0)===1?'person':'people'),'success'); loadWorkflows(); })
+    .catch(function(e){ showToast('Could not stop them: '+((e&&e.message)||e),'error'); });
+};
+window.wfDeleteAsk=function(id){
+  var d=wfDefById(id); if(!d)return; var n=d.people_now||0, days=(STATE.wf&&STATE.wf.undoDays)||14;
+  wfAsk('Delete “'+htmlEsc(d.name)+'”?',
+    (n?'<b>'+n+' '+(n===1?'person is':'people are')+'</b> in it now and will be stopped. ':'Nobody is in it now. ')+
+    'Emails already sent or waiting to go stay as they are, and its past numbers stay in Outreach Insights. '+
+    'You can bring it back for <b>'+days+' days</b> (“Recently deleted”, at the bottom of this page); after that it can no longer be restored.',
+    'Delete','wfDeleteDo(\''+id+'\')');
+};
+window.wfDeleteDo=function(id){
+  apiPost('/wf/definitions/'+id+'/delete',{}).then(function(r){ closeModal(); showToast('Deleted'+(r.stopped?' — '+r.stopped+' stopped':'')+'. You can bring it back for '+(r.restorable_days||14)+' days.','success'); loadWorkflows(); })
+    .catch(function(e){ showToast('Could not delete it: '+((e&&e.message)||e),'error'); });
+};
+window.wfRestore=function(id){
+  apiPost('/wf/definitions/'+id+'/restore',{}).then(function(){ showToast('Brought back — it is switched off; turn it on when you are ready.','success'); loadWorkflows(); })
+    .catch(function(e){ showToast('Could not restore it: '+((e&&e.message)||e),'error'); });
+};
 window.wfRunTick=function(){ STATE.wfTickLog='running'; scheduleRender(); apiPost('/wf/tick',{}).then(function(r){ STATE.wfTickLog=r; loadWorkflows(); }).catch(function(e){ STATE.wfTickLog=null; showToast('Tick failed: '+(e&&e.message||e),'error'); scheduleRender(); }); };
 window.wfEnrollmentAction=function(id,action){ apiPost('/wf/enrollments/'+id+'/'+action,{}).then(function(){ showToast('Enrollment '+action+(action==='exit'?'ed':'d'),'success'); loadWorkflows(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
 window.wfToggleRuns=function(id){
@@ -152,7 +191,10 @@ window.wfSaveDefinition=function(){
     } else {
       showToast(b.id?'Sequence updated':(b._copyOf?'Saved as a new sequence (a draft — activate it to use it). The old one carries on unchanged.':'Sequence created (draft — activate it to enroll)'),'success'); loadWorkflows();
     }
-  }).catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
+  }).catch(function(e){
+    if(e&&e.body&&e.body.code==='needs_copy'&&STATE.wfBuilder){ STATE.wfBuilder._needsCopy=true; refreshWfBuilder(); }
+    showToast('Save failed: '+(e&&e.message||e),'error');
+  });
 };
 // ── "Start sequence" on a selection (bulk enroll) ──
 // opts.anyStage = enrol leads regardless of their pipeline stage (used when the
@@ -340,7 +382,7 @@ function wfUnknownVars(text){
 function wfPreviewMailboxes(){ var u=STATE.user||{}; return ((STATE.userEmailsCache&&STATE.userEmailsCache[u.id])||[]).filter(function(e){return e.is_active;}); }
 function wfPreviewMailbox(){
   var list=wfPreviewMailboxes();
-  return list.filter(function(e){return e.id===STATE.wfPrevMbId;})[0]||list.filter(function(e){return e.is_primary;})[0]||list[0]||null;
+  return list.filter(function(e){return e.id===STATE.wfPrevMbId;})[0]||firstWorkingMailbox(list)||null;      // R-399
 }
 window.wfPreviewAs=function(id){
   STATE.wfPrevMbId=id;
@@ -554,13 +596,12 @@ function refreshWfBuilder(){
 
   // One follow-up doubles reply rates in practice, so a one-step sequence gets
   // a nudge rather than being silently accepted as finished.
-  // People mid-sequence lock the STEPS (the server refuses — their place in it would break). Say so
-  // BEFORE anything is written, with the number, and offer the way through: a new sequence from this
-  // text; the old one is untouched and carries on for the people already in it.
-  var lockedN=b.id?(((((STATE.wf||{}).stats||{}).by_workflow||{})[b.id]||{}).active||0):0;
-  var lockBanner=lockedN>0
-    ?'<div class="wf-lock"><b>'+lockedN+' '+(lockedN===1?'person is':'people are')+' in this sequence right now,</b> so its steps cannot be changed here. '+
-      'Either stop them first (Enrollments, below the list), or press <b>Save as a new sequence</b> — your writing is kept, and this one carries on unchanged for the people already in it.</div>'
+  // People inside a running sequence (D-0217): the WORDING of any step can change; adding/removing a step or changing
+  // the days makes a copy (the server says so with a 409 needs_copy). Say what is allowed BEFORE anything is written.
+  var insideN=b.id?(((STATE.wf||{}).defs||[]).find(function(x){return x.id===b.id;})||{}).people_now||0:0;
+  var lockBanner=insideN>0
+    ?'<div class="wf-lock" data-wf-inside><b>'+insideN+' '+(insideN===1?'person is':'people are')+' in this sequence right now.</b> You can change the wording of any step. '+
+      'Adding or removing a step, or changing the days between them, saves as a new copy; this one carries on for the people inside.</div>'
     :'';
   var hint = b.steps.length < 2
     ? '<div class="seq-hint">'+UI.ic('bolt')+'<span>It is usually the follow-up that gets the reply. Consider adding one more step.</span></div>'
@@ -581,10 +622,8 @@ function refreshWfBuilder(){
       hint+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button>'+
-      (lockedN>0
-        // A new sequence is made in the new builder only (D-0158) — not as a copy saved from this old window.
-        ?'<button class="btn btn-outline" disabled title="Not while people are mid-sequence">Save</button><button class="btn btn-primary wf-save-new" onclick="STATE.wfBuilder=null;wfOpenBuilder(null,\''+(b.entity_type||'contact')+'\')">Make a new sequence instead</button>'
-        :'<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>')+
+      (b._needsCopy?'<button class="btn btn-outline" data-wf-savecopy onclick="wfSaveAsNew()">Save as a new copy</button>':'')+
+      '<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>'+
     '</div>'+
   '</div>';
   render();
@@ -647,13 +686,16 @@ function renderSequenceBody(){
     :'';
   var defCards=(wf.defs||[]).filter(function(d){ return !candOnly||d.entity_type==='submission'||d.entity_type==='candidate'; }).map(function(d){
     var st=(wf.stats.by_workflow||{})[d.id]||{};
-    var mine=canDesign||(canDesignOwn&&d.created_by===u.id), v2=wfIsV2(d);
+    var mine=(d.created_by===u.id), v2=wfIsV2(d);      // D-0214: only your own are listed, so these are yours
     var who=(d.entity_type==='submission'||d.entity_type==='candidate')?'Candidates':'Leads';
     var steps=(d.steps||[]).length, fu=Math.max(0,steps-1);
+    var people=d.people_now||0;
     var acts=mine?('<button class="btn btn-sm btn-outline" onclick="wfOpenBuilder(\''+d.id+'\')">Edit</button>'+
       (d.status==='draft'?'<button class="btn btn-sm btn-primary" onclick="wfSetStatus(\''+d.id+'\',\'active\')">Turn on</button>':'')+
       (d.status==='active'?'<button class="btn btn-sm btn-outline" onclick="wfSetStatus(\''+d.id+'\',\'archived\')">Turn off</button>':'')+
-      (d.status==='archived'?'<button class="btn btn-sm btn-outline" onclick="wfSetStatus(\''+d.id+'\',\'active\')">Turn on</button>':'')):'';
+      (d.status==='archived'?'<button class="btn btn-sm btn-outline" onclick="wfSetStatus(\''+d.id+'\',\'active\')">Turn on</button>':'')+
+      (people?'<button class="btn btn-sm btn-outline" data-wf-stopall onclick="wfStopAllAsk(\''+d.id+'\')">Stop all</button>':'')+
+      '<button class="btn btn-sm btn-outline" data-wf-delete onclick="wfDeleteAsk(\''+d.id+'\')">Delete</button>'):'';
     var isPrim=(STATE.wfPrimary||{})[d.entity_type||'contact']===d.id;
     var primSw=(d.status==='active')
       ?'<label class="wf-prim" title="'+(isPrim?'Your Primary — Start sequence has it ready':'Make this the one Start sequence has ready')+'"><span class="wf-prim-l">Primary</span>'+
@@ -663,44 +705,19 @@ function renderSequenceBody(){
     return '<div class="card wf-seq" data-wfcard="'+d.id+'"><div class="wf-seq-top"><div>'+
         '<div class="wf-seq-name">'+htmlEsc(d.name)+(isPrim?' <span class="wf-prim-badge">Primary</span>':'')+'</div>'+
         '<div class="fs-12 c-text3">'+who+' · first email'+(fu?' + '+fu+' follow-up'+(fu===1?'':'s'):'')+' · '+state+
-          ' · '+(st.active||0)+' in it now, '+(st.completed||0)+' finished'+(v2?'':' · made in the old window — it keeps running as it is')+'</div></div>'+
+          ' · '+(people?'<b data-wf-people>'+people+' '+(people===1?'person':'people')+' in it now</b>':'nobody in it now')+', '+(st.completed||0)+' finished'+(v2?'':' · made in the old window — it keeps running as it is')+'</div></div>'+
         '<div class="wf-seq-acts">'+primSw+acts+'</div></div></div>';
   }).join('')||'<div class="fs-13 c-text3 wf-seq-empty">No named sequences yet. "+ New sequence" makes one — for leads or for candidates on a job.</div>';
 
-  var f=STATE.wfFilter||{};
-  var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });
-  var wfOpts='<option value="">All workflows</option>'+(wf.defs||[]).filter(function(d){ return !candOnly||d.entity_type==='submission'||d.entity_type==='candidate'; }).map(function(d){return '<option value="'+d.id+'"'+(f.workflow===d.id?' selected':'')+'>'+htmlEsc(d.name)+'</option>';}).join('');
-  var stOpts='<option value="">All statuses</option>'+['active','paused','completed','exited','failed'].map(function(s){return '<option value="'+s+'"'+(f.status===s?' selected':'')+'>'+s+'</option>';}).join('');
-  var enrRows=enr.map(function(e){
-    var def=(wf.defs||[]).find(function(d){return d.id===e.workflow_id;});
-    var total=def&&def.steps?def.steps.length:'?';
-    var name=e.contact?((e.contact.first_name||'')+' '+(e.contact.last_name||'')).trim()||e.contact.email:e.entity_id.slice(0,8);
-    var fromMb=(e.metadata&&e.metadata.from_mailbox_email)?' · ✉ '+htmlEsc(e.metadata.from_mailbox_email):'';
-    var jobLbl=(e.job?htmlEsc((e.job.position||'')+((e.job.company&&e.job.company.name)?' · '+e.job.company.name:'')):'—')+fromMb;
-    var acts='';
-    if(e.status==='active')acts='<a onclick="wfEnrollmentAction(\''+e.id+'\',\'pause\')" style="cursor:pointer;color:var(--amber);font-size:11px">Pause</a> <a onclick="wfEnrollmentAction(\''+e.id+'\',\'exit\')" style="cursor:pointer;color:var(--red);font-size:11px">Exit</a>';
-    else if(e.status==='paused')acts='<a onclick="wfEnrollmentAction(\''+e.id+'\',\'resume\')" style="cursor:pointer;color:var(--green);font-size:11px">Resume</a> <a onclick="wfEnrollmentAction(\''+e.id+'\',\'exit\')" style="cursor:pointer;color:var(--red);font-size:11px">Exit</a>';
-    var runs=STATE.wfRuns&&STATE.wfRuns[e.id];
-    var runsHtml='';
-    if(runs==='loading')runsHtml='<div class="fs-12 c-text3" style="padding:8px 14px">Loading history…</div>';
-    else if(runs)runsHtml='<div style="padding:6px 14px 10px;background:var(--bg3)">'+(runs.length?runs.map(function(r){
-      var oc=r.outcome==='done'?'var(--green)':r.outcome==='failed'?'var(--red)':'var(--text3)';
-      var why=r.detail&&(r.detail.reason||r.detail.error)?' — '+htmlEsc(r.detail.reason||r.detail.error):'';
-      return '<div class="fs-12 c-text2" style="padding:3px 0">step '+r.step_order+' · '+(WF_CHANNEL_LABELS[r.channel]||r.channel)+' · <b style="color:'+oc+'">'+r.outcome+'</b>'+why+' <span class="c-text3">· '+String(r.run_at||'').slice(0,16).replace('T',' ')+'</span></div>';
-    }).join(''):'<div class="fs-12 c-text3">No steps executed yet.</div>')+'</div>';
-    return '<div style="border-bottom:1px solid var(--border)">'+
-      '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px">'+
-        '<div style="flex:1.2;min-width:0"><div class="fs-13" style="font-weight:600">'+htmlEsc(name)+'</div><div class="fs-11 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+jobLbl+'</div></div>'+
-        '<div class="fs-12 c-text2" style="flex:1">'+htmlEsc((e.workflow&&e.workflow.name)||'—')+'</div>'+
-        '<div class="fs-12 c-text2" style="min-width:56px">step '+e.current_step_order+'/'+total+'</div>'+
-        '<div class="fs-12 c-text3" style="min-width:78px">'+(e.next_step_due_date||'—')+'</div>'+
-        '<div style="min-width:90px">'+wfStatusBadge(e.status,e.exit_reason)+'</div>'+
-        '<div style="min-width:86px;display:flex;gap:8px">'+acts+'</div>'+
-        '<a onclick="wfToggleRuns(\''+e.id+'\')" style="cursor:pointer;font-size:11px;color:var(--accent)">'+(runs?'Hide':'History')+'</a>'+
-      '</div>'+runsHtml+
-    '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:14px">No enrollments'+((f.status||f.workflow)?' match the filter.':' yet — open a lead and enroll a contact.')+'</div>';
-
+  // R-385 (owner 4 Nov): the "Enrolled leads" list is gone from this page — each sequence says how many are in it now, with Stop all.
+  // R-384: your deleted sequences that can still be brought back.
+  var gone=(wf.deleted||[]);
+  var goneHtml=gone.length
+    ?'<div class="fs-13 c-text2 wf-gone-h" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:22px 0 8px">Recently deleted ('+gone.length+')</div>'+
+      gone.map(function(g){ return '<div class="card wf-seq wf-gone" data-wfgone="'+g.id+'"><div class="wf-seq-top"><div><div class="wf-seq-name">'+htmlEsc(g.name)+'</div>'+
+        '<div class="fs-12 c-text3">Can be brought back until '+htmlEsc(String(g.restorable_until||'').slice(0,10))+'. Its people were stopped and stay stopped.</div></div>'+
+        '<div class="wf-seq-acts"><button class="btn btn-sm btn-outline" data-wf-restore onclick="wfRestore(\''+g.id+'\')">Restore</button></div></div></div>'; }).join('')
+    :'';
   return '<div>'+
     '<div class="wf-seq-head"><div class="fs-13 c-text3">A sequence is a first email and follow-ups, sent by themselves; follow-ups stop when someone replies.</div>'+
       '<div class="wf-seq-acts">'+tickHtml+
@@ -708,11 +725,7 @@ function renderSequenceBody(){
         ((canDesign||canDesignOwn)?'<button onclick="wfOpenBuilder()" class="btn btn-primary" data-wf-new>+ New sequence</button>':'')+
       '</div></div>'+
     outreachCard+defCards+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin:20px 0 8px"><div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em">Enrolled leads ('+enr.length+')</div>'+
-      '<div style="display:flex;gap:6px"><select onchange="wfSetFilter(\'status\',this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text)">'+stOpts+'</select>'+
-      '<select onchange="wfSetFilter(\'workflow\',this.value)" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text)">'+wfOpts+'</select></div>'+
-    '</div>'+
-    '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+enrRows+'</div>'+
+    goneHtml+
   '</div>';
 }
 

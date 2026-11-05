@@ -1053,12 +1053,16 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     }
     let sendingAddr = job?.sending_email?.email_address || null;
     if (!job?.sending_email_id) {
+      // R-399: this SAVES the mailbox onto the lead, so it must be one that can send — the first whose sign-in works, never one Google
+      // rejected (services/working-mailbox.js). A lead already tied to a mailbox is not touched.
       const { data: ue } = await db.forRequest(req).from('user_emails')
-        .select('id,email_address,is_primary').eq('user_id', req.user.id).eq('is_active', true)
-        .order('is_primary', { ascending: false }).limit(1);
+        .select('id,email_address,is_primary,is_active,created_at').eq('user_id', req.user.id).eq('is_active', true)
+        .order('is_primary', { ascending: false }).order('created_at', { ascending: true });
       if (!ue || !ue.length) return res.status(400).json({ error: 'No active sending mailbox available' });
-      await db.forRequest(req).from('jobs').update({ sending_email_id: ue[0].id }).eq('id', job_id);
-      sendingAddr = ue[0].email_address;
+      const pick = workingMailbox.pickWorkingMailbox(ue, await workingMailbox.loadMailboxHealth(supabase, ue.map(m => m.id)));
+      if (!pick) return res.status(400).json({ error: 'None of your sending mailboxes is connected and working — reconnect one under Email IDs, then send again.' });
+      await db.forRequest(req).from('jobs').update({ sending_email_id: pick.id }).eq('id', job_id);
+      sendingAddr = pick.email_address;
     }
 
     // Double-send guard: if a follow-up or reminder to this contact is already
@@ -4061,6 +4065,7 @@ async function getMicrosoftToken(userEmailId) {
 // Build an HTML email body from plain text + optional HTML signature — services/email-html.js is the ONE place that lays a body out
 // (paragraphs, spacing, the opt-out footer), so every composer produces the same look in Gmail and Outlook (R-397).
 const { buildHtmlEmailBody } = require('./services/email-html');
+const workingMailbox = require('./services/working-mailbox');   // R-399: which mailboxes can actually send
 
 
 

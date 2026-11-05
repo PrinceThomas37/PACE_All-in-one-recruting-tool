@@ -19,6 +19,9 @@ const BUILDER = 'v2';
 const CANDIDATE_VARS = new Set(['first_name', 'full_name', 'title', 'location', 'position', 'client', 'company', 'job_code', 'sender', 'senderemail']);
 const LEAD_CHANNEL = 'email', CANDIDATE_CHANNEL = 'candidate_email';
 const isCandidates = (entityType) => entityType === 'submission' || entityType === 'candidate';
+// shortcut: this is only the fallback when a caller does not pass the admin's number. The routes always pass `maxVersions` — the admin's
+// `sequence_versions_max` (config/settings.js, versions per step INCLUDING the step's own) — because no limit on a customer is typed in code
+// (D-0123, D-0216). Upgrade: drop the fallback once every caller passes it.
 const MAX_VERSIONS = 2;
 const txt = (v) => String(v == null ? '' : v);
 
@@ -32,8 +35,10 @@ function isV2(def) { const st = (def && def.steps) || []; return st.length > 0 &
  * Why a v2 step list cannot be saved, in the person's words — or null. Run on the server for every step marked v2, so a hole in
  * an email is refused where it can be fixed, never sent (CLAUDE.md: a merge field is filled and then CHECKED).
  */
-function problem(steps, entityType) {
+function problem(steps, entityType, opts) {
   const allowed = allowedFor(entityType);
+  // versions per step INCLUDING the step's own words (the admin's `sequence_versions_max`); the old fixed "2 extra" only when none is passed
+  const maxExtra = opts && Number.isInteger(opts.maxVersions) && opts.maxVersions >= 1 ? opts.maxVersions - 1 : MAX_VERSIONS;
   const v2 = (steps || []).filter((s) => s && s.config && s.config.builder === BUILDER);
   for (let i = 0; i < v2.length; i++) {
     const s = v2[i], c = s.config, label = i === 0 ? 'The first email' : `Follow-up ${i}`;
@@ -42,12 +47,36 @@ function problem(steps, entityType) {
     if (i === 0 && !txt(c.subject).trim()) return 'The first email needs a subject.';
     if (txt(c.body).trim().length < (i === 0 ? 20 : 5)) return `${label} has no text yet.`;
     const versions = Array.isArray(c.versions) ? c.versions : [];
-    if (versions.length > MAX_VERSIONS) return `${label}: at most ${MAX_VERSIONS} extra versions.`;
+    if (versions.length > maxExtra) return `${label}: at most ${maxExtra + 1} versions (this one's own words and ${maxExtra} more).`;
     const texts = [c.subject, c.body].concat(...versions.map((v) => [v && v.subject, v && v.body]));
     const bad = [...new Set([].concat(...texts.map(varsIn)))].filter((k) => !allowed.has(k));
     if (bad.length) return `${label}: PACE cannot fill ${bad.map((k) => '{{' + k + '}}').join(', ')}. Use "Add a detail" instead.`;
     if (c.ai && i > 0) return 'Only the first email can be written by AI.';
     if (c.ai && !isCandidates(entityType)) return 'For leads, "AI writes each one" is set in Your outreach (My Setup).';
+  }
+  return null;
+}
+
+/**
+ * Versions on ANY step — also steps written in the older builder, which `problem` (v2 steps only) does not look at (R-383, D-0216).
+ * Each step may carry `config.versions` [{subject?, body}]; at most `maxVersions` in all (its own words included); each needs text;
+ * every {{field}} must be one PACE can fill. Returns the person's words, or null.
+ */
+function versionsProblem(steps, entityType, maxVersions) {
+  const allowed = allowedFor(entityType);
+  const maxExtra = Number.isInteger(maxVersions) && maxVersions >= 1 ? maxVersions - 1 : MAX_VERSIONS;
+  const list = steps || [];
+  for (let i = 0; i < list.length; i++) {
+    const c = (list[i] && list[i].config) || {};
+    if (!Array.isArray(c.versions) || !c.versions.length) continue;
+    const label = i === 0 ? 'The first email' : `Follow-up ${i}`;
+    if (c.versions.length > maxExtra) return `${label}: at most ${maxExtra + 1} versions in all (its own words and ${maxExtra} more).`;
+    for (let k = 0; k < c.versions.length; k++) {
+      const v = c.versions[k] || {};
+      if (!txt(v.body).trim()) return `${label}, version ${k + 2} has no text — write it or remove it.`;
+      const bad = [...new Set([].concat(varsIn(v.subject), varsIn(v.body)))].filter((f) => !allowed.has(f));
+      if (bad.length) return `${label}, version ${k + 2}: PACE cannot fill ${bad.map((f) => '{{' + f + '}}').join(', ')}.`;
+    }
   }
   return null;
 }
@@ -82,4 +111,4 @@ async function composeCandidateStep({ cfg, defaults, vars, hasJob }, io) {
   return { ok: true, subject: r.subject, body: r.body, panelHtml, writtenBy };
 }
 
-module.exports = { BUILDER, composeCandidateStep, CANDIDATE_VARS, LEAD_CHANNEL, CANDIDATE_CHANNEL, MAX_VERSIONS, isCandidates, allowedFor, isV2, problem, pickVersion };
+module.exports = { BUILDER, versionsProblem, composeCandidateStep, CANDIDATE_VARS, LEAD_CHANNEL, CANDIDATE_CHANNEL, MAX_VERSIONS, isCandidates, allowedFor, isV2, problem, pickVersion };

@@ -43,6 +43,11 @@ const WORKFLOW_DEFINITIONS = [
   // R-395: a plain BD may enrol only into a sequence THEY made (services/sequence-visibility.js); managers reach any. This suite is about
   // WHICH LEAD may be enrolled, so the sequence is the BD's own and the target gate is what is being measured.
   { id: 'WF1', org_id: ORG, entity_type: 'contact', status: 'active', created_by: 'BD' },
+  // D-0214 (5 Nov): EVERY role — managers and admins too — uses only the sequences THEY made. This suite is about which LEAD may be
+  // enrolled, so each role it tests with owns a sequence of its own and the target gate is what is measured.
+  { id: 'WF1_RA_LEAD', org_id: ORG, entity_type: 'contact', status: 'active', created_by: 'RA_LEAD' },
+  { id: 'WF1_ADMIN', org_id: ORG, entity_type: 'contact', status: 'active', created_by: 'ADMIN' },
+  { id: 'WF1_RECRUITER', org_id: ORG, entity_type: 'contact', status: 'active', created_by: 'RECRUITER' },
   { id: 'WF_FOREIGN', org_id: FOREIGN, entity_type: 'contact', status: 'active' },
 ];
 const SUBMISSIONS = [
@@ -176,9 +181,9 @@ const ok = (n, c, d) => results.push({ n, c: !!c, d });
   {
     const rBd = await call('BD', 'POST', '/wf/enroll', { workflow_id: 'WF1', entity_type: 'contact', entity_id: 'C_POOL' });
     ok('a plain BD cannot enroll a pool-lead contact -> 404', rBd.status === 404, rBd.body);
-    const rRal = await call('RA_LEAD', 'POST', '/wf/enroll', { workflow_id: 'WF1', entity_type: 'contact', entity_id: 'C_POOL' });
+    const rRal = await call('RA_LEAD', 'POST', '/wf/enroll', { workflow_id: 'WF1_RA_LEAD', entity_type: 'contact', entity_id: 'C_POOL' });
     ok('ra_lead CAN enroll a pool-lead contact', rRal.status === 200, rRal.body);
-    const rAdmin = await call('ADMIN', 'POST', '/wf/enroll', { workflow_id: 'WF1', entity_type: 'contact', entity_id: 'C_POOL' });
+    const rAdmin = await call('ADMIN', 'POST', '/wf/enroll', { workflow_id: 'WF1_ADMIN', entity_type: 'contact', entity_id: 'C_POOL' });
     ok('admin CAN enroll a pool-lead contact', rAdmin.status === 200, rAdmin.body);
     enrollCalls.length = 0;
   }
@@ -204,12 +209,12 @@ const ok = (n, c, d) => results.push({ n, c: !!c, d });
 
   // ── bonus: a plain RECRUITER not assigned to the submission's job order ──
   {
-    const r = await call('RECRUITER', 'POST', '/wf/enroll', { workflow_id: 'WF1', entity_type: 'submission', entity_id: 'SUB1' });
+    const r = await call('RECRUITER', 'POST', '/wf/enroll', { workflow_id: 'WF1_RECRUITER', entity_type: 'submission', entity_id: 'SUB1' });
     ok('recruiter assigned to SUB1\'s job order (JO1) can enroll', r.status === 200, r.body);
     enrollCalls.length = 0;
     // remove the assignment to prove the negative
     RECRUITER_ASSIGNMENTS.length = 0;
-    const r2 = await call('RECRUITER', 'POST', '/wf/enroll', { workflow_id: 'WF1', entity_type: 'submission', entity_id: 'SUB1' });
+    const r2 = await call('RECRUITER', 'POST', '/wf/enroll', { workflow_id: 'WF1_RECRUITER', entity_type: 'submission', entity_id: 'SUB1' });
     ok('recruiter NOT assigned to the submission\'s job order -> 404', r2.status === 404, r2.body);
     RECRUITER_ASSIGNMENTS.push({ recruiter_id: 'RECRUITER', job_order_id: 'JO1' });
     enrollCalls.length = 0;

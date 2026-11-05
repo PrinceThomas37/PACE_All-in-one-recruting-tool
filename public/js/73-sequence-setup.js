@@ -202,6 +202,7 @@
     var def=opts.id?((STATE.wf&&STATE.wf.defs)||[]).find(function(d){ return d.id===opts.id; }):null;
     if(def){
       Q.target.name=def.name||'';
+      Q.target.people=def.people_now||0;   // R-383: people inside change what a save may do (wording yes, structure = a copy)
       var st=(def.steps||[]).slice().sort(function(a,b){ return a.step_order-b.step_order; });
       var c0=(st[0]&&st[0].config)||{};
       Q.mode=c0.ai?'ai':'template';
@@ -260,10 +261,21 @@
     // D-0196: room = the person's chosen number − their own email − what is already there. Not chosen yet: keep what they have, and
     // the button waits for a number (the card above).
     var room=Q.vCount?Math.max(0,Q.vCount-1-list.length):0;
-    var h=list.map(function(v,i){
-      return '<div class="sq-ver"><div class="sq-ver-h"><span>Version '+(i+2)+'</span><button type="button" class="btn btn-sm btn-outline" data-sq="rmv" data-slot="'+slot+'" data-i="'+i+'">Remove</button></div>'+
-        '<div class="sq-ver-t">'+(skel?'':esc((first?'Subject: '+fill(v.subject||htmlToTokens(Q.first.subject))+'\n\n':'')+fill(v.body)))+'</div></div>';
-    }).join('');
+    // R-383: ONE version on screen with arrows (‹ ›) instead of a long stack. Version 1 is the person's own email (edited above).
+    var h='';
+    if(list.length){
+      Q.vi=Q.vi||{}; var cur=Math.min(Math.max(Number(Q.vi[slot])||0,0),list.length); Q.vi[slot]=cur;
+      var total=list.length+1, txt;
+      if(cur===0){ var src=first?Q.first:Q.fus[Number(slot)]||{};
+        txt=skel?'':esc((first?'Subject: '+fill(htmlToTokens(src.subject||''))+'\n\n':'')+fill(htmlToTokens(src.body||''))); }
+      else { var v=list[cur-1]; txt=skel?'':esc((first?'Subject: '+fill(v.subject||htmlToTokens(Q.first.subject))+'\n\n':'')+fill(v.body)); }
+      h+='<div class="sq-ver" data-sq-verview="'+slot+'"><div class="sq-ver-h">'+
+        '<span class="sq-vnav"><button type="button" class="btn btn-sm btn-outline" data-sq="vnav" data-slot="'+slot+'" data-dir="-1" aria-label="Previous version"'+(cur===0?' disabled':'')+'>‹</button>'+
+        '<span data-sq-vpos>Version '+(cur+1)+' of '+total+(cur===0?' · your own email, edited above':'')+'</span>'+
+        '<button type="button" class="btn btn-sm btn-outline" data-sq="vnav" data-slot="'+slot+'" data-dir="1" aria-label="Next version"'+(cur===list.length?' disabled':'')+'>›</button></span>'+
+        (cur>0?'<button type="button" class="btn btn-sm btn-outline" data-sq="rmv" data-slot="'+slot+'" data-i="'+(cur-1)+'">Remove this version</button>':'')+'</div>'+
+        '<div class="sq-ver-t">'+txt+'</div></div>';
+    }
     if(room>0) h+='<div class="sq-row"><button data-ai="1" type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
       (Q.busy==='vary'+slot?('Writing '+(Q.varyAt||1)+' of '+(Q.varyOf||room)+'…'):'Write '+room+' version'+(room===1?'':'s')+' with AI')+'</button></div>';
     var hint=!Q.vCount?'Choose how many versions you want (top of the page) to let AI write them.'
@@ -336,7 +348,7 @@
     var t=Q.target;
     return '<div class="card sq-card"><label class="sq-lbl" for="sq-name">Name this sequence</label>'+
       '<input id="sq-name" class="sq-inp" maxlength="120" placeholder="'+(t.cand?'e.g. Site engineers — Houston':'e.g. Java developers — healthcare clients')+'" value="'+(skel?'':esc(t.name))+'">'+
-      '<p class="sq-hint">For: <b>'+(t.cand?'candidates on a job':'leads')+'</b>. Follow-ups stop by themselves when someone replies.</p>'+msgHtml('name')+'</div>';
+      '<p class="sq-hint">For: <b>'+(t.cand?'candidates on a job':'leads')+'</b>. Follow-ups stop by themselves when someone replies.</p>'+msgHtml('name')+insideNote(t)+'</div>';
   }
   function writeStep(skel){
     var ai=Q.mode==='ai', busy=!!Q.busy;
@@ -462,7 +474,8 @@
     return '<div class="card sq-card"><h2 class="sq-h2">What a '+who+' gets</h2>'+mail+fus+'</div>'+
       '<div class="card sq-card"><div class="sq-row sq-between"><div><h2 class="sq-h4">'+(n?'Save and start':'Save')+'</h2><p class="sq-hint">'+
         (n?'Starts now for the '+n+' '+noun+' you ticked.':'Saved and switched on; you start it for '+who+'s from their list.')+'</p></div>'+
-      '<button type="button" class="btn btn-primary" data-sq="save"'+(Q.saving?' disabled':'')+'>'+(Q.saving?'Saving…':(n?'Save and start for '+n+' '+noun:'Save sequence'))+'</button></div>'+msgHtml('save')+'</div>';
+      '<button type="button" class="btn btn-primary" data-sq="save"'+(Q.saving?' disabled':'')+'>'+(Q.saving?'Saving…':(n?'Save and start for '+n+' '+noun:'Save sequence'))+'</button></div>'+msgHtml('save')+
+        (Q.needsCopy?'<div class="sq-row"><button type="button" class="btn btn-outline" data-sq="savecopy">Save as a new copy</button></div>':'')+'</div>';
   }
   function startStep(){
     if(named()) return namedStartStep();
@@ -633,6 +646,12 @@
       .catch(function(e){ Q.aitest={error:(e&&e.message)||String(e)}; })]).then(function(){ Q.busy=''; repaint(); });
   }
   // A named sequence is saved as a workflow definition: day N of a follow-up becomes "N − previous day" after the step before.
+  // People are inside this sequence right now: say what may change before anything is written (D-0217).
+  function insideNote(t){
+    var n=t&&t.id?(t.people||0):0; if(!n) return '';
+    return '<p class="sq-hint" data-sq-inside="1"><b>'+n+' '+(n===1?'person is':'people are')+' in it now.</b> You can change the wording of any email, even one they have not reached yet. '+
+      'Adding or removing an email, or changing the days between them, saves as a new copy instead, and this one carries on for the people inside.</p>';
+  }
   function namedSteps(b){
     var t=Q.target, cand=t.cand, ch=cand?'candidate_email':'email';
     var clean=function(o){ Object.keys(o).forEach(function(k){ if(o[k]===undefined) delete o[k]; }); return o; };
@@ -662,7 +681,16 @@
         if(ea&&ea.items&&ea.items.length&&typeof wfEnrollSelectionInto==='function'){ wfEnrollSelectionInto(id, ea.entity_type||t.entity, ea.items); Q.savedStarted=ea.items.length; t.enrollAfter=null; }
         Q.saving=false; Q.saved=true; STATE.wf=undefined; repaint();
       });
-    }).catch(function(e){ Q.saving=false; say('save',(e&&e.message)||String(e)); repaint(); });
+    }).catch(function(e){
+      Q.saving=false; say('save',(e&&e.message)||String(e));
+      if(e&&e.body&&e.body.code==='needs_copy') Q.needsCopy=true;
+      repaint();
+    });
+  }
+  // The structure changed while people are inside: save what is on screen as a NEW sequence; the old one is untouched.
+  function saveAsCopy(){
+    var t=Q.target; if(!t||!t.id) return;
+    var nm=String(t.name||'').trim(); t.name=nm+' (copy)'; t.id=null; t.people=0; Q.needsCopy=false; saveNamed();
   }
   function save(){
     if(named()) return saveNamed();
@@ -705,6 +733,7 @@
     if(a==='undo'){ if(Q.undo){ Q.first.subject=Q.undo.subject; Q.first.body=Q.undo.body; Q.first.versions=Q.undo.versions||[]; } Q.undo=null; say('first',''); paint(true); return; }
     if(a==='fudraft'){ if(!Q.busy) draftFollowup(i); return; }
     if(a==='vary'){ if(!Q.busy) vary(el.getAttribute('data-slot')); return; }
+    if(a==='vnav'){ saveEditors(); var vs=el.getAttribute('data-slot'); Q.vi=Q.vi||{}; Q.vi[vs]=(Number(Q.vi[vs])||0)+Number(el.getAttribute('data-dir')); paint(true); return; }
     if(a==='rmv'){ saveEditors(); var sl=el.getAttribute('data-slot'); (sl==='first'?Q.first.versions:Q.fus[Number(sl)].versions).splice(i,1); Q.preview=null; paint(true); return; }
     if(a==='futhread'){
       saveEditors(); var thr=el.getAttribute('data-thr')==='new'?'new':'same'; if(!Q.fus[i]||Q.fus[i].thread===thr) return;
@@ -755,6 +784,7 @@
     if(a==='cancel'){ var back=named()?Q.target.back:'mysetup'; if(back==='seqsetup') back='email'; goPage(back); return; }
     if(a==='test'){ if(!Q.busy) test(); return; }
     if(a==='save'){ if(!Q.saving) save(); return; }
+    if(a==='savecopy'){ if(!Q.saving) saveAsCopy(); return; }
     if(a==='rwpend'){ var rp=Q.rewritePending; if(!rp||rp.busy) return; rp.busy=true; rp.err=''; repaint();
       apiPost('/my-setup/sequence/rewrite-pending',{}).then(function(r){ rp.busy=false; rp.done=(r&&r.rewritten)||0; if(!rp.done) rp.err='Nothing was re-written — they may have just gone out.'; repaint(); })
         .catch(function(e){ rp.busy=false; rp.err='Could not re-write them: '+((e&&e.message)||e); repaint(); });

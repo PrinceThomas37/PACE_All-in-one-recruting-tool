@@ -65,9 +65,10 @@ step('…including the one they just made', (r.out || []).some(d => d.name === '
 r = await call('/wf/definitions', 'get', 'bd2');
 step('another BD sees theirs, not the first BD\'s', (r.out || []).some(d => d.id === 'theirs') && !(r.out || []).some(d => d.id === 'mine' || d.name === 'My plan'));
 r = await call('/wf/definitions', 'get', 'boss');
-step('a lead sees every sequence, as before', (r.out || []).length === T.workflow_definitions.length);
+// D-0214 (owner 5 Nov: "they only have to see their own"): managers too — what a manager sees across the team is analytics, not this list
+step('a lead sees only THEIR OWN sequence (D-0214) — not the company\'s, not a BD\'s', (r.out || []).length === 1 && r.out[0].id === 'lead1', JSON.stringify((r.out || []).map(d => d.id)));
 r = await call('/wf/definitions', 'get', 'adm');
-step('an admin too', (r.out || []).length === T.workflow_definitions.length);
+step('an admin too: sees only their own (here none — the company\'s standard and everyone else\'s stay out of the list)', (r.out || []).length === 0, JSON.stringify((r.out || []).map(d => d.id)));
 r = await call('/wf/definitions/:id', 'put', 'boss', { name: 'Lead edit' }, { id: 'theirs' });
 step('a lead can still edit any sequence, as before', r.code === 200 && T.workflow_definitions.find(d => d.id === 'theirs').name === 'Lead edit');
 
@@ -97,7 +98,9 @@ for (const door of ['/wf/enroll', '/wf/enroll-bulk']) {
   r = await call(door, 'post', 'bd1', body('mine'));
   step(door + ': …but their OWN passes the sequence check (any later answer is about the lead, not the sequence)', !notThere(r), JSON.stringify(r));
   r = await call(door, 'post', 'boss', body('theirs'));
-  step(door + ': a BD lead still reaches any sequence, as before', !notThere(r), JSON.stringify(r));
+  step(door + ': a BD lead cannot enrol into a BD\'s sequence either (D-0214: only their own)', notThere(r), JSON.stringify(r));
+  r = await call(door, 'post', 'boss', body('lead1'));
+  step(door + ': …their OWN passes the sequence check', !notThere(r), JSON.stringify(r));
 }
 
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);

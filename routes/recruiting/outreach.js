@@ -34,6 +34,7 @@ const interviewTime = require('../../services/interview-time');
 const submissionEmail = require('../../services/submission-email');
 const interviewInvite = require('../../services/interview-invite');   // R-317: the words of each interview email (candidate / client / BD)
 const { clientOwnerFrom } = require('../../services/ownership');
+const workingMailbox = require('../../services/working-mailbox');   // R-399: which mailboxes can actually send
 
 module.exports = function (app, ctx) {
   const {
@@ -147,16 +148,13 @@ async function recruiterSendingMailbox(recruiterId) {
   const rows = [...(msTokens || []), ...(gmailTokens || [])];
   const connected = new Set(rows.map(t => t.user_email_id));
   smtpIds.forEach(i => connected.add(i));
-  const usable = mailboxes.filter(m => connected.has(m.id) && m.is_active !== false);
-  // R-394 (owner 4 Nov: Ash's default mailbox was one Google had stopped accepting, so every send failed "Gmail token refresh
-  // failed" while his other mailbox was healthy): the default is the first mailbox whose sign-in WORKS. A mailbox that is only
-  // "connected" because a stored sign-in exists — Google rejected it — is the default only when nothing else is left, so a person
-  // with nothing healthy still gets the honest error, not a silent "no mailbox".
-  const rejected = rejectedIds(rows);
-  return usable.find(m => !rejected.has(m.id)) || usable[0] || null;
+  // R-394 (owner 4 Nov: Ash's default mailbox was one Google had stopped accepting, so every send failed "Gmail token refresh failed"
+  // while his other mailbox was healthy): the default is the first mailbox whose sign-in WORKS — the ONE rule is
+  // services/working-mailbox.js (R-399). A rejected one is the default only when nothing else is left, so a person with nothing
+  // healthy still gets the honest error, not a silent "no mailbox".
+  return workingMailbox.pickWorkingMailbox(mailboxes, { connected, rejected: workingMailbox.rejectedIds(rows) }, { fallbackToRejected: true });
 }
-// Which stored sign-ins Google (or Microsoft) answered "no" to on the last refresh (recorded by recordRefreshOutcome, R-037).
-function rejectedIds(tokenRows) { return new Set((tokenRows || []).filter(t => t.refresh_failed === true).map(t => t.user_email_id)); }
+const rejectedIds = workingMailbox.rejectedIds;
 
 // Dispatch a fresh outbound message by the mailbox's connected platform —
 // the Microsoft/Gmail counterpart to sendMicrosoftNewMessage alone. Both

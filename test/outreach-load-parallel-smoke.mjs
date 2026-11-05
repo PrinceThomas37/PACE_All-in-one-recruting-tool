@@ -11,7 +11,7 @@ const ORG = 'org-a', ME = 'bd-1', LATENCY = 20;
 const today = new Date(); const day = (n) => new Date(today.getTime() - n * 86400000).toISOString();
 const N_EMAILS = 3500, N_PEOPLE = 2100;
 const D = { workflow_definitions: [{ id: 'wfA', name: 'Seq A', created_by: ME, org_id: ORG }], workflow_step_runs: [],
-  emails: [], email_tracking: [], contacts: [], jobs: [] };
+  emails: [], email_tracking: [], contacts: [], jobs: [], users: [{ id: ME, name: 'Me', org_id: ORG, deleted_at: null }] };
 for (let i = 0; i < N_PEOPLE; i++) { D.contacts.push({ id: 'c' + i, first_name: 'P' + i, last_name: '', email: 'p' + i + '@x.test', email_status: 'valid', replied_at: null, job_id: 'j' + i, org_id: ORG });
   D.jobs.push({ id: 'j' + i, stage: 'Assigned', position: 'Role', industry: 'Tech', timezone: 'EST', company: { name: 'Co', industry: 'Tech' }, org_id: ORG }); }
 for (let i = 0; i < N_EMAILS; i++) { D.emails.push({ id: 'e' + i, sent_by: ME, status: 'sent', sent_at: day(i % 20).slice(0, 10), contact_id: 'c' + (i % N_PEOPLE), org_id: ORG });

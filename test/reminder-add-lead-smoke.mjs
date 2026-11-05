@@ -36,7 +36,9 @@ const fake = createFakeDb({
     companies: [{ id: 'co-new', org_id: O, name: 'Fulton Technology' }, { id: 'co-old', org_id: O, name: 'Known Co' }],
     jobs: [{ id: 'L-known', org_id: O, company_id: 'co-old', position: 'Plant Manager', stage: 'Assigned', assigned_to_bd: 'other', created_by: 'other', deleted_at: null, created_at: new Date().toISOString() }],
     contacts: [{ id: 'c-known', org_id: O, job_id: 'L-known', first_name: 'Kim', email: 'kim@known.co' }],
-    user_emails: [{ id: 'mb-1', org_id: O, user_id: 'martin', is_primary: false }, { id: 'mb-main', org_id: O, user_id: 'martin', is_primary: true }, { id: 'mb-x', org_id: O, user_id: 'other', is_primary: true }],
+    // R-399: a mailbox saved onto a new lead must be able to SEND — active, with a stored sign-in Google has not rejected (services/working-mailbox.js)
+    user_emails: [{ id: 'mb-1', org_id: O, user_id: 'martin', is_primary: false, is_active: true }, { id: 'mb-main', org_id: O, user_id: 'martin', is_primary: true, is_active: true }, { id: 'mb-x', org_id: O, user_id: 'other', is_primary: true, is_active: true }],
+    gmail_tokens: [{ id: 't1', user_email_id: 'mb-1', refresh_failed: false }, { id: 't2', user_email_id: 'mb-main', refresh_failed: false }, { id: 't3', user_email_id: 'mb-x', refresh_failed: false }],
     reminders: [
       { id: 'R-martin', org_id: O, user_id: 'martin', job_id: null, contact_id: null, contact_name: 'Nathan W', company_name: 'Fulton Technology', email: 'nathan@fultontechnology.com', reminder_type: 'manual' },
       { id: 'R-other', org_id: O, user_id: 'other', job_id: null, contact_id: null, contact_name: 'Pat', company_name: 'Fulton Technology', email: 'pat@fultontechnology.com', reminder_type: 'manual' },

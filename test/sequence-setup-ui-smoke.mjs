@@ -82,8 +82,12 @@ await pg.selectOption('[data-sq-vcount]','3');
 await pg.waitForSelector('[data-sq="vary"][data-slot="first"]');
 ok('3 chosen → "Write 2 versions with AI"', (await pg.textContent('[data-sq="vary"][data-slot="first"]')).includes('Write 2 versions'));
 await pg.click('[data-sq="vary"][data-slot="first"]');
-await pg.waitForFunction(()=>document.querySelectorAll('.sq-ver').length===2);
-ok('two versions written, filled in', (await pg.$$('.sq-ver')).length===2 && (await pg.textContent('.sq-ver')).includes('Hello Dana'));
+await pg.waitForSelector('[data-sq-verview="first"]');
+ok('versions are read ONE at a time with arrows: version 1 of 3 is the own email, previous is off', (await pg.$$('.sq-ver')).length===1 && (await pg.textContent('[data-sq-vpos]')).includes('Version 1 of 3') && await pg.isDisabled('[data-sq="vnav"][data-slot="first"][data-dir="-1"]'));
+await pg.click('[data-sq="vnav"][data-slot="first"][data-dir="1"]');
+ok('the arrow shows version 2, filled in', (await pg.textContent('[data-sq-vpos]')).includes('Version 2 of 3') && (await pg.textContent('.sq-ver')).includes('Hello Dana'));
+await pg.click('[data-sq="vnav"][data-slot="first"][data-dir="1"]');
+ok('…and version 3, where Next is off', (await pg.textContent('[data-sq-vpos]')).includes('Version 3 of 3') && await pg.isDisabled('[data-sq="vnav"][data-slot="first"][data-dir="1"]'));
 if(OUT){ await pg.evaluate(()=>document.querySelector('[data-sq-vcount]').closest('.card').scrollIntoView({block:'start'})); await pg.screenshot({path:OUT+'/s1b-versions.png'}); }
 ok('all written: the button goes, the count is said', !(await pg.$('[data-sq="vary"][data-slot="first"]')) && (await pg.textContent('#sq-root')).includes('3 of 3 versions'));
 // follow-up

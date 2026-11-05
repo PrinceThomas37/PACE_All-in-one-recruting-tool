@@ -1192,6 +1192,7 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 @media (hover:hover) and (pointer:fine){.sq-it:hover{background:var(--accent-l)}}
 .sq-ver{border:2px solid var(--border2);border-radius:0;background:var(--bg);padding:10px 12px;margin-top:8px}
 .sq-ver-h{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:var(--text2)}
+.sq-vnav{display:inline-flex;align-items:center;gap:8px}
 .sq-ver-t{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;color:var(--text)}
 .sq-mail{border:2px solid var(--ctl-brd);border-radius:0;background:var(--card);margin-top:8px;overflow:hidden}
 .sq-mrow{display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2)}

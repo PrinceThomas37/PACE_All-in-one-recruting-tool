@@ -25,8 +25,11 @@ function reminderLeadOffer(reminder) {
 }
 
 // The main mailbox a new lead of theirs sends from: the one marked primary, else their first; none → null (they pick at send).
-function mainMailboxId(mailboxes) {
-  const list = (mailboxes || []).filter(Boolean);
+// R-399: given the mailboxes' sign-in `health` (services/working-mailbox.js loadMailboxHealth), only a mailbox that can SEND is picked —
+// never one Google rejected, because the choice is saved onto the new lead. Without `health` it is the old rule.
+function mainMailboxId(mailboxes, health) {
+  let list = (mailboxes || []).filter(Boolean);
+  if (health) list = list.filter((m) => health.connected.has(m.id) && !health.rejected.has(m.id));
   const p = list.find((m) => m.is_primary) || list[0];
   return p ? p.id : null;
 }

@@ -29,6 +29,7 @@ const leadClaim = require('../services/lead-claim');
 const leadPosting = require('../services/lead-posting');
 const leadCheck = require('../services/lead-check');
 const reminderLead = require('../services/reminder-lead');   // a reminder about someone PACE does not know → your lead (R-309, D-0178)
+const workingMailbox = require('../services/working-mailbox');   // R-399: which mailboxes can actually send
 const listTag = require('../services/list-tag');   // "has anything changed since my last load?" (R-302)
 const { createDb } = require('../models');
 
@@ -548,9 +549,10 @@ router.post('/jobs', auth, async (req, res) => {
         const j = dup[0].job || {};
         return res.status(409).json({ error: `${rem.email} is already a contact on a lead in PACE${j.position ? ` (${j.position}${j.company && j.company.name ? ' at ' + j.company.name : ''})` : ''}.`, reason: 'contact_exists' });
       }
-      const { data: boxes } = await withOrg(supabase.from('user_emails').select('id,is_primary').eq('user_id', req.user.id), req);
+      const { data: boxes } = await withOrg(supabase.from('user_emails').select('id,is_primary,is_active,created_at').eq('user_id', req.user.id).eq('is_active', true), req);
       fromReminder = rem;
-      ownerPatch = reminderLead.leadOwnerFields(req.user.id, reminderLead.mainMailboxId(boxes), new Date());
+      // R-399: the mailbox saved onto the new lead is one that can send (services/working-mailbox.js), never one Google rejected
+      ownerPatch = reminderLead.leadOwnerFields(req.user.id, reminderLead.mainMailboxId(boxes, await workingMailbox.loadMailboxHealth(supabase, (boxes || []).map(m => m.id))), new Date());
     }
     // A paragraph in Found by, a link in Pay…: moved to where it belongs, kept word for word in Notes (services/lead-fields.js).
     const tidy = leadFields.tidyLeadFields({ source, job_url, salary_range, location, position, notes });
