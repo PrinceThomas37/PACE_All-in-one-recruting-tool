@@ -198,7 +198,7 @@ router.get('/admin/deliverability', auth, async (req, res) => {
     const { data: mailboxes } = await mbQuery;
     const delivCols = {};
     for (const ids of chunk((mailboxes || []).map(m => m.id), 100)) {
-      try { const { data } = await scoped.from('user_emails').select('id,warmup_start_date,auto_paused_at').in('id', ids); (data || []).forEach(r => { delivCols[r.id] = r; }); } catch (_) {}
+      try { const { data } = await scoped.from('user_emails').select('id,warmup_status,warmup_start_date,auto_paused_at').in('id', ids); (data || []).forEach(r => { delivCols[r.id] = r; }); } catch (_) {}
     }
     const [warmupStart, warmupStep] = await Promise.all([
       getSetting(supabase, 'mailbox_warmup_start', orgOf(req)),
@@ -211,7 +211,8 @@ router.get('/admin/deliverability', auth, async (req, res) => {
         id: m.id, email: m.email_address, name: m.display_name, daily_limit: m.daily_send_limit,
         auto_paused: !!dc.auto_paused_at,
         connection: conns[m.id] || { connected: false, status: 'none' },
-        warmup: dc.warmup_start_date ? { since: dc.warmup_start_date, today_cap: warmupLimit(dc, warmupStart, warmupStep) } : null
+        // The card says what the engine does: a ramp only while the mailbox is still in warm-up (null cap = no ramp = no line).
+        warmup: warmupLimit(dc, warmupStart, warmupStep) != null ? { since: dc.warmup_start_date, today_cap: warmupLimit(dc, warmupStart, warmupStep) } : null
       };
     });
     res.json({ window_days: days, view, can_org: admin, sent, failed, bounced_contacts: bounced, replied_contacts: replied, suppression_count: suppression, mailboxes: mailboxHealth });

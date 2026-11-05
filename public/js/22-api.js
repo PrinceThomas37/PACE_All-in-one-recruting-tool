@@ -272,7 +272,7 @@ function loadAppData(opts){
 function leadsStartup(){
   var who=STATE.token;
   if(!window.leadsStore)return loadLeadsInBackground();
-  STATE.jobsLoading=true;leadsNote('Loading your leads…');
+  STATE.jobsLoading=true;leadsNoteSoon('Loading your leads…');
   return leadsStore.start().then(function(on){
     if(STATE.token!==who)return;
     if(on){STATE.jobsLoading=false;leadsNote(null);render();return;}
@@ -280,7 +280,23 @@ function leadsStartup(){
   });
 }
 var LEADS_RETRY_S=[3,6,10,20,30];
+// The plain "Loading your leads…" note is for a SLOW load only (owner, 5 Nov: "I don't need this dialogue box, it comes in for every
+// login"). A normal login answers well inside this time and never sees it; the empty list is still never left unexplained, because
+// after this wait the note appears. "Still loading — the server is busy" and "could not load" show at once (something IS wrong).
+// shortcut: one fixed display delay, not an admin setting (it is not a limit on anything a customer does); revisit if sign-ins
+// are routinely slower than this and the note flashes up for most people.
+var LEADS_NOTE_DELAY_MS=4000;
+var _leadsNoteTimer=null;
+function leadsNoteSoon(text){
+  var who=STATE.token;
+  if(_leadsNoteTimer)return;   // already waiting (the first load fell back to a second): the clock does not restart
+  _leadsNoteTimer=setTimeout(function(){
+    _leadsNoteTimer=null;
+    if(STATE.token===who&&STATE.jobsLoading)leadsNote(text);   // still waiting, same person: now it is worth saying
+  },LEADS_NOTE_DELAY_MS);
+}
 function leadsNote(text,canRetry){
+  if(_leadsNoteTimer){clearTimeout(_leadsNoteTimer);_leadsNoteTimer=null;}   // any other say-so (or clearing) cancels a note that was still waiting
   if(typeof document==='undefined')return;
   var el=document.getElementById('leads-loading-note');
   if(!text){if(el)el.remove();return;}
@@ -292,7 +308,7 @@ function loadLeadsInBackground(tries,opts){
   var who=STATE.token;
   STATE.jobsLoading=true;
   if(!tries&&!opts.keepWhileLoading){STATE.jobs=[];STATE.contacts=[];_jobsTag=null;}
-  leadsNote(tries?'Still loading your leads — the server is busy…':'Loading your leads…');
+  if(tries)leadsNote('Still loading your leads — the server is busy…');else leadsNoteSoon('Loading your leads…');
   return apiGetJobsList().then(function(jl){
     if(STATE.token!==who)return;   // signed out (or someone else signed in) meanwhile
     STATE.jobsLoading=false;leadsNote(null);

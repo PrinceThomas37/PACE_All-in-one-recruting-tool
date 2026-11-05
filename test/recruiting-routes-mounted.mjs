@@ -25,7 +25,11 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const PORT = 20000 + Math.floor(Math.random() * 20000);
+const randomPort = () => 20000 + Math.floor(Math.random() * 20000);
+// A random port can land on one the machine is already using (the range overlaps the temporary ports browsers and outgoing connections use):
+// the server then dies with EADDRINUSE and nothing answers. 5 Nov 2026: that failed a full gate run on Node 22 although the code was fine,
+// so the boot below tries a fresh port instead. ROUTES_TEST_PORT pins the FIRST port so the retry itself can be tested.
+let PORT = Number(process.env.ROUTES_TEST_PORT) || randomPort();
 
 const results = [];
 const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail });
@@ -84,22 +88,27 @@ const LITERAL_BEFORE_PARAM = [
   ['GET', '/candidates/status-counts'],
 ];
 
-const child = spawn('node', ['index.js'], {
-  cwd: ROOT,
-  env: {
-    ...process.env,
-    PORT: String(PORT),
-    SUPABASE_URL: 'http://127.0.0.1:59999',
-    SUPABASE_SERVICE_KEY: 'dummy-service-key',
-    JWT_SECRET: 'test-secret',
-    NODE_ENV: 'test',
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
 let stderr = '';
 let stdout = '';
-child.stdout.on('data', d => { stdout += d.toString(); });
-child.stderr.on('data', d => { stderr += d.toString(); });
+function startServer() {
+  stderr = ''; stdout = '';
+  const c = spawn('node', ['index.js'], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      SUPABASE_URL: 'http://127.0.0.1:59999',
+      SUPABASE_SERVICE_KEY: 'dummy-service-key',
+      JWT_SECRET: 'test-secret',
+      NODE_ENV: 'test',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  c.stdout.on('data', d => { stdout += d.toString(); });
+  c.stderr.on('data', d => { stderr += d.toString(); });
+  return c;
+}
+let child = startServer();
 
 function req(method, p) {
   return new Promise((resolve, reject) => {
@@ -114,6 +123,7 @@ function req(method, p) {
 async function waitForBoot(ms = 20000) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
+    if (/EADDRINUSE/.test(stderr)) return false;   // the port was taken: no point waiting, the caller tries another
     try { await req('GET', '/health'); return true; } catch (_) {}
     await new Promise(r => setTimeout(r, 200));
   }
@@ -122,7 +132,10 @@ async function waitForBoot(ms = 20000) {
 
 let failed = 0;
 try {
-  const booted = await waitForBoot();
+  let booted = await waitForBoot();
+  for (let attempt = 0; !booted && /EADDRINUSE/.test(stderr) && attempt < 3; attempt++) {
+    child.kill('SIGKILL'); PORT = randomPort(); child = startServer(); booted = await waitForBoot();
+  }
   ok('the server boots with the split route modules', booted, stderr.slice(-400));
   if (!booted) throw new Error('server did not boot');
 

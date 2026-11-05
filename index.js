@@ -696,24 +696,13 @@ async function loadMailboxDelivState(ids) {
   const map = {};
   if (!ids || !ids.length) return map;
   try {
-    const { data } = await supabase.from('user_emails').select('id,warmup_start_date,auto_paused_at').in('id', ids);
+    const { data } = await supabase.from('user_emails').select('id,warmup_status,warmup_start_date,auto_paused_at').in('id', ids);
     (data || []).forEach(r => { map[r.id] = r; });
   } catch (_) {}
   return map;
 }
-// Warm-up: effective daily cap ramps from a small number; null = no ramp.
-// start/step are admin-editable (config/settings.js: mailbox_warmup_start,
-// mailbox_warmup_step) — callers fetch them once per batch and pass them in;
-// the literals here are only a last-resort fallback if a caller omits them.
-function warmupLimit(mailboxRow, start, step) {
-  if (!mailboxRow || !mailboxRow.warmup_start_date) return null;
-  const startDate = new Date(mailboxRow.warmup_start_date);
-  if (isNaN(startDate.getTime())) return null;
-  const days = Math.max(0, Math.floor((Date.now() - startDate.getTime()) / 86400000));
-  const warmupStart = start != null ? start : 20;
-  const warmupStep = step != null ? step : 5;
-  return warmupStart + warmupStep * days;
-}
+// Warm-up ramp (the daily cap while a mailbox is still warming; null = no ramp): ONE home, services/warmup-ramp.js.
+const { warmupLimit } = require('./services/warmup-ramp');
 async function setMailboxAutoPaused(userEmailId, paused, reason, note) {
   try { await supabase.from('user_emails').update({ auto_paused_at: paused ? new Date() : null }).eq('id', userEmailId); } catch (_) {}
   // What the pause was FOR is kept beside it, so the dashboard can say which mailbox, when and why; a resume forgets it.

@@ -97,11 +97,24 @@ try {
     await ev(() => !!document.getElementById('login-email') && !document.getElementById('app-loadfail') && /session expired/i.test(document.body.innerText)));
   // ── R-348: the app opens WITHOUT waiting for the lead list ──
   await ev(() => { window.LEADS_RETRY_S = [0.2, 0.2, 0.2, 0.2, 0.2]; });
+  // 5 Nov (owner: "I don't need this dialogue box, it comes in for every login"): the plain "Loading your leads…" note waits before it
+  // appears, so a NORMAL login never shows it. Case 1 — an ordinary login (list answers in 1.5 s, the wait is 5 s): the note must never appear.
+  await ev(() => { window.LEADS_NOTE_DELAY_MS = 5000; window.__noteSeen = false; new MutationObserver(() => { if (document.getElementById('leads-loading-note')) window.__noteSeen = true; }).observe(document.body, { childList: true, subtree: true }); });
   jobsMode = 'ok'; leadsMode = 'slow'; leadsCalls = 0;
   await signIn();
   await page.waitForSelector('#sidebar', { timeout: 1200 }).catch(() => {});
   step('a slow lead list does not hold the sign-in: PACE is open before the leads arrive', await ev(() => !!document.getElementById('sidebar') && STATE.jobsLoading === true));
-  step('…and says the leads are on their way (an empty list never reads as "no leads")', await ev(() => /Loading your leads/.test((document.getElementById('leads-loading-note') || {}).innerText || '')));
+  await page.waitForFunction(() => !STATE.jobsLoading, null, { timeout: 5000 }).catch(() => {});
+  step('an ordinary login (leads there within the wait) never shows the "Loading your leads" box', await ev(() => STATE.jobs.length === 1 && window.__noteSeen === false));
+  await ev(() => doLogout()); await page.waitForTimeout(100);
+  // Case 2 — a genuinely slow login (the list takes 1.5 s, the wait is 0.5 s): the note must appear, so the empty list never reads as "no leads".
+  await ev(() => { window.LEADS_NOTE_DELAY_MS = 500; });
+  jobsMode = 'ok'; leadsMode = 'slow'; leadsCalls = 0;
+  await signIn();
+  await page.waitForSelector('#sidebar', { timeout: 1200 }).catch(() => {});
+  step('…not yet, right after the app opens (it waits first)', await ev(() => !document.getElementById('leads-loading-note') && STATE.jobsLoading === true));
+  await page.waitForSelector('#leads-loading-note', { timeout: 1200 }).catch(() => {});
+  step('…but a slow lead list says the leads are on their way (an empty list never reads as "no leads")', await ev(() => /Loading your leads/.test((document.getElementById('leads-loading-note') || {}).innerText || '')));
   await page.waitForFunction(() => !STATE.jobsLoading, null, { timeout: 5000 }).catch(() => {});
   step('when the list arrives the leads are there and the note is gone', await ev(() => STATE.jobs.length === 1 && !document.getElementById('leads-loading-note')));
   step('…asked once, not once per screen', leadsCalls === 1, String(leadsCalls));

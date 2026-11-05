@@ -510,7 +510,15 @@ function renderEmail(){
         :wp.active?'<strong class="c-green">Sending now</strong> — '+(wp.sent||0)+' sent of '+(wp.total||0)+(wp.failed?' · '+wp.failed+' failed':'')+(wp.current?' · now: '+htmlEsc(String(wp.current).slice(0,90)):'')
         :wp.done?'<strong>Last run finished</strong> — '+(wp.sent||0)+' sent'+(wp.interrupted?' (cut off by a restart — PACE picks it up again by itself)':'')
         :'<strong class="c-amber">Not sending right now</strong>';
-      var liveCard='<div class="card cp mb3 flex jb aic" style="gap:12px;flex-wrap:wrap"><div class="fs-13">'+wpLine+'<div class="fs-11_5 c-text3">Updates by itself every 15 seconds.</div></div>'+
+      // A bar while a run is in flight (owner, 5 Nov: "i need a progress bar") — the SAME number the person's own window shows:
+      // (sent + failed) of the run's total. Reuses the import banner's bar classes; the width is the only inline value (it is data).
+      var wpBar='';
+      if(wp&&wp.active&&(wp.total||0)>0){
+        var wpPct=Math.min(100,Math.round(((wp.sent||0)+(wp.failed||0))/wp.total*100));
+        wpBar='<div class="imp-bar sp-live-bar'+(wp.stalled?' sp-live-stalled':'')+'" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+wpPct+'" aria-label="Sending progress"><div class="imp-fill" style="width:'+wpPct+'%"></div></div>'+
+          '<div class="fs-11_5 c-text3 sp-live-pct">'+wpPct+'% of this run done</div>';
+      }
+      var liveCard='<div class="card cp mb3 flex jb aic" style="gap:12px;flex-wrap:wrap"><div class="fs-13 sp-live">'+wpLine+wpBar+'<div class="fs-11_5 c-text3">Updates by itself every 15 seconds.</div></div>'+
         ((bdSum.pending||0)>0&&!(wp&&wp.active)?'<button class="btn btn-primary btn-sm" onclick="raLeadStartSending()">Start sending their pending now</button>':'')+'</div>';
       pendingHtml='<div>'+scheduleBanner+backBtn+liveCard+
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;text-align:center;margin-bottom:14px">'+
