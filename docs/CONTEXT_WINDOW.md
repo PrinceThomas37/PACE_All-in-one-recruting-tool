@@ -2,7 +2,17 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 5 Nov 2026 (Session 62, end). Main = `c7689fd` (#404) plus the docs-only PR carrying this file.
+**Updated**: 5 Nov 2026 (Session 63, end). Main = `d98282a` (#406). Highest ids: roadmap R-402, decision D-0217 (none new), next migration 075 (nothing applied).
+
+## 5 Nov 2026 (Session 63, end) — #406 MERGED (`d98282a`, owner's yes; full run 371/371 on Node 22 AND Node 26.11.1)
+Deploy NOT confirmed from the sandbox — the owner's look at the live app is the first confirmation. No migration.
+- **R-400 warm-up cap bug (Sam Wilson):** Stop warm-up (and the engine's own graduation) left `warmup_start_date`, and the send loop read the date only, so a stopped mailbox stayed capped at start + step × days. Rule now in `services/warmup-ramp.js` (ramps only while status is `warming`/`paused`); `loadMailboxDelivState` and the deliverability card read the status. Guard `warmup-ramp-smoke`. LIVE DATA done by hand: Sam's `warmup_start_date` cleared (his 300/day applies). No other mailbox had a leftover date (16 checked).
+- **R-401** progress bar on the RA lead's drill-down into a manager's Pending window. **R-402** the "Loading your leads…" box waits 4 s (`LEADS_NOTE_DELAY_MS`) — NOT deleted: it is what stops an empty list reading as "no leads" on a slow server (R-348).
+- **Martin Smith (live writes, owner's instruction):** 26 never-sent queued follow-up emails deleted, 27 `follow_ups` set `skipped`. **STILL OWED:** his ONE pending first email (id `39f27409-a7e9-480f-a30e-ae93e1009c74`, to csillerud@grndwork.com, 3 Nov) — owner said "Yes" to remove-or-leave (read as remove); the Supabase delete timed out waiting for the owner's confirmation and did NOT run. Run it again only on the owner's word. His leads/mailbox: owner said No (do nothing).
+- **Owner asked how to verify a domain** (vhcstaffing.com "Not verified"): add the TXT record shown by "Show record" at the domain's DNS provider, then Verify. Not done by me — needs DNS access; I do not know how Futeglobal was done.
+- **Lessons:** (1) grep `test/` for anything a change touches BEFORE the long run — R-402 broke `users-emails-bulk-smoke` (a bare vm sandbox with no `setTimeout`) and cost a 35-min run. (2) `recruiting-routes-mounted` booted on a random port that can be taken (EADDRINUSE, silent 20 s) — now retries on a fresh port. (3) A fresh sandbox needs `npm install` before any suite. (4) `~/run-both.sh`'s own exit code is the last `echo`'s, not the tests' — read the counts in `~/logs/n22.log` / `n26.log`.
+- **Not checked:** the bar and the delayed box on a phone-width / real run; Render deploy; whether Sam's 35 pending emails went out after the date was cleared.
+
 
 ## 5 Nov 2026 (Session 62, end) — the sequence engine build is MERGED
 **Main = `c7689fd` (#404, owner's go "merge once the test passes"; 369/369 on Node 22 AND Node 26.11.1). No migration, no live-data write (the 20 leads on ash@futeglobal.com are untouched by decision). Highest ids: decision D-0217, roadmap R-399, next migration 075 (nothing applied).** Render deploys main automatically; the deploy was NOT confirmed from the sandbox — the owner's look at the live app is the first confirmation.
