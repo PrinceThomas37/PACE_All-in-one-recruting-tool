@@ -4058,31 +4058,9 @@ async function getMicrosoftToken(userEmailId) {
   return refreshed.access_token;
 }
 
-// Build an HTML email body from plain text + optional HTML signature.
-// Plain text is escaped and wrapped in <p> tags with <br> for line breaks.
-// The signature (already HTML) is appended after a ruled separator.
-// CAN-SPAM compliance footer: a clear opt-out on every message we originate.
-// Giving recipients an easy "no thanks" route diverts them from the spam button —
-// spam complaints are the single most damaging sender-reputation signal.
-// (The required physical postal address lives in the signature — see
-// ensureSignatureAddress in email-signature.js — so it is not repeated here.)
-const COMPLIANCE_FOOTER_HTML =
-  '<div style="margin-top:20px;font-size:11px;line-height:1.5;color:#94A3B8;font-family:Arial,sans-serif">'
-  + 'If you\'d prefer not to hear from me, just reply "unsubscribe" and I\'ll remove you from my list.'
-  + '</div>';
-
-function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
-  const escaped = (plainText || '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const htmlBody = '<p>' + escaped.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
-  const sig = signatureHtml && signatureHtml.trim()
-    ? '<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0">' + signatureHtml
-    : '';
-  const footer = includeFooter ? COMPLIANCE_FOOTER_HTML : '';
-  return '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#0F172A">' + htmlBody + sig + footer + '</div>';
-}
-
-
+// Build an HTML email body from plain text + optional HTML signature — services/email-html.js is the ONE place that lays a body out
+// (paragraphs, spacing, the opt-out footer), so every composer produces the same look in Gmail and Outlook (R-397).
+const { buildHtmlEmailBody } = require('./services/email-html');
 
 
 

@@ -70,8 +70,36 @@ function fillSignatureHtml(signatureHtml, { displayName, emailAddress }) {
     .replace(/{{senderemail}}/g, senderEmail);
 }
 
+// A signature pasted from Word or Outlook carries Word's own markup — class="MsoNormal", mso-* style rules, <o:p> tags, conditional
+// comments, runs of empty paragraphs. Gmail ignores some of it and Outlook honours other parts, so one signature looks different in
+// each (owner 4–5 Nov: "even the signature looks off"; 1 of 17 saved signatures, Ash's, was such a paste). This strips ONLY that
+// markup and keeps what the person made (text, bold, colours, links, images, tables). Pure and idempotent; our own mark is kept.
+function cleanWordMarkup(html) {
+  let s = String(html == null ? '' : html);
+  if (!s) return s;
+  const wasWord = /\bMso|\bmso-|<o:p|<!--\[if/i.test(s);       // only a Word paste gets the spacing step below; every other signature stays byte-for-byte
+  s = s.replace(/<!--(?!pace-own-signature)[\s\S]*?-->/g, '');                 // comments, incl. <!--[if gte mso 9]>…<![endif]-->
+  s = s.replace(/<!\[(?:if|endif)[^\]]*\]>/gi, '');                              // downlevel-revealed markers <![if !vml]> … <![endif]>
+  s = s.replace(/<xml\b[\s\S]*?<\/xml>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '');
+  s = s.replace(/<o:p>([\s\S]*?)<\/o:p>/gi, '$1').replace(/<\/?(?:o|v|w|m):[a-z]+\b[^>]*>/gi, '');   // Office namespace tags (the content of <o:p> — often a spacer &nbsp; — stays)
+  s = s.replace(/\sclass=(["'])[^"']*\bMso[^"']*\1/gi, '');                      // class="MsoNormal" and friends
+  s = s.replace(/\bmso-[a-z0-9-]+\s*:[^;"']*;?/gi, '');                           // mso-* rules inside style=""
+  s = s.replace(/\sstyle=(["'])\s*\1/gi, '');                                    // a style left empty
+  s = s.replace(/\b0(?:\.0+)?in\b/gi, '0');                                      // "0in" → 0 (Word's unit)
+  const EMPTY_P = '<p\\b[^>]*>(?:\\s|&nbsp;|<br\\s*\\/?>)*<\\/p>';
+  s = s.replace(new RegExp('(?:' + EMPTY_P + '\\s*){2,}', 'gi'), (m) => m.match(new RegExp(EMPTY_P, 'i'))[0]);   // a run of empties → one
+  if (wasWord) {                                                                 // a paragraph with no margin of its own: Gmail and Outlook default it differently
+    s = s.replace(/<p(?![^>]*\bmargin)(\s+style=(["'])([^"']*)\2)([^>]*)>/gi, (m, _a, q, st, rest) => '<p style=' + q + st.replace(/;?\s*$/, ';') + 'margin:0 0 3px 0' + q + rest + '>');
+    s = s.replace(/<p(?![^>]*\bstyle=)([^>]*)>/gi, (m, rest) => '<p style="margin:0 0 3px 0"' + rest + '>');
+  }
+  for (let i = 0; i < 4; i++) {                                                  // none at the start or end of a block
+    s = s.replace(new RegExp('(<(?:div|td)\\b[^>]*>\\s*)' + EMPTY_P, 'gi'), '$1').replace(new RegExp(EMPTY_P + '(\\s*<\\/(?:div|td)>)', 'gi'), '$1');
+  }
+  return s;
+}
+
 function resolveSignatureHtml(savedHtml) {
-  const val = String(savedHtml || '').trim();
+  const val = cleanWordMarkup(String(savedHtml || '').trim());     // R-397: Word's markup is gone at read time too, so a signature saved before this still sends clean
   if (!val) return DEFAULT_SIGNATURE_HTML;
   // A signature built from a mailbox's own "sends as" carries ITS company's address — never add Fute Global's (or rewrite its words).
   if (val.includes(OWN_SIGNATURE_MARK)) return val;
@@ -146,5 +174,6 @@ module.exports = {
   upgradeSignatureTitle,
   ensureSignatureAddress,
   fillSignatureHtml,
-  resolveSignatureHtml
+  resolveSignatureHtml,
+  cleanWordMarkup
 };

@@ -162,7 +162,10 @@
     var eff=w.effective;
     var dayWords=eff.days?eff.days.map(function(d){ return names[d]; }).join(', '):'every day';
     return '<div class="card fd-form"><div class="fs-14 fd-strong">Sending days and hours</div>'+
-      '<div class="fd-hint">Your outreach goes out '+esc(dayWords)+', '+hourLabel(eff.start)+' – '+hourLabel(eff.end)+' in the lead\'s own time. Your organisation allows '+hourLabel(w.org.start)+' – '+hourLabel(w.org.end)+'; you can narrow that, not widen it. The daily number of emails stays with your admin.</div>'+
+      '<div class="fd-hint">Your outreach goes out '+esc(dayWords)+', '+hourLabel(eff.start)+' – '+hourLabel(eff.end)+' in the lead\'s own time. Your organisation allows '+hourLabel(w.org.start)+' – '+hourLabel(w.org.end)+'; you can narrow that, not widen it. '+
+        // R-397 (owner 5 Nov: "there is no time before 8 am or after 4 pm"): the company's hours are the ADMIN's to change — say where, instead of just stopping.
+        (userHasRole(STATE.user,'admin')?'<button type="button" class="btn btn-sm btn-outline" onclick="openEmailEngineModal()">Change the company\'s hours</button> ':'To widen it, ask your admin. ')+
+        'The daily number of emails stays with your admin.</div>'+
       '<div class="fd-row">'+days+'</div>'+
       '<div class="fd-row"><label class="fd-use">From <select id="ms-win-start" class="sel" onchange="mySetupWinHour()">'+opts(w.org.start,w.org.end-1,f.start)+'</select></label>'+
         '<label class="fd-use">until <select id="ms-win-end" class="sel" onchange="mySetupWinHour()">'+opts(w.org.start+1,w.org.end,f.end)+'</select></label>'+

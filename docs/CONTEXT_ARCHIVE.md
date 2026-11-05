@@ -7530,3 +7530,5 @@ While taking the owner's screenshots (Session 62) the Show-everything bar was fo
 R-394 (Session 62, owner's Ash Sayyad screenshot): rejected sign-in as default sender; fixed in the branch with D-0211, guards mutant-proved. Full gate on the final head before merge.
 
 Session 62 (later): R-395 (own sequences only, all enrol doors), R-396 (lead by default + signature preview/edit in the Compose batch), R-394 (rejected sign-in never the default). One full gate on the final head, then merge (owner: "run the full test on all and then merge it").
+
+Session 62 (5 Nov): #402 merged (7dde84b, 361/361 on Node 22 and 26.11.1). R-397 built on a fresh branch: one email layout, Word markup out of signatures, hours card says who can change the hours (D-0213).

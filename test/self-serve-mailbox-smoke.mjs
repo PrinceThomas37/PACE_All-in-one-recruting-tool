@@ -132,6 +132,11 @@ r = await call('PUT', `/users/ra1/emails/${mine.id}/sends-as`, 'ra1', { ...SA, t
 step('the owner can (200); their saved signature is KEPT (it may be hand-edited), the record updates', r.code === 200 && r.out.signature_rebuilt === false && JSON.parse(setting('ue_' + mine.id + '_sends_as')).title === 'Managing Director' && /Vice President/.test(setting('ue_' + mine.id + '_signature_html')));
 r = await call('PUT', `/users/ra1/emails/${mine.id}/sends-as`, 'ra1', { ...SA, title: 'Managing Director', rebuild_signature: true });
 step('"rebuild the signature from this" rewrites it', r.out.signature_rebuilt === true && /Managing Director/.test(setting('ue_' + mine.id + '_signature_html')));
+// R-397 (owner 5 Nov: "even the signature looks off"): a signature PASTED from Word / Outlook is saved without Word's own markup
+const WORD = '<div style="font-family:Arial"><p class="MsoNormal" style="margin-bottom:0in;mso-fareast-font-family:Times"><b>Ra One</b><o:p></o:p></p><!--[if gte mso 9]><xml><o:OfficeDocumentSettings/></xml><![endif]--><p class="MsoNormal"><a href="mailto:ra@x.test">ra@x.test</a><o:p></o:p></p></div>';
+r = await call('PUT', `/users/ra1/emails/${mine.id}/sends-as`, 'ra1', { ...SA, signature_html: WORD });
+const savedWord = setting('ue_' + mine.id + '_signature_html') || '';
+step('a Word-pasted signature is saved WITHOUT Word\'s markup (Mso classes, mso- rules, <o:p>, conditional comments) and keeps its text, bold and link', r.code === 200 && !/Mso|mso-|<o:p|\[if/i.test(savedWord) && /<b>Ra One<\/b>/.test(savedWord) && /href="mailto:ra@x.test"/.test(savedWord), savedWord.slice(0, 200));
 r = await call('PUT', `/users/ra1/emails/${mine.id}/sends-as`, 'ra1', { company: '' });
 step('an incomplete answer is refused in words and changes nothing', r.code === 400 && JSON.parse(setting('ue_' + mine.id + '_sends_as')).company === 'Acme Talent LLC');
 r = await call('PUT', `/users/ra1/emails/mBd/sends-as`, 'ra1', SA);

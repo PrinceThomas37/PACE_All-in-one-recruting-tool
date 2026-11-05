@@ -10,7 +10,7 @@ const mailboxLimit = require('../services/mailbox-limit');            // who may
 const { getSetting } = require('../config/settings');            // a new mailbox starts at the admin's number (D-0123)
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, OWN_SIGNATURE_MARK } = require('../email-signature');
+const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, OWN_SIGNATURE_MARK, cleanWordMarkup } = require('../email-signature');
 const { sanitizeEmailHtml } = require('../services/mail-provider');
 const sigLogo = require('../services/signature-logo');
 const { mailboxConnections } = require('../mailbox-health');
@@ -95,7 +95,7 @@ router.post('/auth/change-password', auth, async (req, res) => {
 // A signature a person wrote or formatted: cleaned the way every email body is (nothing that can run), and — when its mailbox says who it
 // writes for — marked as carrying its OWN address so Fute Global's is never added to it.
 function cleanSignatureForSave(html, hasSendsAs) {
-  let out = sanitizeEmailHtml(String(html == null ? '' : html), { blockRemoteImages: false });
+  let out = cleanWordMarkup(sanitizeEmailHtml(String(html == null ? '' : html), { blockRemoteImages: false }));   // R-397: Word's markup out as well
   if (hasSendsAs && out.trim() && !out.includes(OWN_SIGNATURE_MARK)) out = OWN_SIGNATURE_MARK + out;
   return out;
 }

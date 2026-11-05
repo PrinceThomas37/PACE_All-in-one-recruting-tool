@@ -334,3 +334,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 - **From pickers and the Outreach batch (4 Nov 2026, R-394):** `10b-from-picker.js` and the Compose From box (`og-from`) label a rejected mailbox "sign-in expired, reconnect it" and disable it; the batch (`ogcWriteAll` / `sendRow` in `48-page-outreach-gen.js`) passes `mailbox_id`, and changing the From box clears the written batch (each email names its sender). Guards in `test/from-picker-smoke.mjs`.
 
 - **Compose batch (4 Nov 2026, R-395/R-396):** `48-page-outreach-gen.js` — `noSequenceHtml` (loaded-and-empty list → "Create your first sequence"), `leadChoiceHtml` (the box, `g.createLead!==false`), `signatureBoxHtml` (+ `outreachGenEditSignature` → My Setup's `mySetupEdit`, and `outreachGenSignatureSaved`, called by `69-page-mysetup.js` after a save). Guards in `test/from-picker-smoke.mjs`.
+
+- **My Setup → Sending days and hours (5 Nov 2026, R-397):** the card says a person can only narrow the company's hours; an admin gets "Change the company's hours" (opens `openEmailEngineModal`), everyone else "To widen it, ask your admin". Guard in `test/mysetup-page-smoke.mjs`.
