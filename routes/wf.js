@@ -412,6 +412,12 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // The two admin numbers the Sequences screens need to word themselves truthfully (D-0123): versions per step (in all) and the undo days. A literal path.
+  router.get('/wf/limits', auth, async (req, res) => {
+    try { res.json({ versions_max: await versionsMax(req), undo_days: await undoDays(req) }); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // Stop everyone in a sequence (R-385): nobody gets another step; emails ALREADY QUEUED still go out. Says how many it stopped.
   router.post('/wf/definitions/:id/stop-all', auth, async (req, res) => {
     try {
