@@ -1257,3 +1257,8 @@ body.ai-off [data-ai] { display: none !important; }
 .imp-bar { height: 6px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin-top: 6px; }
 .imp-fill { height: 100%; background: var(--accent); transition: width .4s ease; }
 .imp-row .btn { margin-left: 6px; }
+
+/* The manager's live sending card (RA-lead drill-down, 07-page-email.js): the text and its bar take the card's width; a stalled run turns amber. */
+.sp-live { flex: 1; min-width: 240px; }
+.sp-live-bar { max-width: 520px; margin: 8px 0 4px; }
+.sp-live-stalled .imp-fill { background: var(--amber); }
