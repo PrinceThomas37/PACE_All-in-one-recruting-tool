@@ -11,6 +11,8 @@ const aiProvider = require('../services/ai-provider');
 const sequenceDraft = require('../services/sequence-draft');
 const aiStyle = require('../services/ai-style');
 const sequencePrimary = require('../services/sequence-primary');
+const sequenceControl = require('../services/sequence-control');   // R-384/385/386: stop everyone, delete + restore, in-place wording edits
+const settingsConfig = require('../config/settings');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -29,6 +31,12 @@ module.exports = (ctx) => {
   // one, and edit / switch on or off only the ones they made. Everything else about sequences stays with the roles above.
   const canDesignOwn = (req) => hasRole(req, 'bd', 'recruiter');
   // Managers change any sequence; a recruiter (who may design — canDesign) changes only the ones they made, like a BD (owner, 20 Oct).
+  // The two numbers an admin chooses (D-0123): versions per step (including its own words), and how many days a deleted sequence can come back.
+  const adminInt = async (req, key, fallback, lo, hi) => {
+    try { const v = Number(await settingsConfig.getSetting(supabase, key, req.orgId || undefined)); return Number.isInteger(v) && v >= lo ? Math.min(v, hi) : fallback; } catch (_) { return fallback; }
+  };
+  const versionsMax = (req) => adminInt(req, 'sequence_versions_max', 20, 1, 20);
+  const undoDays = (req) => adminInt(req, 'sequence_undo_days', 14, 1, 90);
   const managesAll = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead');
   const mayChange = async (req, id) => {
     if (managesAll(req)) return true;
@@ -217,9 +225,25 @@ module.exports = (ctx) => {
       // A person starts BLANK (owner, 8 Oct, D-0113): only the sequences THEY made — not the company's standard one, not another
       // person's. A BD lead, RA lead, admin or recruiter-designer still sees all. ONE rule, shared with the Outreach dropdown and
       // the enrol doors (services/sequence-visibility.js, R-395).
-      const list = seqVisibility.visibleSequences(data || [], req.user);
+      const list = seqVisibility.visibleSequences(data || [], req.user).filter(d => d.status !== 'deleted');   // a deleted one is in "Recently deleted"
       list.forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
+      // R-385: how many people are in each one RIGHT NOW (active or paused) — the line "N people in it now" and the Stop all button
+      const counts = await sequenceControl.peopleCounts(supabase, list.map(d => d.id), req.orgId || null);
+      list.forEach(d => { d.people_now = counts[d.id] ? counts[d.id].total : 0; });
       res.json(list);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // YOUR sequences deleted within the undo window, newest first, with how long each can still be brought back (R-384). A literal path.
+  router.get('/wf/definitions/deleted', auth, async (req, res) => {
+    try {
+      const days = await undoDays(req);
+      const { data, error } = await withOrg(supabase.from('workflow_definitions').select('id,name,status,created_by,updated_at').eq('status', 'deleted'), req).order('updated_at', { ascending: false });
+      if (error) throw error;
+      const now = new Date();
+      const out = seqVisibility.visibleSequences(data || [], req.user).map(d => ({ id: d.id, name: d.name, deleted_at: d.updated_at, restorable: sequenceControl.restorable(d, { now, days }) }))
+        .filter(d => d.restorable.ok).map(d => ({ id: d.id, name: d.name, deleted_at: d.deleted_at, restorable_until: d.restorable.until }));
+      res.json({ days, deleted: out });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -285,7 +309,8 @@ module.exports = (ctx) => {
       if (!b.name) return res.status(400).json({ error: 'name required' });
       const steps = normalizeSteps(b.steps);
       // A sequence written in the new builder is checked here, where a hole in an email can still be fixed (R-269).
-      const v2Problem = sequenceV2.problem(steps, b.entity_type || 'contact');
+      const maxV = await versionsMax(req);
+      const v2Problem = sequenceV2.problem(steps, b.entity_type || 'contact', { maxVersions: maxV }) || sequenceV2.versionsProblem(steps, b.entity_type || 'contact', maxV);
       if (v2Problem) return res.status(400).json({ error: v2Problem });
       // C-0022: this used to look up the org by the hard-coded slug 'fute',
       // or trust a body-supplied `org_id` — either way every new sequence
@@ -320,20 +345,44 @@ module.exports = (ctx) => {
       const meta = {};
       ['name', 'description', 'domain', 'trigger_event'].forEach(k => { if (b[k] !== undefined) meta[k] = b[k]; });
       if (Array.isArray(b.steps)) {
-        // Replacing steps under running enrollments would corrupt their state.
-        const { count } = await supabase.from('workflow_enrollments')
-          .select('id', { count: 'exact', head: true }).eq('workflow_id', req.params.id).eq('status', 'active');
-        if (count > 0) return res.status(409).json({ error: `Workflow has ${count} active enrollment(s) — exit or complete them before editing steps.` });
         const steps = normalizeSteps(b.steps);
-        const { data: kind } = await supabase.from('workflow_definitions').select('entity_type').eq('id', req.params.id).maybeSingle();
-        const v2Problem = sequenceV2.problem(steps, (kind && kind.entity_type) || 'contact');
+        const { data: kind } = await supabase.from('workflow_definitions').select('entity_type,status').eq('id', req.params.id).maybeSingle();
+        if (kind && kind.status === 'deleted') return res.status(409).json({ error: 'This sequence is deleted — restore it first.' });
+        const entityType = (kind && kind.entity_type) || 'contact';
+        const maxV = await versionsMax(req);
+        const v2Problem = sequenceV2.problem(steps, entityType, { maxVersions: maxV }) || sequenceV2.versionsProblem(steps, entityType, maxV);
         if (v2Problem) return res.status(400).json({ error: v2Problem });
-        await supabase.from('workflow_steps').delete().eq('workflow_id', req.params.id);
-        const { error: stErr } = await supabase.from('workflow_steps')
-          .insert(steps.map(s => ({ ...s, workflow_id: req.params.id, ...orgStamp(req) })));
-        if (stErr) throw stErr;
-        const { data: cur } = await supabase.from('workflow_definitions').select('version').eq('id', req.params.id).single();
-        meta.version = (cur?.version || 1) + 1;
+        // R-386 (owner 4–5 Nov, D-0217): people inside no longer lock the sequence. The WORDING of any step (subject, body, versions) can
+        // change while they are in it — it is updated IN PLACE, so step numbers and everyone's place stay exactly as they are, and it only
+        // reaches people who have not yet received that step (an email already sent never changes). Adding, removing, reordering or
+        // retiming steps would shift people's places, so with people inside that is refused — it is saved as a new copy instead.
+        const counts = await sequenceControl.peopleCounts(supabase, [req.params.id], req.orgId || null);
+        const inside = counts[req.params.id] ? counts[req.params.id].total : 0;
+        let changedSomething = true;
+        if (inside > 0) {
+          const { data: oldSteps } = await supabase.from('workflow_steps').select('*').eq('workflow_id', req.params.id).order('step_order');
+          const cls = sequenceControl.classifyEdit(oldSteps || [], steps);
+          if (cls.kind === 'structure') {
+            return res.status(409).json({ code: 'needs_copy', people: inside,
+              error: `${inside} ${inside === 1 ? 'person is' : 'people are'} in this sequence, and this change ${cls.why}. That can't be done while they are inside — save it as a new copy, or stop everyone first.` });
+          }
+          changedSomething = cls.kind === 'wording';
+          const sorted = (oldSteps || []).slice().sort((x, y) => x.step_order - y.step_order);
+          for (const n of cls.changed) {
+            const { error: upErr } = await supabase.from('workflow_steps').update({ name: steps[n - 1].name, config: steps[n - 1].config })
+              .eq('workflow_id', req.params.id).eq('step_order', sorted[n - 1].step_order);
+            if (upErr) throw upErr;
+          }
+        } else {
+          await supabase.from('workflow_steps').delete().eq('workflow_id', req.params.id);
+          const { error: stErr } = await supabase.from('workflow_steps')
+            .insert(steps.map(s => ({ ...s, workflow_id: req.params.id, ...orgStamp(req) })));
+          if (stErr) throw stErr;
+        }
+        if (changedSomething) {
+          const { data: cur } = await supabase.from('workflow_definitions').select('version').eq('id', req.params.id).single();
+          meta.version = (cur?.version || 1) + 1;
+        }
       }
       if (Object.keys(meta).length) {
         meta.updated_at = new Date().toISOString();
@@ -350,6 +399,8 @@ module.exports = (ctx) => {
       if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
       const status = req.body?.status;
       if (!['draft', 'active', 'archived'].includes(status)) return res.status(400).json({ error: 'status must be draft | active | archived' });
+      { const { data: cur } = await withOrg(supabase.from('workflow_definitions').select('status').eq('id', req.params.id), req).maybeSingle();
+        if (cur && cur.status === 'deleted') return res.status(409).json({ error: 'This sequence is deleted — restore it first.' }); }
       // The org condition goes ON the update itself — a foreign id matches
       // zero rows rather than needing a separate check-then-mutate.
       const { data, error } = await withOrg(supabase.from('workflow_definitions')
@@ -357,6 +408,48 @@ module.exports = (ctx) => {
         .eq('id', req.params.id).select().maybeSingle();
       if (error) throw error;
       if (!data) return res.status(404).json({ error: 'Workflow not found' });
+      res.json(data);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Stop everyone in a sequence (R-385): nobody gets another step; emails ALREADY QUEUED still go out. Says how many it stopped.
+  router.post('/wf/definitions/:id/stop-all', auth, async (req, res) => {
+    try {
+      if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
+      const { data: owned } = await withOrg(supabase.from('workflow_definitions').select('id,status').eq('id', req.params.id), req).maybeSingle();
+      if (!owned) return res.status(404).json({ error: 'Workflow not found' });
+      const stopped = await sequenceControl.stopEveryone(supabase, { workflowId: req.params.id, orgId: req.orgId || null });
+      res.json({ stopped });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Delete a sequence (R-384, D-0216): everyone in it stops, it leaves the list, and it is KEPT — restorable for the admin's number of days,
+  // and its past numbers stay in Outreach Insights. Emails already sent or queued are untouched.
+  router.post('/wf/definitions/:id/delete', auth, async (req, res) => {
+    try {
+      if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
+      const { data: owned } = await withOrg(supabase.from('workflow_definitions').select('id,status').eq('id', req.params.id), req).maybeSingle();
+      if (!owned) return res.status(404).json({ error: 'Workflow not found' });
+      if (owned.status === 'deleted') return res.status(409).json({ error: 'This sequence is already deleted.' });
+      const stopped = await sequenceControl.stopEveryone(supabase, { workflowId: req.params.id, orgId: req.orgId || null, reason: sequenceControl.DELETE_REASON });
+      const nowIso = new Date().toISOString();
+      const { error } = await withOrg(supabase.from('workflow_definitions').update({ status: 'deleted', updated_at: nowIso }), req).eq('id', req.params.id);
+      if (error) throw error;
+      const days = await undoDays(req);
+      res.json({ deleted: true, stopped, restorable_days: days, restorable_until: new Date(Date.parse(nowIso) + days * 86400000).toISOString() });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Bring a deleted sequence back — switched OFF (archived), so nothing starts by itself; its people were stopped and stay stopped.
+  router.post('/wf/definitions/:id/restore', auth, async (req, res) => {
+    try {
+      if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
+      const { data: def } = await withOrg(supabase.from('workflow_definitions').select('id,status,updated_at').eq('id', req.params.id), req).maybeSingle();
+      if (!def) return res.status(404).json({ error: 'Workflow not found' });
+      const can = sequenceControl.restorable(def, { now: new Date(), days: await undoDays(req) });
+      if (!can.ok) return res.status(409).json({ error: can.why });
+      const { data, error } = await withOrg(supabase.from('workflow_definitions').update({ status: 'archived', updated_at: new Date().toISOString() }), req).eq('id', req.params.id).select().maybeSingle();
+      if (error) throw error;
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

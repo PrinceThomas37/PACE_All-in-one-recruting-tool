@@ -355,6 +355,12 @@ const SETTINGS_SCHEMA = [
     description: 'The highest number anyone may choose. Each person picks how many versions they want for their own emails (1, 2, 3 … up to this). PACE picks one at random for each lead, so leads do not all get the same words. Their own wording is version 1; the rest are written by AI from it.',
     default: 20, min: 1, max: 20,
   },
+  // D-0216 (owner, 5 Nov 2026): a deleted sequence is kept so it can be brought back — for how long is the admin's number, not the code's.
+  {
+    key: 'sequence_undo_days', label: 'Days a deleted sequence can be brought back', unit: 'days', group: 'Sequences',
+    description: 'Deleting a sequence stops everyone in it and hides it, but it is kept (with its past numbers in Outreach Insights). Within this many days its owner can restore it; after that it can no longer be restored. Nothing is ever erased.',
+    default: 14, min: 1, max: 90,
+  },
   {
     key: 'ai_price_in_per_million', label: 'Paid AI price: text sent', unit: 'US$ per million tokens', group: 'AI',
     description: 'For the AI usage table only: what a paid AI model charges for the text PACE sends it. Copy it from the price page of the model you are considering. 0 = not set (the table then shows no cost).',

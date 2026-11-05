@@ -27,7 +27,11 @@ step('candidates fill from the candidate menu — a LEAD detail ({{fn}}) is refu
 step('…and the candidate details pass', V2.problem([cand({ subject: '{{position}}', body: 'Hi {{first_name}}, a {{position}} role with {{client}} in {{location}}. — {{sender}}' })], 'submission') === null);
 step('a lead sequence cannot send through the candidate channel (and the reverse)', /sends with "email"/.test(V2.problem([cand({ subject: 'x', body: BODY })], 'contact') || '') && /sends with "candidate_email"/.test(V2.problem([lead({ subject: 'x', body: 'Hi {{first_name}} long enough' })], 'submission') || ''));
 step('only the first email may be AI-written, and only for candidates', /Only the first email/.test(V2.problem([cand({ subject: 'x', body: 'Hi {{first_name}}, long enough text.' }), cand({ body: 'nudge', ai: true })], 'submission') || '') && /Your outreach/.test(V2.problem([lead({ subject: 'x', body: BODY, ai: true })], 'contact') || ''));
-step('at most two extra versions', /at most 2/.test(V2.problem([lead({ subject: 'x', body: BODY, versions: [{ body: 'a b c d e' }, { body: 'f g h i' }, { body: 'j k l' }] })], 'contact') || ''));
+// D-0216 (owner 5 Nov): the number of versions is the ADMIN'S (`sequence_versions_max`, versions in all INCLUDING the step's own words),
+// passed in by the routes. The old fixed "two extra" survives only as the fallback when no number is passed.
+const THREE = [{ body: 'a b c d e' }, { body: 'f g h i' }, { body: 'j k l' }];
+step('versions: the admin\'s number is the limit (3 in all → a 4th is refused; 5 in all → three extra are fine)', /at most 3 versions/.test(V2.problem([lead({ subject: 'x', body: BODY, versions: THREE })], 'contact', { maxVersions: 3 }) || '') && V2.problem([lead({ subject: 'x', body: BODY, versions: THREE })], 'contact', { maxVersions: 5 }) === null);
+step('versions: with no number passed the old fallback (two extra) still applies', /and 2 more/.test(V2.problem([lead({ subject: 'x', body: BODY, versions: THREE })], 'contact') || ''));
 step('steps from the OLD window are not checked here (they keep working exactly as before)', V2.problem([{ channel: 'email', config: { template_key: 'fu1', thread: true } }, { channel: 'bd_touch', config: {} }], 'contact') === null);
 step('isV2: only a sequence whose every step the new builder wrote opens in it', V2.isV2({ steps: [lead({}), lead({})] }) && !V2.isV2({ steps: [lead({}), { config: { template_key: 'fu1' } }] }) && !V2.isV2({ steps: [] }));
 
