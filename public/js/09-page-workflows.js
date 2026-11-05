@@ -191,7 +191,10 @@ window.wfSaveDefinition=function(){
     } else {
       showToast(b.id?'Sequence updated':(b._copyOf?'Saved as a new sequence (a draft — activate it to use it). The old one carries on unchanged.':'Sequence created (draft — activate it to enroll)'),'success'); loadWorkflows();
     }
-  }).catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
+  }).catch(function(e){
+    if(e&&e.body&&e.body.code==='needs_copy'&&STATE.wfBuilder){ STATE.wfBuilder._needsCopy=true; refreshWfBuilder(); }
+    showToast('Save failed: '+(e&&e.message||e),'error');
+  });
 };
 // ── "Start sequence" on a selection (bulk enroll) ──
 // opts.anyStage = enrol leads regardless of their pipeline stage (used when the
@@ -593,13 +596,12 @@ function refreshWfBuilder(){
 
   // One follow-up doubles reply rates in practice, so a one-step sequence gets
   // a nudge rather than being silently accepted as finished.
-  // People mid-sequence lock the STEPS (the server refuses — their place in it would break). Say so
-  // BEFORE anything is written, with the number, and offer the way through: a new sequence from this
-  // text; the old one is untouched and carries on for the people already in it.
-  var lockedN=b.id?(((((STATE.wf||{}).stats||{}).by_workflow||{})[b.id]||{}).active||0):0;
-  var lockBanner=lockedN>0
-    ?'<div class="wf-lock"><b>'+lockedN+' '+(lockedN===1?'person is':'people are')+' in this sequence right now,</b> so its steps cannot be changed here. '+
-      'Either stop them first (Enrollments, below the list), or press <b>Save as a new sequence</b> — your writing is kept, and this one carries on unchanged for the people already in it.</div>'
+  // People inside a running sequence (D-0217): the WORDING of any step can change; adding/removing a step or changing
+  // the days makes a copy (the server says so with a 409 needs_copy). Say what is allowed BEFORE anything is written.
+  var insideN=b.id?(((STATE.wf||{}).defs||[]).find(function(x){return x.id===b.id;})||{}).people_now||0:0;
+  var lockBanner=insideN>0
+    ?'<div class="wf-lock" data-wf-inside><b>'+insideN+' '+(insideN===1?'person is':'people are')+' in this sequence right now.</b> You can change the wording of any step. '+
+      'Adding or removing a step, or changing the days between them, saves as a new copy; this one carries on for the people inside.</div>'
     :'';
   var hint = b.steps.length < 2
     ? '<div class="seq-hint">'+UI.ic('bolt')+'<span>It is usually the follow-up that gets the reply. Consider adding one more step.</span></div>'
@@ -620,10 +622,8 @@ function refreshWfBuilder(){
       hint+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button>'+
-      (lockedN>0
-        // A new sequence is made in the new builder only (D-0158) — not as a copy saved from this old window.
-        ?'<button class="btn btn-outline" disabled title="Not while people are mid-sequence">Save</button><button class="btn btn-primary wf-save-new" onclick="STATE.wfBuilder=null;wfOpenBuilder(null,\''+(b.entity_type||'contact')+'\')">Make a new sequence instead</button>'
-        :'<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>')+
+      (b._needsCopy?'<button class="btn btn-outline" data-wf-savecopy onclick="wfSaveAsNew()">Save as a new copy</button>':'')+
+      '<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>'+
     '</div>'+
   '</div>';
   render();

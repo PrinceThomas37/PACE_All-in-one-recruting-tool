@@ -150,14 +150,15 @@ try {
   //    BEFORE anything is written, with the number, and offers "Save as a new sequence" (owner, 6 Oct: they
   //    wrote a whole email and was only told on Save).
   await page.evaluate(() => {
-    STATE.wf = { stats: { by_workflow: { 'wf-live': { active: 3 }, 'wf-idle': { active: 0 } } }, defs: [
-      { id: 'wf-live', name: 'Client intro', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] },
-      { id: 'wf-idle', name: 'Idle one', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] }] };
+    STATE.wf = { stats: { by_workflow: {} }, defs: [
+      { id: 'wf-live', people_now: 3, name: 'Client intro', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] },
+      { id: 'wf-idle', people_now: 0, name: 'Idle one', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] }] };
     __posts.length = 0; __toasts.length = 0; wfOpenBuilder('wf-live');
   });
   await page.waitForSelector('.seq-modal');
-  step('a sequence with 3 people in it says so AT THE TOP, with the number', await page.evaluate(() => { const b = document.querySelector('.wf-lock'); return !!b && /3 people are in this sequence/.test(b.innerText) && b.compareDocumentPosition(document.querySelector('.seq')) & Node.DOCUMENT_POSITION_FOLLOWING; }));
-  step('…Save is switched off and "Save as a new sequence" is the button offered', await page.evaluate(() => { const f = document.querySelector('.seq-modal .mf'); const save = [...f.querySelectorAll('button')].find(x => x.textContent.trim() === 'Save'); return !!save && save.disabled && !!f.querySelector('.wf-save-new'); }));
+  step('a sequence with 3 people in it says so AT THE TOP, with the number, and says wording may change', await page.evaluate(() => { const b = document.querySelector('.wf-lock'); return !!b && /3 people are in this sequence/.test(b.innerText) && /change the wording/.test(b.innerText) && b.compareDocumentPosition(document.querySelector('.seq')) & Node.DOCUMENT_POSITION_FOLLOWING; }));
+  step('…Save stays ON (wording may change while people are inside) and no copy button yet', await page.evaluate(() => { const f = document.querySelector('.seq-modal .mf'); const save = [...f.querySelectorAll('button')].find(x => x.textContent.trim() === 'Save'); return !!save && !save.disabled && !f.querySelector('[data-wf-savecopy]'); }));
+  step('…and when the server answers needs_copy, "Save as a new copy" appears', await page.evaluate(() => { STATE.wfBuilder._needsCopy = true; refreshWfBuilder(); return !!document.querySelector('.seq-modal [data-wf-savecopy]'); }));
   await page.evaluate(() => { wfEmailMode(0, true); wfOwnText(0, 'subject', 'New words for {{pos}}'); wfOwnText(0, 'body', 'Hi {{fn}}, this is what I wrote while people were still in the old one.'); __posts.length = 0; wfSaveAsNew(); });
   await page.waitForTimeout(200);
   const asNew = await page.evaluate(() => ({ posts: __posts.map(p => p[0]), body: (__posts.find(p => p[0] === '/wf/definitions') || [null, {}])[1], toasts: __toasts.map(t => t[0]).join('|') }));
@@ -166,7 +167,7 @@ try {
   step('…and the toast says the old one carries on unchanged', /old one carries on/.test(asNew.toasts), asNew.toasts);
   await page.evaluate(() => { __posts.length = 0; wfOpenBuilder('wf-idle'); });
   await page.waitForSelector('.seq-modal');
-  step('a sequence with nobody in it has no warning and a normal Save', await page.evaluate(() => !document.querySelector('.wf-lock') && !document.querySelector('.wf-save-new') && [...document.querySelectorAll('.seq-modal .mf button')].some(x => x.textContent.trim() === 'Save' && !x.disabled)));
+  step('a sequence with nobody in it has no warning and a normal Save', await page.evaluate(() => !document.querySelector('.wf-lock') && !document.querySelector('[data-wf-savecopy]') && [...document.querySelectorAll('.seq-modal .mf button')].some(x => x.textContent.trim() === 'Save' && !x.disabled)));
   // last, because it closes the window: Edit my wording opens that wording, with its live preview (R-146)
   // Since D-0161 / R-286 the person's own wording is edited in the sequence builder (the old Email → My wording tab is gone).
   step('"Edit my wording" closes the window and opens the person\'s wording in the sequence builder (R-146 → R-286)', await page.evaluate(() => {
