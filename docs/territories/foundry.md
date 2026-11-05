@@ -1407,3 +1407,5 @@ Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repai
 - **New guard (5 Nov 2026):** `test/sequence-control-smoke.mjs` runs the real wf router against an in-memory database: people_now, Stop all (queued email untouched), Delete / Recently deleted / Restore and the admin's undo days, in-place wording edits with people inside, structure refused, versions limit from the admin setting; 5 mutants proved. `test/sequence-v2-smoke.mjs` updated (the fixed "two extra versions" is now the admin's number).
 
 - **5 Nov 2026:** new `test/warmup-ramp-smoke.mjs` (calls the real `services/warmup-ramp.js`; removing the status gate fails 3 checks) and `test/ra-lead-sending-bar-ui-smoke.mjs` (real browser, mocked API; removing the bar fails the bar checks). A fresh sandbox needs `npm install` before any suite — four suites "failed" with MODULE_NOT_FOUND until it ran.
+
+- **5 Nov 2026:** `test/login-load-fail-smoke.mjs` now has two cases for the lead-loading note: an ordinary login never shows it (MutationObserver flag), a slow one shows it after the wait; the instant-note mutant fails 2 checks.

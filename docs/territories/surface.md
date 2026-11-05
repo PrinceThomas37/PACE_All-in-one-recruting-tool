@@ -344,3 +344,5 @@ No `#sidebar:hover` expansion anywhere; only the button (`.rail-toggle .rail-arr
 - 5 Nov (Session 62, in branch, unmerged): sequence builder shows how many people are inside + "Save as a new copy" on needs_copy; versions read with ‹ › arrows (`73-sequence-setup.js`); Outreach Insights "Showing" switch + Switch off (`16-insights.js`). Gateway: `outreachScope` + `POST /insights/outreach/sequence/:id/switch-off` in `routes/workflows.js`.
 
 - **5 Nov 2026 (R-401):** RA-lead drill-down into a BD manager's Pending window gets a progress bar (`07-page-email.js`, classes `sp-live*` at the end of `ui.css`, reusing `.imp-bar/.imp-fill`). Width is the only inline value.
+
+- **5 Nov 2026 (R-402):** the lead-loading note (`#leads-loading-note`, `22-api.js`) is no longer instant: the plain "Loading your leads…" waits `LEADS_NOTE_DELAY_MS` (4 s) and shows only if the list is still loading for the same person; the retry/failure texts are immediate. Reason it was NOT removed: an empty list must never read as "no leads" (R-348). `leadsNote()` cancels a waiting note; `leadsNoteSoon()` does not restart its clock.
