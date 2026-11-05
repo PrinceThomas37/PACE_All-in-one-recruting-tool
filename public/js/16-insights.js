@@ -431,15 +431,33 @@ function renderTeamInsightsBody(){
 // Five numbers once, one line chart (emailed / opened / replied, by day or week), one row per sequence. The server counts
 // (GET /insights/outreach → services/outreach-insights.js); this page only draws.
 // ════════════════════════════════════════════════════════════════
-function oiState(){ return STATE.oi||(STATE.oi={ from:'', to:'', bucket:'day', seq:'all', data:null, loading:false, err:'' }); }
+function oiState(){ return STATE.oi||(STATE.oi={ from:'', to:'', bucket:'day', seq:'all', who:'me', data:null, loading:false, err:'' }); }
 function loadOutreachInsights(){
   var o=oiState(); o.loading=true; o.err='';
   var tz=(insightsTzQ()||'').replace(/^\?/,'');
-  var q=['bucket='+encodeURIComponent(o.bucket),'seq='+encodeURIComponent(o.seq)];
+  var q=['bucket='+encodeURIComponent(o.bucket),'seq='+encodeURIComponent(o.seq),'who='+encodeURIComponent(o.who||'me')];
   if(o.from) q.push('from='+o.from); if(o.to) q.push('to='+o.to); if(tz) q.push(tz);
   apiGet('/insights/outreach?'+q.join('&')).then(function(d){ o.data=d; o.zoom=null; o.loading=false; if(!o.from){ o.from=d.from; o.to=d.to; } if(STATE.page==='bdinsights') render(); })
     .catch(function(e){ o.loading=false; o.err=(e&&e.message)||'Could not load'; if(STATE.page==='bdinsights') render(); });
 }
+// R-398: Me / My team / one person on the reporting line. The sequences differ per person, so the sequence filter starts again.
+window.oiWho=function(v){ var o=oiState(); o.who=v; o.seq='all'; o.drill=null; loadOutreachInsights(); render(); };
+// A manager switches off a team member's sequence FROM HERE: no new people AND everyone inside stops (queued emails still go out).
+window.oiOffAsk=function(id){
+  var r=(((oiState().data||{}).sequences)||[]).find(function(x){ return x.id===id; }); if(!r||typeof wfAsk!=='function') return;
+  var n=r.people_now||0;
+  wfAsk('Switch off “'+htmlEsc(r.name)+'”?',
+    (r.owner_name?'This is '+htmlEsc(r.owner_name)+'\'s sequence. ':'')+
+    (n?'<b>'+n+' '+(n===1?'person is':'people are')+' in it now.</b> They will stop, and nobody new will be started. ':'Nobody is in it now. Nobody new will be started. ')+
+    'Emails already waiting to go out still go. Nothing is erased, and '+(r.owner_name?htmlEsc(r.owner_name)+' can':'it can')+' turn it on again.',
+    'Switch it off','oiOffDo(\''+id+'\')');
+};
+window.oiOffDo=function(id){
+  closeModal();
+  apiPost('/insights/outreach/sequence/'+id+'/switch-off',{}).then(function(r){
+    showToast('“'+((r&&r.name)||'Sequence')+'” is off'+(r&&r.stopped?' — '+r.stopped+' '+(r.stopped===1?'person':'people')+' stopped':''),'success'); loadOutreachInsights();
+  }).catch(function(e){ showToast('Could not switch it off: '+((e&&e.message)||e),'error'); });
+};
 window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); if(o.drill) oiLoadDrill(); render(); };
 // R-316 (owner 26 Oct: "click Bounced / Replied / Interested / Opened → the email IDs and leads behind it … download to Excel … by
 // industry and time zone"). A tile opens the people behind its number, counted by the server with the SAME rules as the tile
@@ -447,7 +465,7 @@ window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); if(
 var OI_KINDS={emailed:'People emailed',opened:'Opened',replied:'Replied',interested:'Interested',bounced:'Bounced'};
 function oiQuery(extra){
   var o=oiState(), tz=(insightsTzQ()||'').replace(/^\?/,'');
-  var q=['seq='+encodeURIComponent(o.seq)];
+  var q=['seq='+encodeURIComponent(o.seq),'who='+encodeURIComponent(o.who||'me')];
   if(o.from) q.push('from='+o.from); if(o.to) q.push('to='+o.to); if(tz) q.push(tz);
   return q.concat(extra||[]).join('&');
 }
@@ -625,7 +643,11 @@ function renderOutreachInsights(toggle){
   if(!o.data&&!o.loading&&!o.err) loadOutreachInsights();
   var d=o.data, t=(d&&d.totals)||{};
   var choices=(d&&d.choices)||[{id:'all',name:'All sequences'}];
-  var controls='<div class="oi-controls">'+
+  var sc=(d&&d.scope)||{people:[]};
+  var whoSel=sc.people.length?'<label class="oi-f"><span>Showing</span><select class="sel" data-oi-who onchange="oiWho(this.value)">'+
+    '<option value="me"'+(o.who==='me'?' selected':'')+'>Me</option><option value="team"'+(o.who==='team'?' selected':'')+'>My team</option>'+
+    '<optgroup label="One person">'+sc.people.map(function(p){ return '<option value="'+escAttr(p.id)+'"'+(o.who===p.id?' selected':'')+'>'+htmlEsc(p.name)+'</option>'; }).join('')+'</optgroup></select></label>':'';
+  var controls='<div class="oi-controls">'+whoSel+
     '<label class="oi-f"><span>Sequence</span><select class="sel" onchange="oiSet(\'seq\',this.value)">'+choices.map(function(c){ return '<option value="'+escAttr(c.id)+'"'+(o.seq===c.id?' selected':'')+'>'+htmlEsc(c.name)+'</option>'; }).join('')+'</select></label>'+
     '<label class="oi-f"><span>From</span><input type="date" class="inp" value="'+escAttr(o.from)+'" onchange="oiSet(\'from\',this.value)"></label>'+
     '<label class="oi-f"><span>To</span><input type="date" class="inp" value="'+escAttr(o.to)+'" onchange="oiSet(\'to\',this.value)"></label></div>';
@@ -645,7 +667,9 @@ function renderOutreachInsights(toggle){
   var chart='<div class="card oi-card"><div class="oi-chart-head">'+legend+buckets+'</div>'+
     (d?(d.series&&d.series.length?'<div class="oi-chart-wrap" data-oi-chart>'+oiChartBlock(d,o)+'</div>':'<div class="fs-13 c-text3">Nothing was sent in these dates.</div>'):'<div class="fs-13 c-text3">Loading…</div>')+'</div>';
   var rows=((d&&d.sequences)||[]).map(function(r){
-    return '<tr><td class="fw6">'+htmlEsc(r.name)+(r.candidates?' <span class="c-text3">(candidates)</span>':'')+'</td><td>'+oiNum(r.people)+'</td><td>'+oiNum(r.emailed)+'</td><td>'+oiNum(r.opened_rate,'%')+'</td><td>'+oiNum(r.replied_rate,'%')+'</td><td>'+oiNum(r.interested)+'</td><td>'+oiNum(r.bounced_rate,'%')+'</td></tr>';
+    var team=!!(d&&d.scope&&d.scope.who!=='me');
+    var off=r.can_switch_off?' <button type="button" class="btn btn-sm btn-outline" data-oi-off="'+escAttr(r.id)+'" onclick="oiOffAsk(\''+escAttr(r.id)+'\')">Switch off</button>':(r.status==='archived'?' <span class="c-text3">(off)</span>':(r.status==='deleted'?' <span class="c-text3">(deleted)</span>':''));
+    return '<tr><td class="fw6">'+htmlEsc(r.name)+(r.candidates?' <span class="c-text3">(candidates)</span>':'')+(team&&r.owner_name?' <span class="c-text3">· '+htmlEsc(r.owner_name)+'</span>':'')+off+'</td><td>'+oiNum(r.people)+'</td><td>'+oiNum(r.emailed)+'</td><td>'+oiNum(r.opened_rate,'%')+'</td><td>'+oiNum(r.replied_rate,'%')+'</td><td>'+oiNum(r.interested)+'</td><td>'+oiNum(r.bounced_rate,'%')+'</td></tr>';
   }).join('');
   var table='<div class="card oi-card" data-oi-table><div class="td-h">BY SEQUENCE</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>Sequence</th><th>People</th><th>Emailed</th><th>Opened</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
     :'<div class="fs-13 c-text3">'+(d?'No sequence sent anything in these dates.':'Loading…')+'</div>')+'</div>';

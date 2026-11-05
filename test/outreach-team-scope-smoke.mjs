@@ -77,6 +77,7 @@ r = await get(mgr, 'team');
 const row = r.body.sequences.find((s) => s.id === 'sR1');
 step('the by-sequence table names the owner and allows switching off a line member\'s active sequence', !!row && row.owner_name === 'Rita Report' && row.can_switch_off === true, JSON.stringify(row));
 
+step('…and it names how many are inside right now (2), so the confirmation can say so', row.people_now === 2, JSON.stringify(row && row.people_now));
 // ── switch off ──
 const off = (u, id) => call('post', '/insights/outreach/sequence/:id/switch-off', as(u.id, u.roles, {}, { id }));
 r = await off({ id: 'X', roles: ['bd'] }, 'sR1');

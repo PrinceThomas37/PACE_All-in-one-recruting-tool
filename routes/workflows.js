@@ -292,6 +292,10 @@ router.get('/insights/outreach', auth, async (req, res) => {
     const line = new Set(L.scope.line);
     out.sequences = (out.sequences || []).map((r) => { const d = defOf[r.id];
       return Object.assign(r, d ? { owner_id: d.created_by, owner_name: L.scope.nameOf[d.created_by] || '', status: d.status, can_switch_off: d.status === 'active' && line.has(d.created_by) } : {}); });
+    // the switch-off confirmation names how many people are inside right now (one read for the rows that can be switched off)
+    const offIds = out.sequences.filter((r) => r.can_switch_off).map((r) => r.id);
+    const inside = offIds.length ? await sequenceControl.peopleCounts(supabase, offIds, req.orgId || null) : {};
+    out.sequences.forEach((r) => { if (r.can_switch_off) r.people_now = (inside[r.id] || {}).total || 0; });
     out.scope = { who: L.scope.who, me: L.me, people: L.scope.people };
     out.tz = L.tz;
     res.json(out);
