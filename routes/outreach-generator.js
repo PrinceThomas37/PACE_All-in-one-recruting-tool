@@ -27,6 +27,7 @@
 
 const express = require('express');
 const aiProvider = require('../services/ai-provider');
+const seqVisibility = require('../services/sequence-visibility');   // R-395: who may see and use a sequence
 const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml, sendsAsKey, cleanSendsAs } = require('../email-signature');
@@ -153,7 +154,7 @@ module.exports = (ctx) => {
       res.json({
         // Every mailbox this person may send from — the "From" picker.
         mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
-          platform: m.platform || 'Microsoft', is_primary: !!m.is_primary })),
+          platform: m.platform || 'Microsoft', is_primary: !!m.is_primary, needs_reconnect: !!m.needs_reconnect })),
         company_name: companyName,
         // Whether an AI writer is configured is the provider's question now, not
         // this file's. Two branches merged cleanly into a break here: #159
@@ -590,7 +591,8 @@ module.exports = (ctx) => {
       companyId = (found && found[0] && found[0].id) || null;
       if (!companyId) {
         const { data: made, error: cErr } = await supabase.from('companies').insert(Object.assign({
-          name: companyName, location: String(b.location || '') || null, created_by: req.user.id
+          name: companyName, location: String(b.location || '') || null, created_by: req.user.id,
+          website: String(b.website || '').trim().slice(0, 300) || null      // R-396: the company's site travels with the lead
         }, org)).select('id').single();
         if (cErr) throw cErr;
         companyId = made.id;
@@ -692,6 +694,13 @@ module.exports = (ctx) => {
       if (!subject) return res.status(400).json({ error: 'Subject is required.' });
       if (!bodyText.trim()) return res.status(400).json({ error: 'The email body is empty.' });
 
+      // R-395: refuse a sequence you may not use BEFORE anything is sent — it would enrol a lead in someone else's wording.
+      const wantSeq = String(b.sequence_id || '').trim();
+      if (wantSeq) {
+        const { data: sdef } = await withOrg(supabase.from('workflow_definitions').select('id,created_by'), req).eq('id', wantSeq).maybeSingle();
+        if (!sdef || !seqVisibility.mayUseSequence(sdef, req.user)) return res.status(404).json({ error: 'That sequence is not one you can use.' });
+      }
+
       const mailbox = await sendingMailboxFor(req, b.mailbox_id);
       if (!mailbox) return String(b.mailbox_id || '').trim()
         ? res.status(404).json({ error: 'That mailbox is not one you can send from.' })
@@ -731,18 +740,32 @@ module.exports = (ctx) => {
       // The enrollment starts AFTER step 1. This email is step 1; a sequence
       // whose first step is `email(+0 days)` would otherwise be due today and
       // send the same person a second email on the next tick.
-      let sequence = null;
+      //
+      // R-396 (owner 4 Nov: "take the information from these emails and create the lead for that user by default, with a check box the
+      // user can switch off"): the page sends `create_lead:true` while its box is ticked, and the lead is made WITHOUT a sequence
+      // too — company (name, website, location), the person (name, title, email) and the job (title, with the posting in its
+      // notes), owned by the sender. Choosing a sequence still always makes the lead. A lead that cannot be made never fails
+      // the send: the email has gone, and the answer says what did not happen.
+      let sequence = null, lead = null, made = null;
       const sequenceId = String(b.sequence_id || '').trim();
-      if (sequenceId) {
+      const wantLead = b.create_lead === true;
+      if (sequenceId || wantLead) {
         try {
-          const made = await createLeadFromOutreach(req, {
-            email: to, company: b.company, location: b.location,
+          const posting = String(b.job_description || '').trim();
+          made = await createLeadFromOutreach(req, {
+            email: to, company: b.company, website: b.website, location: b.location,
             position: b.position || b.job_title || subject, name: b.name, title: b.title,
-            notes: 'Created from the outreach generator when the first email was sent.',
+            notes: 'Created from the outreach generator when the first email was sent.' + (posting ? '\n\nJob posting:\n' + posting.slice(0, 6000) : ''),
             emailed: true,
           }, 'Assigned');
           if (made.error) throw new Error(made.error);
           await supabase.from('email_tracking').update({ lead_id: made.job_id }).eq('token', token);
+          lead = { job_id: made.job_id, contact_id: made.contact_id, existing: !!made.existing };
+        } catch (leadErr) { lead = { error: leadErr.message }; made = null; }
+      }
+      if (sequenceId) {
+        try {
+          if (!made) throw new Error((lead && lead.error) || 'the lead could not be created');
 
           // AN ADDRESS ALREADY ON A COLLEAGUE'S LEAD STAYS THEIRS (D-0020).
           // The pickers no longer offer a colleague's contacts (D-0034), but a
@@ -779,7 +802,7 @@ module.exports = (ctx) => {
         }
       }
 
-      res.json({ sent: true, mailbox: mailbox.email_address, sequence });
+      res.json({ sent: true, mailbox: mailbox.email_address, sequence, lead });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -789,9 +812,11 @@ module.exports = (ctx) => {
   router.get('/outreach/sequences', auth, async (req, res) => {
     try {
       const { data } = await withOrg(supabase.from('workflow_definitions')
-        .select('id,name,domain,entity_type,status,workflow_steps(step_order,name,channel,delay_days)')
+        .select('id,name,domain,entity_type,status,created_by,workflow_steps(step_order,name,channel,delay_days)')
         .eq('status', 'active').eq('entity_type', 'contact'), req);
-      const rows = (data || []).map(d => {
+      // R-395 (owner 4 Nov: a BD with no sequence of his own was offered BD Lead 1's and the built-in one): you are offered the
+      // sequences YOU may use — your own; a lead / admin sees all, as on the Sequences page. services/sequence-visibility.js.
+      const rows = seqVisibility.visibleSequences(data || [], req.user).map(d => {
         const steps = (d.workflow_steps || []).slice().sort((a, b) => a.step_order - b.step_order);
         const next = steps[1] || null;   // step 1 is the email we just sent
         return {

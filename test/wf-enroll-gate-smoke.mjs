@@ -40,7 +40,9 @@ const CONTACTS = [
   { id: 'C_FOREIGN', org_id: FOREIGN, job_id: null },
 ];
 const WORKFLOW_DEFINITIONS = [
-  { id: 'WF1', org_id: ORG, entity_type: 'contact', status: 'active' },
+  // R-395: a plain BD may enrol only into a sequence THEY made (services/sequence-visibility.js); managers reach any. This suite is about
+  // WHICH LEAD may be enrolled, so the sequence is the BD's own and the target gate is what is being measured.
+  { id: 'WF1', org_id: ORG, entity_type: 'contact', status: 'active', created_by: 'BD' },
   { id: 'WF_FOREIGN', org_id: FOREIGN, entity_type: 'contact', status: 'active' },
 ];
 const SUBMISSIONS = [

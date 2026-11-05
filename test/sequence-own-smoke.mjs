@@ -84,5 +84,21 @@ step('…nor a lead\'s', r.code === 403 && T.workflow_definitions.find(d => d.id
 r = await call('/wf/definitions/:id/status', 'post', 'bd1', { status: 'archived' }, { id: recId });
 step('…and a BD cannot touch the recruiter\'s', r.code === 403 && T.workflow_definitions.find(d => d.id === recId).status === 'active');
 
+// ── R-395 (owner 4 Nov): the ENROL DOORS follow the same rule — a BD cannot enrol people into a sequence they may not use ──
+const notThere = (x) => x.code === 404 && /Workflow not found/.test((x.out && x.out.error) || '');
+for (const door of ['/wf/enroll', '/wf/enroll-bulk']) {
+  const body = (wf) => door === '/wf/enroll' ? { workflow_id: wf, entity_id: 'c1', contact_id: 'c1' } : { workflow_id: wf, entity_ids: ['c1'] };
+  r = await call(door, 'post', 'bd1', body('theirs'));
+  step(door + ': a BD cannot enrol into ANOTHER BD\'s sequence (answers "not found")', notThere(r), JSON.stringify(r));
+  r = await call(door, 'post', 'bd1', body('std'));
+  step(door + ': …nor the company\'s built-in one', notThere(r));
+  r = await call(door, 'post', 'bd1', body('lead1'));
+  step(door + ': …nor their manager\'s', notThere(r));
+  r = await call(door, 'post', 'bd1', body('mine'));
+  step(door + ': …but their OWN passes the sequence check (any later answer is about the lead, not the sequence)', !notThere(r), JSON.stringify(r));
+  r = await call(door, 'post', 'boss', body('theirs'));
+  step(door + ': a BD lead still reaches any sequence, as before', !notThere(r), JSON.stringify(r));
+}
+
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);
 process.exit(results.every(Boolean) ? 0 : 1);

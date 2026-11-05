@@ -27,8 +27,9 @@
     if (!S.list.length) return '<span class="from-note from-none">No mailbox connected — connect one under Email before sending.</span>';
     if (S.list.length === 1) return '<span class="from-one">From <b>'+esc(S.list[0].email)+'</b></span>';
     var opts = S.list.map(function(m){
-      var label = (m.display_name ? m.display_name + ' <' + m.email + '>' : m.email) + (m.platform ? ' · ' + m.platform : '');
-      return '<option value="'+esc(m.id)+'"'+(m.id === S.default_id ? ' selected' : '')+'>'+esc(label)+'</option>';
+      var label = (m.display_name ? m.display_name + ' <' + m.email + '>' : m.email) + (m.platform ? ' · ' + m.platform : '') + (m.needs_reconnect ? ' — sign-in expired, reconnect it' : '');
+      // R-394: a rejected sign-in is shown but cannot be picked (unless it is the one selected — the only choice there is)
+      return '<option value="'+esc(m.id)+'"'+(m.id === S.default_id ? ' selected' : (m.needs_reconnect ? ' disabled' : ''))+'>'+esc(label)+'</option>';
     }).join('');
     return '<label class="from-lbl" for="'+esc(slotId)+'-sel">From</label>'+
       '<select id="'+esc(slotId)+'-sel" class="sel from-sel" aria-label="Send from which mailbox">'+opts+'</select>';

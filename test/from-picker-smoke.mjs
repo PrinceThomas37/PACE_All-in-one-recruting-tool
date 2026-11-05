@@ -44,6 +44,7 @@ function findChromium(){
 }
 const TWO = { mailboxes:[{ id:'mb1', email:'me@ours.com', display_name:'Me One', platform:'Microsoft', is_primary:true }, { id:'mb2', email:'me@gmail.test', display_name:'Me Two', platform:'Gmail', is_primary:false }], default_id:'mb1' };
 let mailboxAnswer = TWO;
+let badSenderId = null;      // R-394: which mailbox the server says has an expired sign-in
 const calls=[];
 function reply(route, body, status=200){ return route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) }); }
 async function api(route){
@@ -52,8 +53,10 @@ async function api(route){
   calls.push({ m, p, q:u.search, body });
   if (m==='GET' && p==='/me/sending-mailboxes') return reply(route, mailboxAnswer);
   if (m==='GET' && p==='/clients') return reply(route, [{ id:'co1', name:'Griffith Energy', industry:'Construction', job_order_count:1, open_job_order_count:1, can_edit:true }]);
-  if (m==='GET' && p==='/outreach/sender') return reply(route, { mailboxes:TWO.mailboxes, company_name:'Acme Staffing', ai:false,
-    mailbox: u.searchParams.get('mailbox_id')==='mb2' ? TWO.mailboxes[1] : TWO.mailboxes[0], sender:{ name:u.searchParams.get('mailbox_id')==='mb2'?'Me Two':'Me One' }, signature_html:'' });
+  if (m==='GET' && p==='/outreach/sender') return reply(route, { mailboxes:TWO.mailboxes.map(x=>Object.assign({}, x, { needs_reconnect: x.id===badSenderId })), company_name:'Acme Staffing', ai:false,
+    mailbox: u.searchParams.get('mailbox_id')==='mb2' ? TWO.mailboxes[1] : TWO.mailboxes[0], sender:{ name:u.searchParams.get('mailbox_id')==='mb2'?'Me Two':'Me One' },
+    signature_html: u.searchParams.get('mailbox_id')==='mb2' ? '' : '<p>Warm regards,<br>Me One</p>' });
+  if (m==='GET' && /^\/users\/[^/]+\/emails$/.test(p)) return reply(route, [{ id:'mb1', email_address:'me@ours.com', display_name:'Me One', platform:'Microsoft', is_active:true, connection:{ connected:true }, has_own_signature:true, sends_as:{ company:'Acme', title:'BD', address:'1 Main Street 12345', phone:'', website:'' } }]);
   if (m==='POST' && p==='/submissions/s1/interview-invite') return reply(route, { sent:1 });
   if (m==='PATCH' && /\/stage$/.test(p)) return reply(route, { id:'s1', stage:'Interview Scheduled' });
   // R-388: the email window asks the server for THIS client's contacts (it no longer reads the open record's list)
@@ -155,6 +158,67 @@ try{
   const og1 = await ev(()=>({ draft:!!STATE.outreachGen.draft, err:STATE.outreachGen.error, mb:STATE.outreachGen.form.mailbox_id, name:(STATE.outreachGen.sender&&STATE.outreachGen.sender.sender&&STATE.outreachGen.sender.sender.name)||'' }));
   step('Generator: changing who it sends as clears the draft (its wording names the sender) and says why', !og1.draft && /cleared/.test(og1.err||'') && og1.mb==='mb2', JSON.stringify(og1));
   step('Generator: the sender identity is re-read for THAT mailbox', !!calls.find(c=>c.m==='GET'&&c.p==='/outreach/sender'&&/mailbox_id=mb2/.test(c.q)) && og1.name==='Me Two');
+  // ── R-394: the BATCH ("N emails / Send all") used to name no mailbox, so the server chose — and chose one Google had rejected ──
+  await ev(()=>{ window.__batch = () => { const g=STATE.outreachGen; g.batch=[{ person:{ email:'kev@x.test', first_name:'Kev', title:'TA' }, status:'ready', subject:'Hi Kev', email:'Hello', error:null }]; render(); }; });
+  await ev(()=>{ STATE.outreachGen.form.mailbox_id='mb2'; window.__batch(); });
+  const nb0 = calls.length; await ev(()=>ogcSend(0)); await page.waitForTimeout(500);
+  const bsend = calls.slice(nb0).find(c=>c.m==='POST'&&c.p==='/outreach/send');
+  step('Batch: Send names the mailbox chosen in the From box (it used to name none)', !!bsend && bsend.body.mailbox_id==='mb2', JSON.stringify(bsend&&bsend.body));
+  await ev(()=>{ window.__batch(); });
+  await page.selectOption('#og-from','mb1'); await page.waitForTimeout(500);
+  const bclr = await ev(()=>({ batch:STATE.outreachGen.batch, err:STATE.outreachGen.error }));
+  step('Batch: changing who it sends as clears the written emails (each names its sender) and says why', bclr.batch===null && /cleared/.test(bclr.err||''), JSON.stringify(bclr));
+  // an expired sign-in is shown, marked, and cannot be picked
+  badSenderId = 'mb2';
+  await ev(()=>{ STATE.outreachGen=null; STATE.composeSide='clients'; STATE.emailTab='compose'; STATE.page='email'; render(); });
+  await page.waitForSelector('#og-from',{timeout:6000}).catch(()=>{});
+  const exp = await ev(()=>[...document.querySelectorAll('#og-from option')].map(o=>({ v:o.value, t:o.textContent, d:o.disabled, s:o.selected })));
+  step('Expired mailbox: shown with "sign-in expired", disabled, and the default is the working one', exp.length===2 && exp.find(o=>o.v==='mb2').d===true && /sign-in expired/.test(exp.find(o=>o.v==='mb2').t) && exp.find(o=>o.v==='mb1').s===true && !exp.find(o=>o.v==='mb1').d, JSON.stringify(exp));
+  badSenderId = null;
+  // ── R-396: create the lead by default (a box), and the signature preview with a way to edit it ──
+  await ev(()=>{ STATE.outreachGen=null; STATE.composeSide='clients'; STATE.emailTab='compose'; STATE.page='email'; render(); });
+  await page.waitForSelector('#og-from',{timeout:6000}).catch(()=>{});
+  await ev(()=>{ const g=STATE.outreachGen; g.recipMode='company'; g.sequences=[{ id:'q1', name:'My seq', steps:3 }]; g.sequenceId=''; g.form.job_description='The posting'; g.form.company='Acme Co';
+    STATE.outreachGen.co=STATE.outreachGen.co||{}; window.__batch(); });
+  await page.waitForTimeout(400);
+  const box = await ev(()=>{ const c=document.querySelector('.ogc-lead input'); return { has:!!c, on:!!(c&&c.checked) }; });
+  step('Lead box: there is a box, TICKED by default ("create the lead for that user by default")', box.has && box.on, JSON.stringify(box));
+  const nl0 = calls.length; await ev(()=>ogcSend(0)); await page.waitForTimeout(500);
+  const ls = calls.slice(nl0).find(c=>c.m==='POST'&&c.p==='/outreach/send');
+  step('…the send carries create_lead:true and the posting', !!ls && ls.body.create_lead===true && ls.body.job_description==='The posting', JSON.stringify(ls&&ls.body));
+  await ev(()=>{ window.__batch(); });
+  await page.uncheck('.ogc-lead input'); await page.waitForTimeout(200);
+  const nl1 = calls.length; await ev(()=>ogcSend(0)); await page.waitForTimeout(500);
+  const ls2 = calls.slice(nl1).find(c=>c.m==='POST'&&c.p==='/outreach/send');
+  step('…unticked, the send says create_lead:false (the person is in control)', !!ls2 && ls2.body.create_lead===false, JSON.stringify(ls2&&ls2.body.create_lead));
+  await ev(()=>{ STATE.outreachGen.sequenceId='q1'; window.__batch(); });
+  step('…with a sequence chosen there is no box (the sequence always creates the lead) — nothing that changes nothing', (await ev(()=>!document.querySelector('.ogc-lead input') && /created as part of the sequence/.test(document.querySelector('#content').textContent))));
+  await ev(()=>{ STATE.outreachGen.sequenceId=''; render(); });
+  // signature preview
+  const sg = await ev(()=>({ prev:(document.querySelector('.ogc-sig-prev')||{}).textContent||'', btn:(document.querySelector('.ogc-sigbox button')||{}).textContent||'' }));
+  step('Signature: the batch shows the signature the chosen mailbox will add, with an Edit button', /Warm regards/.test(sg.prev) && /Edit signature/.test(sg.btn), JSON.stringify(sg));
+  await page.selectOption('#og-from','mb2'); await page.waitForTimeout(500);
+  await ev(()=>{ STATE.outreachGen.recipMode='company'; window.__batch(); }); await page.waitForTimeout(300);
+  const sg2 = await ev(()=>({ prev:!!document.querySelector('.ogc-sig-prev'), txt:(document.querySelector('.ogc-sigbox')||{}).textContent||'' }));
+  step('…choosing a mailbox with NO signature says so and offers "Set up signature" (not an empty gap)', !sg2.prev && /no signature yet/.test(sg2.txt) && /Set up signature/.test(sg2.txt), JSON.stringify(sg2));
+  await page.selectOption('#og-from','mb1'); await page.waitForTimeout(500);
+  await ev(()=>{ window.__batch(); }); await page.waitForTimeout(300);
+  const ne = calls.length; await ev(()=>outreachGenEditSignature()); await page.waitForTimeout(600);
+  const ed = await ev(()=>({ modal:!!STATE.modal }));
+  step('Signature: Edit opens the editor (after asking for the person\'s mailboxes)', ed.modal && calls.slice(ne).some(c=>c.m==='GET'&&/^\/users\/[^/]+\/emails$/.test(c.p)), JSON.stringify(ed));
+  // the REAL editor's Save (My Setup's), not a direct call: the two files must really be connected
+  const ns = calls.length; await ev(()=>mySetupSave()); await page.waitForTimeout(700);
+  const afterSave = calls.slice(ns);
+  step('…saving in the editor stores it, and the Compose preview is then asked for again (the two screens are connected)', afterSave.some(c=>c.m==='PUT'&&/\/sends-as$/.test(c.p)) && afterSave.some(c=>c.m==='GET'&&c.p==='/outreach/sender'), JSON.stringify(afterSave.map(c=>c.m+' '+c.p)));
+  // ── R-395: with no sequence of your own, the batch SAYS so and offers to create one (it used to show nothing) ──
+  await ev(()=>{ STATE.outreachGen.recipMode='company'; window.__batch(); STATE.outreachGen.sequences=[]; render(); });
+  const noSeq = await ev(()=>({ txt:(document.querySelector('.ogc-draft-h')||{}).parentElement ? document.querySelector('#content').textContent : '', btn:!!document.querySelector('button[onclick="outreachCreateSequence()"]') }));
+  step('No sequence of your own: the batch says so and offers "Create your first sequence"', /no sequence of your own yet/.test(noSeq.txt) && noSeq.btn, JSON.stringify({ btn:noSeq.btn }));
+  await ev(()=>{ STATE.outreachGen.sequences=undefined; render(); });
+  step('…and while the list has not loaded it says nothing (no false "you have none")', !(await ev(()=>/no sequence of your own yet/.test(document.querySelector('#content').textContent))));
+  await ev(()=>{ STATE.outreachGen.sequences=[]; render(); });
+  await page.click('button[onclick="outreachCreateSequence()"]'); await page.waitForTimeout(300);
+  step('…the button takes you to Email → Sequence to make it', (await ev(()=>({ p:STATE.page, t:STATE.emailTab }))).t==='sequence');
 
   step('No page errors', pageErrors.length===0, pageErrors.slice(0,2).join(' | '));
 }catch(e){

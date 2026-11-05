@@ -260,8 +260,12 @@ t('the lead is Assigned, never Connected — Connected means they replied', () =
   assert.match(rt, /createLeadFromOutreach\(req, \{[\s\S]*?\}, 'Assigned'\)/);
   assert.match(rt, /\}, 'Connected'\)/);
 });
-t('no sequence chosen creates no lead', () => {
-  assert.match(rt, /const sequenceId = String\(b\.sequence_id \|\| ''\)\.trim\(\);\s*\n\s*if \(sequenceId\) \{/);
+// R-396 (owner 4 Nov, D-0212): this used to pin "no sequence chosen creates no lead". The owner changed it: the page's box ("create the
+// lead") is ticked by default and the page sends create_lead:true; a send that does NOT say so still creates nothing — proved by running
+// the route in test/outreach-create-lead-smoke.mjs. Here: the decision is exactly "a sequence, or the explicit create_lead flag".
+t('a lead is created only for a chosen sequence or an explicit create_lead flag — never silently', () => {
+  assert.match(rt, /const wantLead = b\.create_lead === true;/);
+  assert.match(rt, /if \(sequenceId \|\| wantLead\) \{/);
 });
 t('a sequence failure never reports the sent email as failed', () => {
   assert.match(rt, /THE EMAIL HAS ALREADY GONE/);

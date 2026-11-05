@@ -140,14 +140,23 @@ async function recruiterSendingMailbox(recruiterId) {
   if (!mailboxes?.length) return null;
   const ids = mailboxes.map(m => m.id);
   const [{ data: msTokens }, { data: gmailTokens }, smtpIds] = await Promise.all([
-    supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
-    supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+    supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
+    supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
     smtpLive(ids),
   ]);
-  const connected = new Set([...(msTokens || []), ...(gmailTokens || [])].map(t => t.user_email_id));
+  const rows = [...(msTokens || []), ...(gmailTokens || [])];
+  const connected = new Set(rows.map(t => t.user_email_id));
   smtpIds.forEach(i => connected.add(i));
-  return mailboxes.find(m => connected.has(m.id) && m.is_active !== false) || null;
+  const usable = mailboxes.filter(m => connected.has(m.id) && m.is_active !== false);
+  // R-394 (owner 4 Nov: Ash's default mailbox was one Google had stopped accepting, so every send failed "Gmail token refresh
+  // failed" while his other mailbox was healthy): the default is the first mailbox whose sign-in WORKS. A mailbox that is only
+  // "connected" because a stored sign-in exists — Google rejected it — is the default only when nothing else is left, so a person
+  // with nothing healthy still gets the honest error, not a silent "no mailbox".
+  const rejected = rejectedIds(rows);
+  return usable.find(m => !rejected.has(m.id)) || usable[0] || null;
 }
+// Which stored sign-ins Google (or Microsoft) answered "no" to on the last refresh (recorded by recordRefreshOutcome, R-037).
+function rejectedIds(tokenRows) { return new Set((tokenRows || []).filter(t => t.refresh_failed === true).map(t => t.user_email_id)); }
 
 // Dispatch a fresh outbound message by the mailbox's connected platform —
 // the Microsoft/Gmail counterpart to sendMicrosoftNewMessage alone. Both
@@ -239,8 +248,8 @@ async function connectedMailboxById(id) {
   if (!mb || mb.is_active === false) return null;
   if (String(mb.platform || '').toLowerCase() === 'smtp') return (await smtpLive([id])).has(id) ? mb : null;
   const tokenTable = mb.platform === 'Gmail' ? 'gmail_tokens' : 'microsoft_tokens';
-  const { data: tok } = await supabase.from(tokenTable).select('user_email_id').eq('user_email_id', id).maybeSingle();
-  return tok ? mb : null;
+  const { data: tok } = await supabase.from(tokenTable).select('user_email_id,refresh_failed').eq('user_email_id', id).maybeSingle();
+  return tok && tok.refresh_failed !== true ? mb : null;       // R-394: a sign-in that was rejected cannot send — the caller falls back
 }
 
 // ── WHICH OF MY MAILBOXES SENDS (R-087, generalised from candidate outreach) ──
@@ -260,13 +269,16 @@ async function ownSendingMailboxes(req) {
   if (!mine.length) return [];
   const ids = mine.map(m => m.id);
   const [{ data: ms }, { data: gm }, smtpIds] = await Promise.all([
-    supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
-    supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+    supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
+    supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
     smtpLive(ids),
   ]);
-  const live = new Set([...(ms || []), ...(gm || [])].map(t => t.user_email_id));
+  const tokenRows = [...(ms || []), ...(gm || [])];
+  const live = new Set(tokenRows.map(t => t.user_email_id));
   smtpIds.forEach(i => live.add(i));
-  return mine.filter(m => live.has(m.id));
+  const rejected = rejectedIds(tokenRows);
+  // R-394: still listed (the person should SEE it), but marked — the pickers say "sign-in expired" and never default to it.
+  return mine.filter(m => live.has(m.id)).map(m => Object.assign({}, m, { needs_reconnect: rejected.has(m.id) && !smtpIds.has(m.id) }));
 }
 // A requested id that is not one of yours answers null — the caller then refuses.
 async function sendingMailboxFor(req, requestedId) {
@@ -289,7 +301,7 @@ app.get('/me/sending-mailboxes', auth, async (req, res) => {
     const def = await recruiterSendingMailbox(req.user.id);
     res.json({
       mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
-        platform: m.platform || 'Microsoft', is_primary: !!m.is_primary })),
+        platform: m.platform || 'Microsoft', is_primary: !!m.is_primary, needs_reconnect: !!m.needs_reconnect })),
       default_id: def ? def.id : null,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -22,6 +22,7 @@ module.exports = (ctx) => {
   const withOrg = (q, req) => (req.orgId ? q.eq('org_id', req.orgId) : q);
   const orgStamp = (req) => (req.orgId ? { org_id: req.orgId } : {});
   const { reportingChainIds } = require('../hierarchy')(supabase);
+  const seqVisibility = require('../services/sequence-visibility');
 
   const canDesign = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead', 'recruiter');
   // A BD (not a lead) writes sequences of their OWN (owner, 8 Oct: "no new sequence creation option in the sequence section"): they may create
@@ -46,7 +47,7 @@ module.exports = (ctx) => {
   async function loadWorkflowOrgScoped(req, workflowId) {
     if (!workflowId) return null;
     const { data } = await withOrg(
-      supabase.from('workflow_definitions').select('id,entity_type,status'), req
+      supabase.from('workflow_definitions').select('id,entity_type,status,created_by'), req
     ).eq('id', workflowId).maybeSingle();
     return data || null;
   }
@@ -213,13 +214,10 @@ module.exports = (ctx) => {
       if (req.query.status) q = q.eq('status', req.query.status);
       const { data, error } = await q;
       if (error) throw error;
-      let list = data || [];
-      if (!canDesign(req) && canDesignOwn(req)) {
-        // A person starts BLANK (owner, 8 Oct, D-0113): "the system gives a blank template for a user to start with. They decide the
-        // templates, emails, counts and all." A plain BD sees only the sequences THEY made — not the company's standard one and not
-        // another person's. A BD lead, RA lead or admin still sees all (canDesign).
-        list = list.filter(d => d.created_by && d.created_by === req.user.id);
-      }
+      // A person starts BLANK (owner, 8 Oct, D-0113): only the sequences THEY made — not the company's standard one, not another
+      // person's. A BD lead, RA lead, admin or recruiter-designer still sees all. ONE rule, shared with the Outreach dropdown and
+      // the enrol doors (services/sequence-visibility.js, R-395).
+      const list = seqVisibility.visibleSequences(data || [], req.user);
       list.forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
       res.json(list);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -371,7 +369,8 @@ module.exports = (ctx) => {
       const entityId = b.entity_id || b.contact_id;
       if (!entityId) return res.status(400).json({ error: 'entity_id (or contact_id) required' });
       const wf = await loadWorkflowOrgScoped(req, b.workflow_id);
-      if (!wf) return res.status(404).json({ error: 'Workflow not found' });
+      // R-395: a sequence you may not use answers exactly like one that does not exist (nothing says it is there).
+      if (!wf || !seqVisibility.mayUseSequence(wf, req.user)) return res.status(404).json({ error: 'Workflow not found' });
       const entityType = b.entity_type || 'contact';
       const gate = await gateEnrollTarget(req, { entityType, entityId, jobId: b.job_id || null });
       if (!gate.ok) return res.status(gate.status).json({ error: gate.error });
@@ -405,7 +404,7 @@ module.exports = (ctx) => {
       const b = req.body || {};
       if (!b.workflow_id) return res.status(400).json({ error: 'workflow_id required' });
       const wf = await loadWorkflowOrgScoped(req, b.workflow_id);
-      if (!wf) return res.status(404).json({ error: 'Workflow not found' });
+      if (!wf || !seqVisibility.mayUseSequence(wf, req.user)) return res.status(404).json({ error: 'Workflow not found' });   // R-395
       const entityType = b.entity_type || 'contact';
       const items = Array.isArray(b.items) && b.items.length
         ? b.items

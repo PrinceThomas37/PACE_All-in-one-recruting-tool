@@ -500,6 +500,7 @@
     } else {
       done(f.id,false).then(function(){
         var note=f.logoNote; M.form=null; STATE.modal=null; STATE._sigIdentityOverride=null; render(); showToast(note?('Saved — '+note):'Saved',note?'warning':'success');
+        window.outreachGenSignatureSaved(f.id);      // R-396: the Compose preview asks for the saved signature again
       }).catch(function(er){ f.busy=false; f.err=(er&&er.message)||String(er); paintModal(); });
     }
   };

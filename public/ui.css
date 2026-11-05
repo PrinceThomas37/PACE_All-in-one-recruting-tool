@@ -1026,6 +1026,9 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .ogc-body{min-height:150px}
 .ogc-actions{display:flex;justify-content:flex-end}
 .ogc-sig{margin-bottom:4px}
+.ogc-sigbox{margin:8px 0 4px}
+.ogc-sig-prev{border:1px solid var(--border2);padding:10px 12px;background:var(--bg);max-height:190px;overflow:auto;margin:6px 0}
+.ogc-lead{margin:8px 0}
 @media (hover:hover) and (pointer:fine){ .ogc-row:hover{background:var(--accent-l)} }
 .cp-found{border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg);margin:0 0 14px}
 .cp-found-h{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:6px;letter-spacing:.2px}
