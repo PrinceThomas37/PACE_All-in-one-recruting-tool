@@ -2,7 +2,7 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 4 Nov 2026 (Session 62; later: R-394 mailbox fix, see the roadmap row — merged with the docs PR). **Highest ids:** decision **D-0213** · roadmap **R-397** · next migration **075** (nothing applied). Main = `b6520ae` (**#401, merged 4 Nov**, owner's go, after a clean 358/358 on Node 22 and Node 26.11.1) plus the docs-only PR that carries this file. Render deploys main automatically; the deploy could not be confirmed from the sandbox (its proxy blocks the live host), so the owner's look at the live app is the first confirmation.
+**Updated**: 4 Nov 2026 (Session 62; later: R-394 mailbox fix, see the roadmap row — merged with the docs PR). **Highest ids:** decision **D-0214** · roadmap **R-399** · next migration **075** (nothing applied). Main = `b6520ae` (**#401, merged 4 Nov**, owner's go, after a clean 358/358 on Node 22 and Node 26.11.1) plus the docs-only PR that carries this file. Render deploys main automatically; the deploy could not be confirmed from the sandbox (its proxy blocks the live host), so the owner's look at the live app is the first confirmation.
 
 ## START HERE
 **Who the owner is:** product owner and end user, NOT an engineer. Does not read code or use git. Evaluates by using the app, screenshots and short plain answers. "Ask me if you have any doubt, do not assume." "No shortcuts — we are building for the future." Wants the uncomfortable answer first, confidence tagged ([Certain]/[Likely]/[Guessing]), no agreement openers. Every reply ends with one line: what was skipped or not checked. Prefers FEWER, BIGGER merges (one full two-version run per batch).
