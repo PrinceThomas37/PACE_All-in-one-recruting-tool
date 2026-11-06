@@ -2,7 +2,7 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file).
 
-**Updated**: 6 Nov 2026 (book-keeping pass). Main = `ebd0c0f` (#407, docs) on top of `d98282a` (#406). Roadmap rows R-383..R-402 now say MERGED; the online roadmap (`NQ4HUuMfAWJk34g9Vs5EdQ`) has shipped entries for R-383..R-402 but NOTHING for R-335..R-382 (it stopped at R-334) — still to mirror. Highest ids: roadmap R-402, decision D-0217 (none new), next migration 075 (nothing applied).
+**Updated**: 6 Nov 2026 (book-keeping pass; book notes saved in `docs/reading/`; owner will send more books next week). Main = `ebd0c0f` (#407, docs) on top of `d98282a` (#406). Roadmap rows R-383..R-402 now say MERGED; the online roadmap (`NQ4HUuMfAWJk34g9Vs5EdQ`) has shipped entries for R-383..R-402 but NOTHING for R-335..R-382 (it stopped at R-334) — still to mirror. Highest ids: roadmap R-402, decision D-0217 (none new), next migration 075 (nothing applied).
 
 ## 5 Nov 2026 (Session 63, end) — #406 MERGED (`d98282a`, owner's yes; full run 371/371 on Node 22 AND Node 26.11.1)
 Deploy NOT confirmed from the sandbox — the owner's look at the live app is the first confirmation. No migration.

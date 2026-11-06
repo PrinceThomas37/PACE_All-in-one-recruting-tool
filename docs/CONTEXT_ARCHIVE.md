@@ -7565,3 +7565,6 @@ Owner asked to correct stale records. `docs/ROADMAP.md`: R-383..R-386 (were "PAR
 
 ## 6 Nov 2026 — books read; "unbreakable" plan proposed (no code)
 Owner had Clean Code (462 pp) and Clean Architecture (429 pp) read in full by 10 Sonnet helpers (owner's yes to agents in their own words; ~1.73M helper tokens). Notes were in the session scratchpad only (owner not yet asked to keep them in the repo). Synthesis given to the owner: PACE matches the books on vendor boundaries, per-org config, incremental change, tenant isolation; gaps: `index.js` 4,541 lines doing wiring + engine, 153 direct `supabase.from(` calls in it, guards found vacuous before, 35-min test run, silent failures (R-352, R-370), record drift. Owner asked how to make PACE "unbreakable"; plan recorded as R-403..R-408 (ratchet guards, DB-call audit, slim index.js, backups proven, errors reach us first, staging + owner sentences as tests). Nothing built.
+
+## 6 Nov 2026 — reading notes saved
+Owner: "I don't want them lost." Notes for Clean Code and Clean Architecture copied from the scratchpad into `docs/reading/` (index in `docs/reading/README.md`). Owner will send more books next week to read the same way.
