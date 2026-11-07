@@ -7574,3 +7574,6 @@ First file was a 30-page Bookey summary (not the book); the real 2nd edition (20
 
 ## 7 Nov 2026 — Designing Data-Intensive Applications read
 Owner sent the 613-page book as two compressed halves (whole was 25 MB, compressed 7 MB, Drive limit ~5 MB). 7 Sonnet helpers read it in full ("Use helpers and extract all information"); ~1.41M helper tokens. Notes in `docs/reading/designing-data-intensive-applications/`. Spot-checked; helper-added terms (outbox, SKIP LOCKED) flagged in the reading README. New roadmap rows R-409 (send-path safety audit) and R-410 (privacy as a feature).
+
+## 7 Nov 2026 — Fundamentals of Software Architecture read
+Sent as two halves (pages 1-200, 200-422). 4 Sonnet helpers ("Use helpers"), ~0.77M helper tokens. Notes in `docs/reading/fundamentals-of-software-architecture/`. Star-rating tables were figures and are marked unverified. Takeaways for PACE: it is a technically-partitioned layered monolith with one deployable ("architecture quantum of one"); service-based is the first split if ever needed (email engine / ATS / AI workers, shared DB), only on stated signals; fitness functions = the ratchet guards of R-403; DECISIONS.md is already an ADR log.
