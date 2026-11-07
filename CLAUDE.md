@@ -205,6 +205,9 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
 - **Never `git add -A`** where an agent is working — stage the paths the commit is about. **Never pipe `git push`
   into `tail`.** Before moving any file read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP".
 
+## Engineering canon (D-0218, owner 7 Nov 2026)
+Five books (Clean Code, Clean Architecture, A Philosophy of Software Design, Designing Data-Intensive Applications, Fundamentals of Software Architecture) are how PACE is built. **When designing or reviewing, read the one-page `docs/reading/CANON.md`; open a book's notes only for the topic in hand; never reread whole books.** CLAUDE.md rules win over the books.
+
 ## How I write code (D-0198, adapted from "Ponytail", owner's yes 2 Nov 2026)
 
 - **Before new code, take the first option that fully works:** does it need to exist at all → reuse what PACE already has → a built-in Node/browser feature → a library already installed → only then new code.

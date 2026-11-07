@@ -7568,3 +7568,12 @@ Owner had Clean Code (462 pp) and Clean Architecture (429 pp) read in full by 10
 
 ## 6 Nov 2026 — reading notes saved
 Owner: "I don't want them lost." Notes for Clean Code and Clean Architecture copied from the scratchpad into `docs/reading/` (index in `docs/reading/README.md`). Owner will send more books next week to read the same way.
+
+## 7 Nov 2026 — A Philosophy of Software Design read
+First file was a 30-page Bookey summary (not the book); the real 2nd edition (200 pp) was then read in full by 3 Sonnet helpers (owner: "Yes use helpers"); ~480k helper tokens; 6 claims spot-checked, all matched. Notes in `docs/reading/philosophy-of-software-design/`. Key disagreements with Clean Code: function length (Ousterhout: do not shred functions; deep modules over many tiny pieces), comments (interface comments are essential, not failures), TDD (rejected as tactical; test-first only for bug fixes). Tension with PACE rule D-0123 (every customer limit is an admin setting): Ch. 8 says config knobs push complexity onto users, so every setting must have a good default; raised with the owner, not changed.
+
+## 7 Nov 2026 — Designing Data-Intensive Applications read
+Owner sent the 613-page book as two compressed halves (whole was 25 MB, compressed 7 MB, Drive limit ~5 MB). 7 Sonnet helpers read it in full ("Use helpers and extract all information"); ~1.41M helper tokens. Notes in `docs/reading/designing-data-intensive-applications/`. Spot-checked; helper-added terms (outbox, SKIP LOCKED) flagged in the reading README. New roadmap rows R-409 (send-path safety audit) and R-410 (privacy as a feature).
+
+## 7 Nov 2026 — Fundamentals of Software Architecture read
+Sent as two halves (pages 1-200, 200-422). 4 Sonnet helpers ("Use helpers"), ~0.77M helper tokens. Notes in `docs/reading/fundamentals-of-software-architecture/`. Star-rating tables were figures and are marked unverified. Takeaways for PACE: it is a technically-partitioned layered monolith with one deployable ("architecture quantum of one"); service-based is the first split if ever needed (email engine / ATS / AI workers, shared DB), only on stated signals; fitness functions = the ratchet guards of R-403; DECISIONS.md is already an ADR log.
