@@ -7571,3 +7571,6 @@ Owner: "I don't want them lost." Notes for Clean Code and Clean Architecture cop
 
 ## 7 Nov 2026 — A Philosophy of Software Design read
 First file was a 30-page Bookey summary (not the book); the real 2nd edition (200 pp) was then read in full by 3 Sonnet helpers (owner: "Yes use helpers"); ~480k helper tokens; 6 claims spot-checked, all matched. Notes in `docs/reading/philosophy-of-software-design/`. Key disagreements with Clean Code: function length (Ousterhout: do not shred functions; deep modules over many tiny pieces), comments (interface comments are essential, not failures), TDD (rejected as tactical; test-first only for bug fixes). Tension with PACE rule D-0123 (every customer limit is an admin setting): Ch. 8 says config knobs push complexity onto users, so every setting must have a good default; raised with the owner, not changed.
+
+## 7 Nov 2026 — Designing Data-Intensive Applications read
+Owner sent the 613-page book as two compressed halves (whole was 25 MB, compressed 7 MB, Drive limit ~5 MB). 7 Sonnet helpers read it in full ("Use helpers and extract all information"); ~1.41M helper tokens. Notes in `docs/reading/designing-data-intensive-applications/`. Spot-checked; helper-added terms (outbox, SKIP LOCKED) flagged in the reading README. New roadmap rows R-409 (send-path safety audit) and R-410 (privacy as a feature).
