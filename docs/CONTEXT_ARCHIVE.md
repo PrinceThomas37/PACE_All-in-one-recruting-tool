@@ -7568,3 +7568,6 @@ Owner had Clean Code (462 pp) and Clean Architecture (429 pp) read in full by 10
 
 ## 6 Nov 2026 — reading notes saved
 Owner: "I don't want them lost." Notes for Clean Code and Clean Architecture copied from the scratchpad into `docs/reading/` (index in `docs/reading/README.md`). Owner will send more books next week to read the same way.
+
+## 7 Nov 2026 — A Philosophy of Software Design read
+First file was a 30-page Bookey summary (not the book); the real 2nd edition (200 pp) was then read in full by 3 Sonnet helpers (owner: "Yes use helpers"); ~480k helper tokens; 6 claims spot-checked, all matched. Notes in `docs/reading/philosophy-of-software-design/`. Key disagreements with Clean Code: function length (Ousterhout: do not shred functions; deep modules over many tiny pieces), comments (interface comments are essential, not failures), TDD (rejected as tactical; test-first only for bug fixes). Tension with PACE rule D-0123 (every customer limit is an admin setting): Ch. 8 says config knobs push complexity onto users, so every setting must have a good default; raised with the owner, not changed.
