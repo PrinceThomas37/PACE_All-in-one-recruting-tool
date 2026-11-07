@@ -16,4 +16,4 @@ Where Ousterhout disagrees with Clean Code (he names Martin twice: function leng
 
 Where the two books disagree and PACE's own rule wins: test-only security bypasses (Clean Architecture ch. 28) are NOT allowed in PACE (Session 11 rule, no product-side bypass); tenant isolation stays enforced in the database (RLS) even though "the database is a detail" (ch. 30).
 
-Next: the owner will send more books (said 6 Nov); read them the same way (full text, chapter slices, helpers on a cheaper model with the owner's yes, notes saved here).
+Start with `CANON.md` (the one-page digest, D-0218). More books: read them the same way (full text, chapter slices, helpers on a cheaper model with the owner's yes, notes saved here, then update CANON.md).
